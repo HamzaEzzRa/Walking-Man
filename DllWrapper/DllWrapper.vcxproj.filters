@@ -1,0 +1,216 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="Source Files\Music Mod">
+      <UniqueIdentifier>{18f87d0f-2c78-4ebd-8972-3fc1be7da687}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\DirectX Hook">
+      <UniqueIdentifier>{75718d85-780d-48ab-bc7b-83a75f6c55f6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Music Mod">
+      <UniqueIdentifier>{0dbab404-2637-498e-b71f-ad804bee2f2b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\DirectX Hook">
+      <UniqueIdentifier>{4b811bbf-f97f-4809-af27-a0a1966b9452}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\MinHook">
+      <UniqueIdentifier>{7702c831-79a8-47b9-9752-b27f94452afb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\MinHook">
+      <UniqueIdentifier>{e50824eb-f335-48cf-9028-05af36041c44}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\MinHook\hde">
+      <UniqueIdentifier>{bcd6e4d5-cc66-449b-90bb-47b4dce790bb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\tsl">
+      <UniqueIdentifier>{9518ab1d-b549-4a31-9a63-9f61b0e324aa}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\DirectXHook\include\UniversalProxyDLL.h">
+      <Filter>Header Files\DirectX Hook</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXHook\include\DirectXHook.h">
+      <Filter>Header Files\DirectX Hook</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXHook\include\ID3DRenderer.h">
+      <Filter>Header Files\DirectX Hook</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXHook\include\IRenderCallback.h">
+      <Filter>Header Files\DirectX Hook</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXHook\include\Logger.h">
+      <Filter>Header Files\DirectX Hook</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXHook\include\MemoryUtils.h">
+      <Filter>Header Files\DirectX Hook</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXHook\include\nmd_assembly.h">
+      <Filter>Header Files\DirectX Hook</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXHook\include\OverlayFramework.h">
+      <Filter>Header Files\DirectX Hook</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXHook\include\Renderer.h">
+      <Filter>Header Files\DirectX Hook</Filter>
+    </ClInclude>
+    <ClInclude Include="..\MusicMod\include\IRenderCallbackObserver.h">
+      <Filter>Header Files\Music Mod</Filter>
+    </ClInclude>
+    <ClInclude Include="..\MusicMod\include\ModManager.h">
+      <Filter>Header Files\Music Mod</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXHook\include\Shaders.h">
+      <Filter>Header Files\DirectX Hook</Filter>
+    </ClInclude>
+    <ClInclude Include="..\MusicMod\include\InputObserver.h">
+      <Filter>Header Files\Music Mod</Filter>
+    </ClInclude>
+    <ClInclude Include="..\MusicMod\include\InputTracker.h">
+      <Filter>Header Files\Music Mod</Filter>
+    </ClInclude>
+    <ClInclude Include="..\MusicMod\include\Utils.h">
+      <Filter>Header Files\Music Mod</Filter>
+    </ClInclude>
+    <ClInclude Include="..\MusicMod\include\MusicPlayer.h">
+      <Filter>Header Files\Music Mod</Filter>
+    </ClInclude>
+    <ClInclude Include="..\MusicMod\include\PatternScanner.h">
+      <Filter>Header Files\Music Mod</Filter>
+    </ClInclude>
+    <ClInclude Include="..\MusicMod\include\InputCode.h">
+      <Filter>Header Files\Music Mod</Filter>
+    </ClInclude>
+    <ClInclude Include="..\MinHook\include\MinHook.h">
+      <Filter>Header Files\MinHook</Filter>
+    </ClInclude>
+    <ClInclude Include="..\MinHook\src\buffer.h">
+      <Filter>Source Files\MinHook</Filter>
+    </ClInclude>
+    <ClInclude Include="..\MinHook\src\trampoline.h">
+      <Filter>Source Files\MinHook</Filter>
+    </ClInclude>
+    <ClInclude Include="..\MinHook\src\hde\hde32.h">
+      <Filter>Source Files\MinHook\hde</Filter>
+    </ClInclude>
+    <ClInclude Include="..\MinHook\src\hde\hde64.h">
+      <Filter>Source Files\MinHook\hde</Filter>
+    </ClInclude>
+    <ClInclude Include="..\MinHook\src\hde\pstdint.h">
+      <Filter>Source Files\MinHook\hde</Filter>
+    </ClInclude>
+    <ClInclude Include="..\MinHook\src\hde\table32.h">
+      <Filter>Source Files\MinHook\hde</Filter>
+    </ClInclude>
+    <ClInclude Include="..\MinHook\src\hde\table64.h">
+      <Filter>Source Files\MinHook\hde</Filter>
+    </ClInclude>
+    <ClInclude Include="..\MusicMod\include\UIManager.h">
+      <Filter>Header Files\Music Mod</Filter>
+    </ClInclude>
+    <ClInclude Include="..\MusicMod\include\BreakpointWatcher.h">
+      <Filter>Header Files\Music Mod</Filter>
+    </ClInclude>
+    <ClInclude Include="..\MusicMod\include\IEventListener.h">
+      <Filter>Header Files\Music Mod</Filter>
+    </ClInclude>
+    <ClInclude Include="..\MusicMod\include\ModEvents.h">
+      <Filter>Header Files\Music Mod</Filter>
+    </ClInclude>
+    <ClInclude Include="..\MusicMod\include\UIButton.h">
+      <Filter>Header Files\Music Mod</Filter>
+    </ClInclude>
+    <ClInclude Include="..\tsl\include\ordered_map.h">
+      <Filter>Header Files\tsl</Filter>
+    </ClInclude>
+    <ClInclude Include="..\tsl\include\ordered_hash.h">
+      <Filter>Header Files\tsl</Filter>
+    </ClInclude>
+    <ClInclude Include="..\MusicMod\include\PlaybackQueue.h">
+      <Filter>Header Files\Music Mod</Filter>
+    </ClInclude>
+    <ClInclude Include="..\MusicMod\include\ModConfiguration.h">
+      <Filter>Header Files\Music Mod</Filter>
+    </ClInclude>
+    <ClInclude Include="..\tsl\include\ordered_set.h">
+      <Filter>Header Files\tsl</Filter>
+    </ClInclude>
+    <ClInclude Include="..\MusicMod\include\GameStateManager.h">
+      <Filter>Header Files\Music Mod</Filter>
+    </ClInclude>
+    <ClInclude Include="..\MusicMod\include\MemoryWatcher.h">
+      <Filter>Header Files\Music Mod</Filter>
+    </ClInclude>
+    <ClInclude Include="..\MusicMod\include\FunctionHook.h">
+      <Filter>Header Files\Music Mod</Filter>
+    </ClInclude>
+    <ClInclude Include="..\MusicMod\include\GameData.h">
+      <Filter>Header Files\Music Mod</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="DllMain.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\MusicMod\src\ModManager.cpp">
+      <Filter>Source Files\Music Mod</Filter>
+    </ClCompile>
+    <ClCompile Include="..\DirectXHook\src\Renderer.cpp">
+      <Filter>Source Files\DirectX Hook</Filter>
+    </ClCompile>
+    <ClCompile Include="..\DirectXHook\src\DirectXHook.cpp">
+      <Filter>Source Files\DirectX Hook</Filter>
+    </ClCompile>
+    <ClCompile Include="..\MusicMod\src\InputTracker.cpp">
+      <Filter>Source Files\Music Mod</Filter>
+    </ClCompile>
+    <ClCompile Include="..\MusicMod\src\MusicPlayer.cpp">
+      <Filter>Source Files\Music Mod</Filter>
+    </ClCompile>
+    <ClCompile Include="..\MinHook\src\buffer.c">
+      <Filter>Source Files\MinHook</Filter>
+    </ClCompile>
+    <ClCompile Include="..\MinHook\src\hook.c">
+      <Filter>Source Files\MinHook</Filter>
+    </ClCompile>
+    <ClCompile Include="..\MinHook\src\trampoline.c">
+      <Filter>Source Files\MinHook</Filter>
+    </ClCompile>
+    <ClCompile Include="..\MinHook\src\hde\hde32.c">
+      <Filter>Source Files\MinHook\hde</Filter>
+    </ClCompile>
+    <ClCompile Include="..\MinHook\src\hde\hde64.c">
+      <Filter>Source Files\MinHook\hde</Filter>
+    </ClCompile>
+    <ClCompile Include="..\MusicMod\src\UIManager.cpp">
+      <Filter>Source Files\Music Mod</Filter>
+    </ClCompile>
+    <ClCompile Include="..\MusicMod\src\BreakpointWatcher.cpp">
+      <Filter>Source Files\Music Mod</Filter>
+    </ClCompile>
+    <ClCompile Include="..\MusicMod\src\ModConfiguration.cpp">
+      <Filter>Source Files\Music Mod</Filter>
+    </ClCompile>
+    <ClCompile Include="..\MusicMod\src\GameStateManager.cpp">
+      <Filter>Source Files\Music Mod</Filter>
+    </ClCompile>
+    <ClCompile Include="..\MusicMod\src\MemoryWatcher.cpp">
+      <Filter>Source Files\Music Mod</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
+  </ItemGroup>
+</Project>

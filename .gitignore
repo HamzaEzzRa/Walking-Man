@@ -39,3 +39,16 @@
 
 # debug information files
 *.dwo
+/.vs/DllWrapper/copilot-chat/51d1bc13/sessions
+/.vs/DllWrapper/CopilotIndices
+/.vs/DllWrapper/FileContentIndex
+/.vs/DllWrapper/v17
+/MusicMod/assets
+/ptr_scans
+/x64
+/packages/directxtk_desktop_2019.2025.3.21.2
+/.vs
+/DllWrapper/x64
+*.nupkg
+*.p7s
+/packages/directxtk_desktop_2019.2025.7.10.1
