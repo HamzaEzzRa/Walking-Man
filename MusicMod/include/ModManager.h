@@ -33,12 +33,15 @@ public:
 private:
 	static void GamePreExitHook(void*, void*, void*, void*);
 	static void GamePreLoadHook(void*, void*, void*, void*);
+	static void AccessMusicPoolHook(void*, void*, void*, void*);
 
 private:
 	inline static ModManager* instance = nullptr;
 
 	inline static std::vector<IEventListener*> listeners{};
 	inline static Logger logger = Logger("Mod Manager");
+
+	inline static uintptr_t musicPoolStartAddress = 0;
 
 	inline static Microsoft::WRL::ComPtr<ID3D11DeviceContext> ofContext;
 	inline static PatternScanner::ScanProgress scanProgress{};

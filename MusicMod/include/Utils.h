@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cstdint>
+#include <intrin.h>
+
 #include <sstream>
 #include <string>
 
@@ -7,20 +10,23 @@
 
 static class Utils {
 public:
-	static std::string PointerToString(void* ptr) {
+	static std::string PointerToString(void* ptr)
+	{
 		std::stringstream ss;
 		ss << std::hex << std::uppercase << std::setw(16) << std::setfill('0') << (uintptr_t)ptr;
 		return ss.str();
 	}
 
-	static void* StringToPointer(const std::string& hexStr) {
+	static void* StringToPointer(const std::string& hexStr)
+	{
 		std::stringstream ss(hexStr);
 		uintptr_t addr = 0;
 		ss >> std::hex >> addr;
 		return reinterpret_cast<void*>(addr);
 	}
 
-	static uint32_t StringToUint32(const std::string& str) {
+	static uint32_t StringToUint32(const std::string& str)
+	{
 		return static_cast<uint32_t>(std::stoul(str, nullptr, 0));
 	}
 
@@ -48,5 +54,40 @@ public:
 		WideCharToMultiByte(CP_UTF8, 0, wideStr.c_str(), -1, &utf8Str[0], utf8Len - 1, nullptr, nullptr);
 
 		return utf8Str;
+	}
+
+	static int highestBitSet(uint64_t value)
+	{
+		DWORD index;
+#if defined(_M_X64) || defined(_M_AMD64)
+		if (_BitScanReverse64(&index, value))
+			return static_cast<int>(index);
+#else
+		// 32-bit fallback: scan high part, then low part
+		if (_BitScanReverse(&index, static_cast<DWORD>(value >> 32)))
+			return static_cast<int>(index + 32);
+		if (_BitScanReverse(&index, static_cast<DWORD>(value)))
+			return static_cast<int>(index);
+#endif
+		return -1;
+	}
+
+	static uintptr_t KeepTopHex(uintptr_t addr, int hexDigitsToKeep)
+	{
+		if (addr == 0 || hexDigitsToKeep <= 0)
+			return 0;
+
+		int highestBit = highestBitSet(static_cast<uint64_t>(addr));
+		if (highestBit < 0)
+			return 0;
+
+		int totalHexDigits = (highestBit / 4) + 1;
+		if (hexDigitsToKeep >= totalHexDigits)
+			return addr;
+
+		int bitsToKeep = hexDigitsToKeep * 4;
+		int shift = highestBit + 1 - bitsToKeep;
+
+		return (addr >> shift) << shift;
 	}
 };

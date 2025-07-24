@@ -14,7 +14,7 @@
 namespace ModConfiguration
 {
 	const std::string modPublicName = "Walking Man";
-	const std::string modInternalVersion = "1.0.0";
+	const std::string modInternalVersion = "1.0.1";
 	const std::string modLogFilename = "walkingman.log";
 	const std::string enableTerminalFilename = "walkingman_terminal.dev";
 
@@ -235,6 +235,12 @@ namespace ModConfiguration
 			},
 
 			// Music player functions
+			{
+				"AccessMusicPool",
+				{"AccessMusicPool",
+				"48 89 5C 24 ?? 57 48 83 EC ?? 48 83 79 ?? ?? 75 0B 48 83 79 ?? ?? "
+				"0F 84 ?? ?? ?? ?? 48 8B 01 FF 10 4C 8B 15 ?? ?? ?? ?? 48 8B F8"}
+			},
 			{
 				"PlayMusic",
 				{"PlayMusic",

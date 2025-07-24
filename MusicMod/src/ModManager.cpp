@@ -10,6 +10,8 @@
 #include "MinHook.h"
 #include "PatternScanner.h"
 
+#include "Utils.h"
+
 #include "ModConfiguration.h"
 
 #include "GameData.h"
@@ -162,6 +164,16 @@ void ModManager::Setup()
 			{
 				logger.Log("GamePreLoad function hooked successfully.");
 			}
+
+			result = TryHookFunction("AccessMusicPool", &AccessMusicPoolHook);
+			if (!result)
+			{
+				logger.Log("Failed to hook AccessMusicPool function.");
+			}
+			else
+			{
+				logger.Log("AccessMusicPool function hooked successfully.");
+			}
 		}, &scanProgress
 	);
 }
@@ -251,79 +263,154 @@ void ModManager::GamePreExitHook(void* arg1, void* arg2, void* arg3, void* arg4)
 	}
 	instance = nullptr; // Clear instance to prevent further calls
 
-	auto it = ModConfiguration::Databases::functionDatabase.find("GamePreExit");
-	if (it != ModConfiguration::Databases::functionDatabase.end())
+	const FunctionData* gamePreExitFuncData = ModManager::GetFunctionData("GamePreExit");
+	if (!gamePreExitFuncData || !gamePreExitFuncData->originalFunction)
 	{
-		reinterpret_cast<GenericFunction_t>(it->second.originalFunction)(arg1, arg2, arg3, arg4);
+		logger.Log("Original GamePreExit function was not hooked, cannot call it.");
+		return;
 	}
+	reinterpret_cast<GenericFunction_t>(gamePreExitFuncData->originalFunction)(
+		arg1, arg2, arg3, arg4
+	);
 }
 
 void ModManager::GamePreLoadHook(void* arg1, void* arg2, void* arg3, void* arg4)
 {
-	auto it = ModConfiguration::Databases::functionDatabase.find("GamePreLoad");
-	if (it != ModConfiguration::Databases::functionDatabase.end())
+	logger.Log("GamePreLoadHook called with args: %p, %p, %p, %p",
+		arg1, arg2, arg3, arg4
+	);
+
+	const FunctionData* gamePreLoadFuncData = ModManager::GetFunctionData("GamePreLoad");
+	if (!gamePreLoadFuncData || !gamePreLoadFuncData->originalFunction)
 	{
-		auto& func = it->second;
-		reinterpret_cast<GenericFunction_t>(func.originalFunction)(
+		logger.Log("Original GamePreLoad function was not hooked, cannot call it.");
+	}
+	else
+	{
+		reinterpret_cast<GenericFunction_t>(gamePreLoadFuncData->originalFunction)(
 			arg1, arg2, arg3, arg4
 		);
-		TryUnhookFunction(func);
-	}
 
-	std::unordered_map<std::string, MusicData*> allMusicTargets;
-	for (auto& [name, data] : ModConfiguration::Databases::sfxDatabase)
-	{
-		allMusicTargets[name] = &data;
-	}
-	for (auto& [name, data] : ModConfiguration::Databases::unknownDatabase)
-	{
-		allMusicTargets[name] = &data;
-	}
-	for (auto& [name, data] : ModConfiguration::Databases::ambientDatabase)
-	{
-		allMusicTargets[name] = &data;
-	}
-
-	std::vector<std::string> unexistingSongs{};
-	for (const std::string& songName : ModConfiguration::activePlaylist)
-	{
-		auto it = ModConfiguration::Databases::songDatabase.find(songName);
-		if (it == ModConfiguration::Databases::songDatabase.end())
+		if (musicPoolStartAddress)
 		{
-			logger.Log("Song %s not found in database, skipping...", songName.c_str());
-			unexistingSongs.push_back(songName);
-			continue;
-		}
-
-		auto& songMusicData = it->second;
-		allMusicTargets[songName] = &songMusicData;
-	}
-	if (unexistingSongs.size() > 0)
-	{
-		std::string errorMessage = "The following songs were not found:\n";
-		for (const auto& song : unexistingSongs)
-		{
-			errorMessage += "\"" + song + "\"\n";
-		}
-		errorMessage += "Please check your playlist inside " + ModConfiguration::configFilePath;
-		MemoryUtils::ShowErrorPopup(errorMessage, ModConfiguration::modPublicName);
-	}
-
-	logger.Log("Scanning for music signatures...");
-	scanProgress.message = "Searching for game music";
-	scanInProgress.store(true);
-	PatternScanner::ScanAsyncPtr<MusicData>(
-		allMusicTargets,
-		[]() {
-			scanInProgress.store(false);
-			if (instance)
+			std::unordered_map<std::string, MusicData*> allMusicTargets;
+			for (auto& [name, data] : ModConfiguration::Databases::sfxDatabase)
 			{
-				instance->DispatchEvent(ModEvent{ ModEventType::ScanCompleted, nullptr, nullptr });
+				allMusicTargets[name] = &data;
 			}
-			logger.Log("Setup complete");
-		},
-		&scanProgress,
-		PAGE_READWRITE,
-		std::chrono::milliseconds(30000)
+			for (auto& [name, data] : ModConfiguration::Databases::unknownDatabase)
+			{
+				allMusicTargets[name] = &data;
+			}
+			for (auto& [name, data] : ModConfiguration::Databases::ambientDatabase)
+			{
+				allMusicTargets[name] = &data;
+			}
+
+			std::vector<std::string> unexistingSongs{};
+			for (const std::string& songName : ModConfiguration::activePlaylist)
+			{
+				auto it = ModConfiguration::Databases::songDatabase.find(songName);
+				if (it == ModConfiguration::Databases::songDatabase.end())
+				{
+					logger.Log("Song %s not found in database, skipping...", songName.c_str());
+					unexistingSongs.push_back(songName);
+					continue;
+				}
+
+				auto& songMusicData = it->second;
+				allMusicTargets[songName] = &songMusicData;
+			}
+			if (unexistingSongs.size() > 0)
+			{
+				std::string errorMessage = "The following songs were not found:\n";
+				for (const auto& song : unexistingSongs)
+				{
+					errorMessage += "\"" + song + "\"\n";
+				}
+				errorMessage += "Please check your playlist inside " + ModConfiguration::configFilePath;
+				MemoryUtils::ShowErrorPopup(errorMessage, ModConfiguration::modPublicName);
+			}
+
+			logger.Log("Scanning for music signatures...");
+			scanProgress.message = "Searching for game music";
+			scanInProgress.store(true);
+			PatternScanner::ScanAsyncPtr<MusicData>(
+				allMusicTargets,
+				[]() {
+					scanInProgress.store(false);
+					if (instance)
+					{
+						instance->DispatchEvent(ModEvent{ ModEventType::ScanCompleted, nullptr, nullptr });
+					}
+					logger.Log("Setup complete");
+
+					for (auto& [name, data] : ModConfiguration::Databases::sfxDatabase)
+					{
+						if (data.address)
+						{
+							logger.Log("SFX %s found at address: %p", name.c_str(), data.address);
+						}
+					}
+					for (auto& [name, data] : ModConfiguration::Databases::unknownDatabase)
+					{
+						if (data.address)
+						{
+							logger.Log("Unknown music %s found at address: %p", name.c_str(), data.address);
+						}
+					}
+					for (auto& [name, data] : ModConfiguration::Databases::ambientDatabase)
+					{
+						if (data.address)
+						{
+							logger.Log("Ambient music %s found at address: %p", name.c_str(), data.address);
+						}
+					}
+					for (auto& [name, data] : ModConfiguration::Databases::songDatabase)
+					{
+						if (data.address)
+						{
+							logger.Log("Song %s found at address: %p", name.c_str(), data.address);
+						}
+					}
+				},
+				&scanProgress,
+				PAGE_READWRITE,
+				std::chrono::milliseconds(0),
+				false,
+				musicPoolStartAddress,
+				musicPoolStartAddress + 0x1000000
+			);
+
+			bool unhookResult = TryUnhookFunction(*gamePreLoadFuncData);
+			logger.Log("GamePreLoad function unhooking %s",
+				unhookResult ? "successful" : "failed"
+			);
+		}
+	}
+}
+
+void ModManager::AccessMusicPoolHook(void* arg1, void* arg2, void* arg3, void* arg4)
+{
+	const FunctionData* accessMusicPoolFuncData = ModManager::GetFunctionData("AccessMusicPool");
+	if (!accessMusicPoolFuncData || !accessMusicPoolFuncData->originalFunction)
+	{
+		logger.Log("Original AccessMusicPool function was not hooked, cannot call it.");
+		return;
+	}
+	reinterpret_cast<GenericFunction_t>(accessMusicPoolFuncData->originalFunction)(
+		arg1, arg2, arg3, arg4
 	);
+
+	// take the first 4 non-zero hex digits of arg1 as music pool start address
+	if (!musicPoolStartAddress)
+	{
+		musicPoolStartAddress = Utils::KeepTopHex(reinterpret_cast<uintptr_t>(arg1), 4);
+		logger.Log("Music pool start address set to: %p", (void*)musicPoolStartAddress);
+
+		bool unhookResult = TryUnhookFunction(*accessMusicPoolFuncData);
+		logger.Log("AccessMusicPool function unhooking %s",
+			unhookResult ? "successful" : "failed"
+		);
+	}
 }
