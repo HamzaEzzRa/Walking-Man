@@ -14,7 +14,7 @@
 namespace ModConfiguration
 {
 	const std::string modPublicName = "Walking Man";
-	const std::string modInternalVersion = "1.0.1";
+	const std::string modInternalVersion = "1.0.2";
 	const std::string modLogFilename = "walkingman.log";
 	const std::string enableTerminalFilename = "walkingman_terminal.dev";
 
@@ -266,7 +266,7 @@ namespace ModConfiguration
 			},
 		};
 
-		// sadly music doesn't keep the same offsets inside this table across versions (most likely new music in DC)
+		// sadly music doesn't keep the same offsets inside this table across versions (most likely because of new music in DC)
 		// ended up going for a stable aob per audio
 		/*std::string audioTableSig =
 			"?? ?? ?? ?? ?? 7F 00 00 01 E6 29 73 28 09 48 F8 "

@@ -7,6 +7,13 @@
 
 #include "Logger.h"
 
+enum class ChiralNetworkState
+{
+	UNKNOWN = -1,
+	OFF = 0,
+	ON = 1
+};
+
 class GameStateManager : public IEventListener, public FunctionHook
 {
 public:
@@ -26,8 +33,8 @@ private:
 	inline static uintptr_t inGameFlagPoolAddress = 0;
 
 	inline static uintptr_t chiralNetworkFlagOffset = 0x174;
-	inline static bool previousChiralNetworkEnabled = false;
-	inline static bool chiralNetworkEnabled = false;
+	inline static ChiralNetworkState previousChiralNetworkEnabled = ChiralNetworkState::UNKNOWN;
+	inline static ChiralNetworkState chiralNetworkEnabled = ChiralNetworkState::UNKNOWN;
 	inline static std::unique_ptr<MemoryWatcher> chiralNetworkFlagWatcher = nullptr;
 	inline static uint32_t chiralNetworkWatcherPollingInterval = 100; // ms
 };

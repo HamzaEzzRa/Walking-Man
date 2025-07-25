@@ -6,6 +6,7 @@
 #include <vector>
 #include <Windows.h>
 
+#include "GameStateManager.h"
 #include "ModConfiguration.h"
 #include "ModManager.h"
 #include "PlaybackQueue.h"
@@ -59,8 +60,8 @@ void MusicPlayer::OnEvent(const ModEvent& event)
 	{
 		if (ModConfiguration::connectToChiralNetwork)
 		{
-			bool* chiralNetworkState = std::any_cast<bool*>(event.data);
-			if (!(*chiralNetworkState) && currentMusicData)
+			ChiralNetworkState* chiralNetworkState = std::any_cast<ChiralNetworkState*>(event.data);
+			if (*chiralNetworkState == ChiralNetworkState::OFF && currentMusicData)
 			{
 				StopMusic();
 
@@ -338,14 +339,12 @@ void MusicPlayer::PlayMusicHook(void* arg1, void* arg2, void* arg3, void* arg4)
 		playMusicFuncRCXAddress = reinterpret_cast<uintptr_t>(arg1);
 		logger.Log("1st arg address set to: %p", (void*)playMusicFuncRCXAddress);
 	}
-	if (!playMusicFuncRDXAddress)
-	{
-		//playMusicFuncRDXAddress = reinterpret_cast<uintptr_t>(arg2) + offsetMenuToInGameRDX;
 
-		// Since we load the mod async now, we don't hit the first call in the menu, and we don't need the offset
-		playMusicFuncRDXAddress = reinterpret_cast<uintptr_t>(arg2);
-		// Force last byte to 0x80 just in case (a bit risky but seems okay with current versions)
-		playMusicFuncRDXAddress = (playMusicFuncRDXAddress & ~0xFF) | 0x80;
+	// Always set to the last arg2, but does it create bugs in the long run? (time will tell)
+	uintptr_t arg2Address = reinterpret_cast<uintptr_t>(arg2);
+	if (playMusicFuncRDXAddress != arg2Address)
+	{
+		playMusicFuncRDXAddress = arg2Address;
 		logger.Log("2nd arg address set to: %p", (void*)playMusicFuncRDXAddress);
 	}
 

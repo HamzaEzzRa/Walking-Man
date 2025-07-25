@@ -29,11 +29,14 @@ void InputTracker::OnEvent(const ModEvent& event)
 
 bool InputTracker::IsCombinationActive(const std::vector<InputCode>& combination)
 {
-	for (const auto& code : combination) {
-		if (code.source == InputSource::KBM && !keyStates[code.code]) {
+	for (const auto& code : combination)
+	{
+		if (code.source == InputSource::KBM && !keyStates[code.code])
+		{
 			return false;
 		}
-		if (code.source == InputSource::GAMEPAD && activeGamepadButtons.find(code.code) == activeGamepadButtons.end()) {
+		if (code.source == InputSource::GAMEPAD && activeGamepadButtons.find(code.code) == activeGamepadButtons.end())
+		{
 			return false;
 		}
 	}
@@ -47,11 +50,13 @@ bool InputTracker::IsCombinationPressed(const std::vector<InputCode>& combinatio
 	bool isActive = IsCombinationActive(combination);
 	bool wasActive = lastActiveCombinations.count(hash) > 0;
 
-	if (isActive && !wasActive) {
+	if (isActive && !wasActive)
+	{
 		lastActiveCombinations.insert(hash); // remember it's now active
 		return true;
 	}
-	else if (!isActive && wasActive) {
+	else if (!isActive && wasActive)
+	{
 		lastActiveCombinations.erase(hash); // reset once released
 	}
 	return false;
@@ -59,17 +64,21 @@ bool InputTracker::IsCombinationPressed(const std::vector<InputCode>& combinatio
 
 void InputTracker::PollKeyboard()
 {
-	for (int vk = 1; vk < 256; ++vk) {
+	for (int vk = 1; vk < 256; ++vk)
+	{
 		SHORT state = GetAsyncKeyState(vk);
 		InputCode code{ vk, InputSource::KBM };
-		if (state & 0x8000) {
-			if (!keyStates[vk]) {
+		if (state & 0x8000)
+		{
+			if (!keyStates[vk])
+			{
 				SendInputPress(code);
 			}
 			SendInputDown(code);
 			keyStates[vk] = true;
 		}
-		else if (keyStates[vk]) {
+		else if (keyStates[vk])
+		{
 			SendInputUp(code);
 			keyStates[vk] = false;
 		}
@@ -80,17 +89,28 @@ void InputTracker::PollGamepad()
 {
 	XINPUT_STATE currentState;
 	ZeroMemory(&currentState, sizeof(XINPUT_STATE));
-	DWORD result = XInputGetState(0, &currentState);
+	DWORD result;
+	for (DWORD i = 0; i < XUSER_MAX_COUNT; i++)
+	{
+		result = XInputGetState(i, &currentState);
+		if (result == ERROR_SUCCESS) // Controller found
+		{
+			break;
+		}
+	}
 
-	if (result != ERROR_SUCCESS) {
-		if (gamepadConnected) {
+	if (result != ERROR_SUCCESS)
+	{
+		if (gamepadConnected)
+		{
 			logger.Log("Gamepad disconnected.");
 			gamepadConnected = false;
 		}
 		return;
 	}
 
-	if (!gamepadConnected) {
+	if (!gamepadConnected)
+	{
 		logger.Log("Gamepad connected.");
 		gamepadConnected = true;
 	}
@@ -112,10 +132,12 @@ void InputTracker::PollGamepad()
 	WORD newButtons = currentState.Gamepad.wButtons;
 
 	activeGamepadButtons.clear();
-	for (WORD mask = 1; mask != 0; mask <<= 1) {
+	for (WORD mask = 1; mask != 0; mask <<= 1)
+	{
 		bool wasDown = (oldButtons & mask) != 0;
 		bool isDown = (newButtons & mask) != 0;
-		if (isDown) {
+		if (isDown)
+		{
 			activeGamepadButtons.insert(mask);
 		}
 
@@ -137,9 +159,8 @@ void InputTracker::PollGamepad()
 	lastGamepadState = currentState;
 }
 
-void InputTracker::HandleGamepadTrigger(
-	BYTE currentValue, BYTE& lastValue, const InputCode& code
-)
+void InputTracker::HandleGamepadTrigger(BYTE currentValue,
+	BYTE& lastValue, const InputCode& code)
 {
 	if (currentValue > GAMEPAD_TRIGGER_THRESHOLD)
 	{
@@ -186,7 +207,8 @@ void InputTracker::SendInputUp(const InputCode& code)
 std::string InputTracker::HashCombination(const std::vector<InputCode>& combination)
 {
 	std::string hash;
-	for (const auto& code : combination) {
+	for (const auto& code : combination)
+	{
 		hash += std::to_string(static_cast<int>(code.source)) + ":" + std::to_string(code.code) + "|";
 	}
 	return hash;

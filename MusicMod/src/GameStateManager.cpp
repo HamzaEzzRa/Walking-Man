@@ -91,11 +91,15 @@ void GameStateManager::InGameFlagUpdateHook(void* arg1, void* arg2, void* arg3, 
 		logger.Log("Flag pool address: %p", (void*)flagPoolAddress);
 		inGameFlagPoolAddress = flagPoolAddress;
 
+		auto state = *reinterpret_cast<const uint8_t*>(flagPoolAddress + chiralNetworkFlagOffset);
+		chiralNetworkEnabled = (state != 0) ? ChiralNetworkState::ON : ChiralNetworkState::OFF;
+
 		chiralNetworkFlagWatcher = std::make_unique<MemoryWatcher>(
 			[](const void* newValue) {
-				chiralNetworkEnabled = *reinterpret_cast<const uint8_t*>(newValue) != 0;
+				auto state = *reinterpret_cast<const uint8_t*>(newValue);
+				chiralNetworkEnabled = (state != 0) ? ChiralNetworkState::ON : ChiralNetworkState::OFF;
 
-				// Unstable when exiting the game, we dispatch on render instead
+				// Makes the mod crash when exiting the game, we dispatch on render instead
 				/*ModManager* instance = ModManager::GetInstance();
 				if (instance)
 				{

@@ -3,6 +3,7 @@
 #include <locale>
 #include <codecvt>
 
+#include "GameStateManager.h"
 #include "ModConfiguration.h"
 #include "ModManager.h"
 #include "MemoryUtils.h"
@@ -44,14 +45,14 @@ void UIManager::OnEvent(const ModEvent& event)
 		{
 			if (ModConfiguration::connectToChiralNetwork)
 			{
-				bool* chiralNetworkState = std::any_cast<bool*>(event.data);
+				ChiralNetworkState* chiralNetworkState = std::any_cast<ChiralNetworkState*>(event.data);
 				for (auto it = musicPlayerActionButtonMap.begin(); it != musicPlayerActionButtonMap.end(); it++)
 				{
 					UIButton& button = it.value();
-					button.Toggle(*chiralNetworkState);
+					button.Toggle(*chiralNetworkState == ChiralNetworkState::ON);
 				}
 
-				const char* notificationText = *chiralNetworkState
+				const char* notificationText = (*chiralNetworkState == ChiralNetworkState::ON)
 					? "Chiral network on: music player can be activated."
 					: "Chiral network off: music player deactivated.";
 				ShowNotificationText(notificationText);

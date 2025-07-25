@@ -155,16 +155,6 @@ void ModManager::Setup()
 				logger.Log("GamePreExit function hooked successfully.");
 			}
 
-			result = TryHookFunction("GamePreLoad", &GamePreLoadHook);
-			if (!result)
-			{
-				logger.Log("Failed to hook GamePreLoad function.");
-			}
-			else
-			{
-				logger.Log("GamePreLoad function hooked successfully.");
-			}
-
 			result = TryHookFunction("AccessMusicPool", &AccessMusicPoolHook);
 			if (!result)
 			{
@@ -173,6 +163,16 @@ void ModManager::Setup()
 			else
 			{
 				logger.Log("AccessMusicPool function hooked successfully.");
+			}
+
+			result = TryHookFunction("GamePreLoad", &GamePreLoadHook);
+			if (!result)
+			{
+				logger.Log("Failed to hook GamePreLoad function.");
+			}
+			else
+			{
+				logger.Log("GamePreLoad function hooked successfully.");
 			}
 		}, &scanProgress
 	);
@@ -274,12 +274,33 @@ void ModManager::GamePreExitHook(void* arg1, void* arg2, void* arg3, void* arg4)
 	);
 }
 
-void ModManager::GamePreLoadHook(void* arg1, void* arg2, void* arg3, void* arg4)
+void ModManager::AccessMusicPoolHook(void* arg1, void* arg2, void* arg3, void* arg4)
 {
-	logger.Log("GamePreLoadHook called with args: %p, %p, %p, %p",
+	const FunctionData* accessMusicPoolFuncData = ModManager::GetFunctionData("AccessMusicPool");
+	if (!accessMusicPoolFuncData || !accessMusicPoolFuncData->originalFunction)
+	{
+		logger.Log("Original AccessMusicPool function was not hooked, cannot call it.");
+		return;
+	}
+	reinterpret_cast<GenericFunction_t>(accessMusicPoolFuncData->originalFunction)(
 		arg1, arg2, arg3, arg4
 	);
 
+	// take the first 4 non-zero hex digits of arg1 as music pool start address
+	if (!musicPoolStartAddress)
+	{
+		musicPoolStartAddress = Utils::KeepTopHex(reinterpret_cast<uintptr_t>(arg1), 4);
+		logger.Log("Music pool start address set to: %p", (void*)musicPoolStartAddress);
+
+		bool unhookResult = TryUnhookFunction(*accessMusicPoolFuncData);
+		logger.Log("AccessMusicPool function unhooking %s",
+			unhookResult ? "successful" : "failed"
+		);
+	}
+}
+
+void ModManager::GamePreLoadHook(void* arg1, void* arg2, void* arg3, void* arg4)
+{
 	const FunctionData* gamePreLoadFuncData = ModManager::GetFunctionData("GamePreLoad");
 	if (!gamePreLoadFuncData || !gamePreLoadFuncData->originalFunction)
 	{
@@ -387,30 +408,5 @@ void ModManager::GamePreLoadHook(void* arg1, void* arg2, void* arg3, void* arg4)
 				unhookResult ? "successful" : "failed"
 			);
 		}
-	}
-}
-
-void ModManager::AccessMusicPoolHook(void* arg1, void* arg2, void* arg3, void* arg4)
-{
-	const FunctionData* accessMusicPoolFuncData = ModManager::GetFunctionData("AccessMusicPool");
-	if (!accessMusicPoolFuncData || !accessMusicPoolFuncData->originalFunction)
-	{
-		logger.Log("Original AccessMusicPool function was not hooked, cannot call it.");
-		return;
-	}
-	reinterpret_cast<GenericFunction_t>(accessMusicPoolFuncData->originalFunction)(
-		arg1, arg2, arg3, arg4
-	);
-
-	// take the first 4 non-zero hex digits of arg1 as music pool start address
-	if (!musicPoolStartAddress)
-	{
-		musicPoolStartAddress = Utils::KeepTopHex(reinterpret_cast<uintptr_t>(arg1), 4);
-		logger.Log("Music pool start address set to: %p", (void*)musicPoolStartAddress);
-
-		bool unhookResult = TryUnhookFunction(*accessMusicPoolFuncData);
-		logger.Log("AccessMusicPool function unhooking %s",
-			unhookResult ? "successful" : "failed"
-		);
 	}
 }

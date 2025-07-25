@@ -32,8 +32,9 @@ public:
 
 private:
 	static void GamePreExitHook(void*, void*, void*, void*);
-	static void GamePreLoadHook(void*, void*, void*, void*);
+
 	static void AccessMusicPoolHook(void*, void*, void*, void*);
+	static void GamePreLoadHook(void*, void*, void*, void*);
 
 private:
 	inline static ModManager* instance = nullptr;
