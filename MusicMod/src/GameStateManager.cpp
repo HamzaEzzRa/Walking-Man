@@ -1,5 +1,6 @@
 #include "GameStateManager.h"
 
+#include "ModConfiguration.h"
 #include "ModManager.h"
 #include "PatternScanner.h"
 
@@ -38,12 +39,18 @@ void GameStateManager::OnEvent(const ModEvent& event)
 
 void GameStateManager::OnScanDone()
 {
+	if (!ModConfiguration::showMusicPlayerUI)
+	{
+		logger.Log("Music player UI is disabled, skipping game state hooks");
+		return;
+	}
+
 	bool result = ModManager::TryHookFunction(
 		"InGameFlagUpdate",
 		reinterpret_cast<void*>(&GameStateManager::InGameFlagUpdateHook)
 	);
 	logger.Log(
-		"InGameFlagUpdate function hook %s.",
+		"InGameFlagUpdate function hook %s",
 		result ? "installed successfully" : "failed"
 	);
 }
@@ -124,7 +131,7 @@ void GameStateManager::InGameFlagUpdateHook(void* arg1, void* arg2, void* arg3, 
 		}
 		bool result = ModManager::TryUnhookFunction(*functionData);
 		logger.Log(
-			"InGameFlagUpdate function unhook %s.",
+			"InGameFlagUpdate function unhook %s",
 			result ? "successful" : "failed"
 		);
 	}

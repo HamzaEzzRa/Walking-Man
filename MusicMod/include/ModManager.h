@@ -42,7 +42,9 @@ private:
 	inline static std::vector<IEventListener*> listeners{};
 	inline static Logger logger = Logger("Mod Manager");
 
-	inline static uintptr_t musicPoolStartAddress = 0;
+	inline static uintptr_t musicPoolScanStartAddress = 0;
+	inline static bool gamePreLoadCalled = false;
+	inline static bool musicScanStarted = false;
 
 	inline static Microsoft::WRL::ComPtr<ID3D11DeviceContext> ofContext;
 	inline static PatternScanner::ScanProgress scanProgress{};

@@ -83,57 +83,33 @@ void MusicPlayer::OnEvent(const ModEvent& event)
 
 void MusicPlayer::OnScanDone()
 {
-	bool result = ModManager::TryHookFunction(
+	bool hookResult = ModManager::TryHookFunction(
 		"PlayMusic",
 		reinterpret_cast<void*>(&MusicPlayer::PlayMusicHook)
 	);
 	logger.Log(
-		"PlayMusic function hook %s.",
-		result ? "installed successfully" : "failed"
+		"PlayMusic function hook %s",
+		hookResult ? "installed successfully" : "failed"
 	);
 
 	const FunctionData* playingLoopData = ModManager::GetFunctionData("PlayingLoop");
 	if (!playingLoopData || !playingLoopData->address)
 	{
-		logger.Log("Failed to find PlayingLoop function signature.");
+		logger.Log("Failed to find PlayingLoop function signature");
 	}
 	else
 	{
 		playingLoopAddress = playingLoopData->address;
 	}
 
-	result = ModManager::TryHookFunction(
-		"PlayUISound",
-		reinterpret_cast<void*>(&MusicPlayer::PlayUISoundHook)
+	hookResult = ModManager::TryHookFunction(
+		"ShowMusicDescriptionCore",
+		reinterpret_cast<void*>(&MusicPlayer::ShowMusicDescriptionCoreHook)
 	);
 	logger.Log(
-		"PlayUISound function hook %s.",
-		result ? "installed successfully" : "failed"
+		"ShowMusicDescriptionCore function hook %s",
+		hookResult ? "installed successfully" : "failed"
 	);
-
-	std::vector<const MusicData*> unknownMusicDataList;
-	for (auto& nameMusicDataPair : ModConfiguration::Databases::unknownDatabase)
-	{
-		auto& unknownMusicData = nameMusicDataPair.second;
-		if (unknownMusicData.address)
-		{
-			unknownMusicDataList.push_back(&unknownMusicData);
-		}
-	}
-	unknownQueue.SetData(unknownMusicDataList.data(), unknownMusicDataList.size());
-	unknownQueue.Reset();
-
-	std::vector<const MusicData*> ambientMusicDataList;
-	for (auto& nameMusicDataPair : ModConfiguration::Databases::ambientDatabase)
-	{
-		auto& ambientMusicData = nameMusicDataPair.second;
-		if (ambientMusicData.address)
-		{
-			ambientMusicDataList.push_back(&ambientMusicData);
-		}
-	}
-	ambientQueue.SetData(ambientMusicDataList.data(), ambientMusicDataList.size());
-	ambientQueue.Reset();
 
 	std::vector<const MusicData*> songMusicDataList;
 	for (const std::string& name : ModConfiguration::activePlaylist)
@@ -141,79 +117,158 @@ void MusicPlayer::OnScanDone()
 		auto it = ModConfiguration::Databases::songDatabase.find(name);
 		if (it == ModConfiguration::Databases::songDatabase.end())
 		{
-			logger.Log("Song %s not found in database, skipping...", name.c_str());
+			logger.Log("Song \"%s\" not found in database, skipping...", name.c_str());
 			continue;
 		}
 
 		auto& songMusicData = it->second;
 		if (!songMusicData.address)
 		{
-			logger.Log("Song %s has no valid address, skipping...", name.c_str());
+			logger.Log("Song \"%s\" has no valid address, skipping...", name.c_str());
 			continue;
 		}
 		songMusicDataList.push_back(&songMusicData);
 	}
 	songQueue.SetData(songMusicDataList.data(), songMusicDataList.size());
 	songQueue.Reset();
+
+	if (ModConfiguration::devMode) // Only create pool queue in dev mode
+	{
+		std::vector<const MusicData*> poolMusicDataList;
+		auto it = ModConfiguration::Databases::songDatabase.find("Music Pool Start");
+		if (it != ModConfiguration::Databases::songDatabase.end())
+		{
+			auto& poolMusicData = it->second;
+			if (poolMusicData.address)
+			{
+				poolMusicDataList.push_back(&poolMusicData);
+				logger.Log("Pushed pool music %s with address %p",
+					poolMusicData.name, poolMusicData.address
+				);
+
+				uintptr_t currentAddress = poolMusicData.address;
+				// Take the first 8 bytes and compare with each new address start to check if we're still within the pool
+				uint64_t poolMusicSignature = *reinterpret_cast<uint64_t*>(poolMusicData.address);
+				size_t index = 0;
+
+				std::vector<size_t> skipIndices{};
+
+				while (true)
+				{
+					currentAddress = currentAddress + poolMusicDataSize;
+					uint64_t signature = *reinterpret_cast<uint64_t*>(currentAddress);
+					if (signature != poolMusicSignature)
+					{
+						logger.Log("Pool music signature mismatch at address %p, pool ended", (void*)currentAddress);
+						break;
+					}
+
+					std::string poolMusicName = "Pool Music " + std::to_string(++index);
+					for (size_t skipIndex : skipIndices)
+					{
+						if (index == skipIndex + 1)
+						{
+							continue;
+						}
+					}
+
+					MusicData* newData = (MusicData*)malloc(sizeof(MusicData));
+					if (!newData)
+					{
+						logger.Log("Failed to allocate memory for new pool music data");
+						continue;
+					}
+					newData->descriptionID = 0;
+					newData->type = MusicType::UNKNOWN;
+					newData->maxLength = 0;
+					newData->name = _strdup(poolMusicName.c_str());
+					newData->artist = "";
+					newData->signature = "";
+					newData->address = currentAddress;
+					newData->active = true;
+
+					poolMusicDataList.push_back(newData);
+
+					logger.Log("Pushed pool music %s with address %p",
+						newData->name, newData->address
+					);
+				}
+			}
+		}
+		poolQueue.SetData(poolMusicDataList.data(), poolMusicDataList.size());
+		poolQueue.Reset();
+	}
 }
 
 void MusicPlayer::OnRender()
 {
 	// Handle Playback
-	if (currentMusicData && !currentMusicIsPlaying.load())
+	if (currentMusicData)
 	{
-		if (gameCalledMusic)
+		if (currentMusicData->maxLength > 0 && currentMusicData->maxLength < currentMusicPlayTime.load())
 		{
-			gameCalledMusic = false;
-			currentMusicData = nullptr;
-			ModManager* instance = ModManager::GetInstance();
-			if (instance)
-			{
-				const char* interruptionReason = "Music player interrupted.";
-				instance->DispatchEvent(ModEvent{
-					ModEventType::MusicPlayerInterrupted,
-					this,
-					&interruptionReason
-				});
-			}
+			logger.Log("Current music playback time exceeded its max duration");
+			currentMusicPlayTime.store(0);
+			currentMusicIsPlaying.store(false);
 		}
-		else
-		{
-			switch (loopMode)
-			{
-				case LoopMode::ALL:
-				{
-					logger.Log("Autoplaying next song...");
-					PlayNextSong();
-					break;
-				}
-				case LoopMode::ONE:
-				{
-					logger.Log("Autoplaying current song...");
-					PlayCurrentSong();
-					break;
-				}
-				case LoopMode::NONE:
-				{
-					if (musicAddressWatcher)
-					{
-						musicAddressWatcher->Uninstall();
-						musicAddressWatcher.reset();
-					}
 
-					ModManager* instance = ModManager::GetInstance();
-					if (instance)
-					{
-						instance->DispatchEvent(ModEvent{
-							ModEventType::MusicPlayerStopped,
-							this,
-							nullptr
-							});
-					}
-					break;
+		if (!currentMusicIsPlaying.load())
+		{
+			if (gameCalledInterruptor || (gameCalledSong && ModConfiguration::allowScriptedSongs))
+			{
+				gameCalledSong = false;
+				gameCalledInterruptor = false;
+
+				currentMusicData = nullptr;
+				ModManager* instance = ModManager::GetInstance();
+				if (instance)
+				{
+					const char* interruptionMessage = "Music player interrupted.";
+					instance->DispatchEvent(ModEvent{
+						ModEventType::MusicPlayerInterrupted,
+						this,
+						&interruptionMessage
+					});
 				}
-				default:
-					break;
+			}
+			else
+			{
+				switch (loopMode)
+				{
+					case LoopMode::ALL:
+					{
+						logger.Log("Autoplaying next song...");
+						PlayNextSong();
+						break;
+					}
+					case LoopMode::ONE:
+					{
+						logger.Log("Autoplaying current song...");
+						PlayCurrentSong();
+						break;
+					}
+					case LoopMode::NONE:
+					{
+						if (musicAddressWatcher)
+						{
+							musicAddressWatcher->Uninstall();
+							musicAddressWatcher.reset();
+						}
+
+						ModManager* instance = ModManager::GetInstance();
+						if (instance)
+						{
+							instance->DispatchEvent(ModEvent{
+								ModEventType::MusicPlayerStopped,
+								this,
+								nullptr
+								});
+						}
+						break;
+					}
+					default:
+						break;
+				}
 			}
 		}
 	}
@@ -340,94 +395,82 @@ void MusicPlayer::PlayMusicHook(void* arg1, void* arg2, void* arg3, void* arg4)
 		logger.Log("1st arg address set to: %p", (void*)playMusicFuncRCXAddress);
 	}
 
-	// Always set to the last arg2, but does it create bugs in the long run? (time will tell)
-	uintptr_t arg2Address = reinterpret_cast<uintptr_t>(arg2);
-	if (playMusicFuncRDXAddress != arg2Address)
+	if (!playMusicFuncRDXAddress)
 	{
-		playMusicFuncRDXAddress = arg2Address;
-		logger.Log("2nd arg address set to: %p", (void*)playMusicFuncRDXAddress);
-	}
-
-	bool gameCalledSilence = false;
-	auto it = ModConfiguration::Databases::sfxDatabase.find("Silence");
-	if (it != ModConfiguration::Databases::sfxDatabase.end())
-	{
-		uintptr_t silenceAddress = it->second.address;
-		if (reinterpret_cast<uintptr_t>(arg3) == silenceAddress)
+		uintptr_t arg2Address = reinterpret_cast<uintptr_t>(arg2);
+		if ((arg2Address & 0xFF) == 0x80)
 		{
-			gameCalledSilence = true;
+			playMusicFuncRDXAddress = arg2Address;
+			logger.Log("2nd arg address set to: %p", (void*)playMusicFuncRDXAddress);
 		}
 	}
-	gameCalledMusic = !gameCalledSilence;
 
-	const FunctionData* functionData = ModManager::GetFunctionData("PlayMusic");
-	if (!functionData || !functionData->originalFunction)
+	gameCalledInterruptor = false;
+	for (const auto& [name, interruptorData] : ModConfiguration::Databases::interruptorDatabase)
 	{
-		logger.Log("Original play music function is not found, cannot play music.");
+		if (reinterpret_cast<uintptr_t>(arg3) == interruptorData.address)
+		{
+			gameCalledInterruptor = true;
+			break;
+		}
+	}
+
+	const FunctionData* playMusicFuncData = ModManager::GetFunctionData("PlayMusic");
+	if (!playMusicFuncData || !playMusicFuncData->originalFunction)
+	{
+		logger.Log("Original play music function is not found, cannot play music");
 		return;
 	}
-	reinterpret_cast<GenericFunction_t>(functionData->originalFunction)(arg1, arg2, arg3, arg4);
-}
 
-void MusicPlayer::PlayUISoundHook(void* arg1, void* arg2, void* arg3, void* arg4)
-{
-	Logger logger("Play UI Sound");
-
-	if (currentMusicData && arg1 && arg2)
+	MusicData songToPlay;
+	if (!gameCalledInterruptor)
 	{
-		std::vector<uint8_t> targetBytes;
-		std::vector<bool> masks;
-		for (const auto& nameInterruptorPair : ModConfiguration::Databases::musicInterruptors)
+		for (const auto& [name, musicData] : ModConfiguration::Databases::songDatabase)
 		{
-			bool match = true;
-			const MusicData& interruptor = nameInterruptorPair.second;
-
-			targetBytes.clear();
-			masks.clear();
-			MemoryUtils::ParseHexString(interruptor.signature, targetBytes, masks);
-			for (size_t i = 0; i < targetBytes.size(); i++)
+			if (reinterpret_cast<uintptr_t>(arg3) == musicData.address)
 			{
-				if (masks[i])
-				{
-					if (*reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(arg2) + i) != targetBytes[i])
-					{
-						//logger.Log("Interruptor %s not matched at offset %zu", interruptor.name, i);
-						match = false;
-						break; // not matched, skip to next interruptor
-					}
-				}
-			}
-
-			if (match)
-			{
-				logger.Log("Interruptor %s matched, stopping autoplay", interruptor.name);
-				currentMusicData = nullptr;
-				currentMusicIsPlaying.store(false);
-
-				ModManager* instance = ModManager::GetInstance();
-				if (instance)
-				{
-					std::string interruptionReasonStr = std::string(interruptor.name) + ": music player interrupted.";
-					const char* interruptionReason = interruptionReasonStr.c_str();
-					instance->DispatchEvent(ModEvent{
-						ModEventType::MusicPlayerInterrupted,
-						nullptr,
-						&interruptionReason
-					});
-				}
-
+				gameCalledSong = true;
+				songToPlay = musicData;
 				break;
 			}
 		}
 	}
 
-	const FunctionData* playUISoundFuncData = ModManager::GetFunctionData("PlayUISound");
-	if (!playUISoundFuncData || !playUISoundFuncData->originalFunction)
+	if (gameCalledSong && !ModConfiguration::allowScriptedSongs)
 	{
-		logger.Log("Original play UI sound function is not found, cannot play sound.");
+		logger.Log(
+			"Configuration does not allow scripted songs, skipping song %s",
+			songToPlay.name
+		);
 		return;
 	}
-	reinterpret_cast<GenericFunction_t>(playUISoundFuncData->originalFunction)(arg1, arg2, arg3, arg4);
+
+	/*if (!gameCalledSong && !gameCalledInterruptor)
+	{
+		logger.Log("Game called PlayMusic function with arg3: %p", arg3);
+	}*/
+	
+	reinterpret_cast<GenericFunction_t>(playMusicFuncData->originalFunction)(arg1, arg2, arg3, arg4);
+}
+
+void MusicPlayer::ShowMusicDescriptionCoreHook(void* arg1, void* arg2, void* arg3, void* arg4)
+{
+	Logger logger("Show Music Description Core Hook");
+
+	const FunctionData* showMusicDescriptionCoreFuncData = ModManager::GetFunctionData("ShowMusicDescriptionCore");
+	if (!showMusicDescriptionCoreFuncData || !showMusicDescriptionCoreFuncData->originalFunction)
+	{
+		logger.Log("Original show music description core function was not hooked, cannot show description");
+		return;
+	}
+
+	if (gameCalledSong && !ModConfiguration::allowScriptedSongs)
+	{
+		logger.Log("Configuration does not allow scripted songs, skipping song description");
+		return;
+	}
+	
+	reinterpret_cast<GenericFunction_t>(showMusicDescriptionCoreFuncData->originalFunction)(arg1, arg2, arg3, arg4);
 }
 
 void MusicPlayer::PlayMusic(const MusicData* data, bool displayDescription=true)
@@ -440,17 +483,20 @@ void MusicPlayer::PlayMusic(const MusicData* data, bool displayDescription=true)
 
 	if (!data || !data->address)
 	{
-		logger.Log("Invalid music data provided, cannot play music.");
+		logger.Log("Invalid music data provided, cannot play music");
 		return;
 	}
 
 	const FunctionData* playMusicFuncData = ModManager::GetFunctionData("PlayMusic");
 	if (!playMusicFuncData || !playMusicFuncData->originalFunction)
 	{
-		logger.Log("Original play music function was not hooked, cannot play music.");
+		logger.Log("Original play music function was not hooked, cannot play music");
 		return;
 	}
-	gameCalledMusic = false; // Always reset this flag. Game calls the play music function at the main menu too
+
+	// Always reset flags to be safe
+	gameCalledSong = false;
+	gameCalledInterruptor = false;
 
 	if (
 		ModConfiguration::showSongDescription && displayDescription
@@ -501,6 +547,7 @@ void MusicPlayer::PlayMusic(const MusicData* data, bool displayDescription=true)
 	void* arg3 = reinterpret_cast<void*>(data->address);
 	logger.Log("Third argument read successfully: %p", arg3);
 
+	currentMusicPlayTime.store(0);
 	currentMusicStartTime = std::chrono::steady_clock::now();
 	reinterpret_cast<GenericFunction_t>(playMusicFuncData->originalFunction)(arg1, arg2, arg3, 0);
 	logger.Log("Playing BGM: \"%s\"", data->name);
@@ -515,6 +562,10 @@ void MusicPlayer::PlayMusic(const MusicData* data, bool displayDescription=true)
 			[] {
 				/*Logger logger("Music Address Watcher");
 				logger.Log("Music still playing...");*/
+				std::chrono::milliseconds songDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
+					std::chrono::steady_clock::now() - currentMusicStartTime
+				);
+				currentMusicPlayTime.store(songDuration.count());
 			},
 			[] {
 				Logger logger("Music Address Watcher");
@@ -541,7 +592,7 @@ void MusicPlayer::PlayCurrentSong()
 	const MusicData* currentSong = songQueue.GetCurrent();
 	if (!currentSong)
 	{
-		logger.Log("No current song available in the queue.");
+		logger.Log("No current song available in the queue");
 		return;
 	}
 
@@ -553,7 +604,7 @@ void MusicPlayer::PlayNextSong()
 	const MusicData* nextSong = songQueue.GetNext();
 	if (!nextSong)
 	{
-		logger.Log("No next songs available in the queue.");
+		logger.Log("No next songs available in the queue");
 		return;
 	}
 	logger.Log("Attempting to play next song: %s", nextSong->name);
@@ -565,90 +616,26 @@ void MusicPlayer::PlayPreviousSong()
 	const MusicData* previousSong = songQueue.GetPrevious();
 	if (!previousSong)
 	{
-		logger.Log("No previous song available in the queue.");
+		logger.Log("No previous song available in the queue");
 		return;
 	}
 	logger.Log("Attempting to play previous song: %s", previousSong->name);
 	PlayMusic(previousSong);
 }
 
-void MusicPlayer::PlayNextAmbient()
-{
-	const MusicData* nextAmbient = ambientQueue.GetNext();
-	if (!nextAmbient)
-	{
-		logger.Log("No next ambient music available in the queue.");
-		return;
-	}
-	logger.Log("Attempting to play next ambient music: %s", nextAmbient->name);
-	PlayMusic(nextAmbient);
-}
-
-void MusicPlayer::PlayPreviousAmbient()
-{
-	const MusicData* previousAmbient = ambientQueue.GetPrevious();
-	if (!previousAmbient)
-	{
-		logger.Log("No previous ambient music available in the queue.");
-		return;
-	}
-	logger.Log("Attempting to play previous ambient music: %s", previousAmbient->name);
-	PlayMusic(previousAmbient);
-}
-
-void MusicPlayer::PlayNextUnknown()
-{
-	const MusicData* nextUnknown = unknownQueue.GetNext();
-	if (!nextUnknown)
-	{
-		logger.Log("No next unknown music available in the queue.");
-		return;
-	}
-	logger.Log("Attempting to play next unknown music: %s", nextUnknown->name);
-	PlayMusic(nextUnknown);
-}
-
-void MusicPlayer::PlayPreviousUnknown()
-{
-	const MusicData* previousUnknown = unknownQueue.GetPrevious();
-	if (!previousUnknown)
-	{
-		logger.Log("No previous unknown music available in the queue.");
-		return;
-	}
-	logger.Log("Attempting to play previous unknown music: %s", previousUnknown->name);
-	PlayMusic(previousUnknown);
-}
-
 void MusicPlayer::PlayByName(const std::string& name)
 {
 	if (name.empty())
 	{
-		logger.Log("Cannot find music with an empty name.");
+		logger.Log("Cannot find music with an empty name");
 		return;
 	}
 
-	auto sfxIt = ModConfiguration::Databases::sfxDatabase.find(name);
-	if (sfxIt != ModConfiguration::Databases::sfxDatabase.end())
+	auto interruptorIt = ModConfiguration::Databases::interruptorDatabase.find(name);
+	if (interruptorIt != ModConfiguration::Databases::interruptorDatabase.end())
 	{
-		const MusicData* sfxMusicData = &(sfxIt->second);
-		PlayMusic(sfxMusicData);
-		return;
-	}
-
-	auto ambientIt = ModConfiguration::Databases::ambientDatabase.find(name);
-	if (ambientIt != ModConfiguration::Databases::ambientDatabase.end())
-	{
-		const MusicData* ambientMusicData = &(ambientIt->second);
-		PlayMusic(ambientMusicData);
-		return;
-	}
-
-	auto unknownIt = ModConfiguration::Databases::unknownDatabase.find(name);
-	if (unknownIt != ModConfiguration::Databases::unknownDatabase.end())
-	{
-		const MusicData* unknownMusicData = &(unknownIt->second);
-		PlayMusic(unknownMusicData);
+		const MusicData* interruptorMusicData = &(interruptorIt->second);
+		PlayMusic(interruptorMusicData);
 		return;
 	}
 	
@@ -668,10 +655,10 @@ void MusicPlayer::StopMusic()
 		return;
 	}
 
-	auto it = ModConfiguration::Databases::sfxDatabase.find("Silence");
-	if (it == ModConfiguration::Databases::sfxDatabase.end())
+	auto it = ModConfiguration::Databases::interruptorDatabase.find("Silence");
+	if (it == ModConfiguration::Databases::interruptorDatabase.end())
 	{
-		logger.Log("Silence music data not found, cannot stop music.");
+		logger.Log("Silence music data not found, cannot stop music");
 		return;
 	}
 
@@ -681,10 +668,71 @@ void MusicPlayer::StopMusic()
 	currentMusicIsPlaying.store(false);
 }
 
+void MusicPlayer::PlayNextInPool()
+{
+	const MusicData* nextPoolMusic = poolQueue.GetNext();
+	if (!nextPoolMusic)
+	{
+		logger.Log("No next music available in the pool");
+		return;
+	}
+
+	logger.Log("Attempting to play next music from pool: %s", nextPoolMusic->name);
+	MemoryUtils::PrintBytesAtAddress(nextPoolMusic->address, 24);
+
+	PlayMusic(nextPoolMusic);
+}
+
+void MusicPlayer::PlayPreviousInPool()
+{
+	const MusicData* previousPoolMusic = poolQueue.GetPrevious();
+	if (!previousPoolMusic)
+	{
+		logger.Log("No previous music available in the pool");
+		return;
+	}
+	
+	logger.Log("Attempting to play previous music from pool: %s", previousPoolMusic->name);
+	MemoryUtils::PrintBytesAtAddress(previousPoolMusic->address, 24);
+
+	PlayMusic(previousPoolMusic);
+}
+
 void MusicPlayer::OnInputPress(const InputCode& inputCode)
 {
 	if (inputCode.source == InputSource::KBM)
 	{
+		if (ModConfiguration::devMode)
+		{
+			if (inputCode.code == VK_F1)
+			{
+				PlayNextInPool();
+			}
+			if (inputCode.code == VK_F2)
+			{
+				PlayPreviousInPool();
+			}
+			if (inputCode.code == VK_F3)
+			{
+				static uint16_t currentDescriptionId = 0;
+
+				const FunctionData* showSongDescriptionFuncData = ModManager::GetFunctionData("ShowMusicDescription");
+				if (!showSongDescriptionFuncData || !showSongDescriptionFuncData->address)
+				{
+					logger.Log("Show music description function not found, cannot show description");
+				}
+				else
+				{
+					void* descriptionId = reinterpret_cast<void*>(currentDescriptionId++);
+					logger.Log("Showing song description for ID: %d", descriptionId);
+					GenericFunction_t showMusicDescriptionFunc = reinterpret_cast<GenericFunction_t>(
+						showSongDescriptionFuncData->address
+					);
+					showMusicDescriptionFunc(nullptr, descriptionId, nullptr, nullptr);
+				}
+			}
+		}
+
 		if (inputCode.code == VK_F9)
 		{
 			StopMusic();

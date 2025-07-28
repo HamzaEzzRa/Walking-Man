@@ -486,13 +486,14 @@ namespace MemoryUtils
 				return minimumClearance;
 			}
 
-			if (byteCount >= minimumClearance)
+			byteCount += instructionSize;
+			requiredClearance = byteCount;
+			if (requiredClearance >= minimumClearance)
 			{
-				requiredClearance = byteCount;
 				break;
 			}
 
-			byteCount += instructionSize;
+			//byteCount += instructionSize;
 		}
 
 		return requiredClearance;
@@ -569,7 +570,7 @@ namespace MemoryUtils
 		std::vector<uint8_t> bytesBuffer(numBytes, 0x90);
 		MemCopy((uintptr_t)&bytesBuffer[0], address, bytesBuffer.size());
 		std::string hexString = ConvertVectorOfBytesToStringOfHex(bytesBuffer);
-		logger.Log("Existing bytes: %s", hexString.c_str());
+		logger.Log("Bytes: %s", hexString.c_str());
 	}
 
 	// Place a trampoline hook from A to B while taking third-party hooks into consideration.

@@ -12,11 +12,12 @@ struct MusicData
 {
 	uint16_t descriptionID; // passed to the draw description function
 	MusicType type;
-	long long length; // estimated length in milliseconds, 0 if unknown. Not useful, playing loop tracks music ending
+	long long maxLength; // max duration in ms, keeps going until the music stops if 0, else stops after this time
 	const char* name; // name and artist are just for logging
 	const char* artist;
 	const char* signature;
 	uintptr_t address = 0;
+	bool active = false;
 };
 
 struct FunctionData

@@ -100,58 +100,65 @@ void UIManager::OnEvent(const ModEvent& event)
 
 void UIManager::OnScanDone()
 {
-	bool result = ModManager::TryHookFunction(
+	if (!ModConfiguration::showMusicPlayerUI)
+	{
+		logger.Log("Music player UI is disabled in configuration, skipping UI hooks");
+		return;
+	}
+
+	bool hookResult;
+	hookResult = ModManager::TryHookFunction(
 		"InGameUIUpdateStaticPoolCaller",
 		reinterpret_cast<void*>(&UIManager::InGameUIUpdateStaticPoolCallerHook)
 	);
 	logger.Log(
-		"InGameUIUpdateStaticPoolCaller function hook %s.",
-		result ? "installed successfully" : "failed"
+		"InGameUIUpdateStaticPoolCaller function hook %s",
+		hookResult ? "installed successfully" : "failed"
 	);
 
-	result = ModManager::TryHookFunction(
-		"AccessStaticPool",
-		reinterpret_cast<void*>(&UIManager::AccessStaticPoolHook)
+	hookResult = ModManager::TryHookFunction(
+		"AccessStaticUIPool",
+		reinterpret_cast<void*>(&UIManager::AccessStaticUIPoolHook)
 	);
 	logger.Log(
-		"AccessStaticPool function hook %s.",
-		result ? "installed successfully" : "failed"
+		"AccessStaticUIPool function hook %s",
+		hookResult ? "installed successfully" : "failed"
 	);
 
-	result = ModManager::TryHookFunction(
+	hookResult = ModManager::TryHookFunction(
 		"UpdateRuntimeUIText",
 		reinterpret_cast<void*>(&UIManager::UpdateRuntimeUITextHook)
 	);
 	logger.Log(
-		"UpdateRuntimeUIText function hook %s.",
-		result ? "installed successfully" : "failed"
+		"UpdateRuntimeUIText function hook %s",
+		hookResult ? "installed successfully" : "failed"
 	);
 
-	result = ModManager::TryHookFunction(
+	hookResult = ModManager::TryHookFunction(
 		"InGameUIDrawElement",
 		reinterpret_cast<void*>(&UIManager::InGameUIDrawElementHook)
 	);
 	logger.Log(
-		"InGameUIDrawElement function hook %s.",
-		result ? "installed successfully" : "failed"
+		"InGameUIDrawElement function hook %s",
+		hookResult ? "installed successfully" : "failed"
 	);
 
-	result = ModManager::TryHookFunction(
+	hookResult = ModManager::TryHookFunction(
 		"InGameUIUpdateElement",
 		reinterpret_cast<void*>(&UIManager::InGameUIUpdateElementHook)
 	);
 	logger.Log(
-		"InGameUIUpdateElement function hook %s.",
-		result ? "installed successfully" : "failed"
+		"InGameUIUpdateElement function hook %s",
+		hookResult ? "installed successfully" : "failed"
 	);
 
-	result = ModManager::TryHookFunction(
+	hookResult = ModManager::TryHookFunction(
 		"PostMenuExit",
 		reinterpret_cast<void*>(&UIManager::PostMenuExitHook)
 	);
 	logger.Log(
-		"PostMenuExit function hook %s.",
-		result ? "installed successfully" : "failed"
+		"PostMenuExit function hook %s",
+		hookResult ? "installed successfully" : "failed"
 	);
 }
 
@@ -374,15 +381,15 @@ void UIManager::InGameUIUpdateStaticPoolCallerHook(void* arg1, void* arg2, void*
 	}
 }
 
-void UIManager::AccessStaticPoolHook(void* arg1, void* arg2, void* arg3, void* arg4)
+void UIManager::AccessStaticUIPoolHook(void* arg1, void* arg2, void* arg3, void* arg4)
 {
-	Logger logger("Access Static Pool Hook");
+	Logger logger("Access Static UI Pool Hook");
 	staticUIPoolAddress = reinterpret_cast<uintptr_t>(arg4) + offsetToStaticUIPool;
 
-	const FunctionData* functionData = ModManager::GetFunctionData("AccessStaticPool");
+	const FunctionData* functionData = ModManager::GetFunctionData("AccessStaticUIPool");
 	if (!functionData || !functionData->originalFunction)
 	{
-		logger.Log("Original AccessStaticPool function was not hooked, cannot call it.");
+		logger.Log("Original AccessStaticUIPool function was not hooked, cannot call it.");
 		return;
 	}
 	reinterpret_cast<GenericFunction_t>(functionData->originalFunction)(arg1, arg2, arg3, arg4);
@@ -461,14 +468,17 @@ void UIManager::InGameUIDrawElementHook(void* arg1, void* arg2, void* arg3, void
 		arg1, arg2, arg3, arg4
 	);
 
+	size_t runtimeSlotIndex = reinterpret_cast<size_t>(arg2);
+	if (runtimeSlotIndex == 0) // New UI group so we reset the compass state
+	{
+		ResetModCompassState();
+	}
 	if (currentCompassState == INCOMPATIBLE)
 	{
 		return; // Don't update compass state if it's incompatible, wait until reset
 	}
 
 	// Update compass state
-	size_t runtimeSlotIndex = reinterpret_cast<size_t>(arg2);
-	
 	void** destinationRuntimeTextPtr = (void**)(
 		currentRuntimeUIPoolStart + runtimeUITextPoolOffset + runtimeSlotIndex * runtimeSlotSize
 	);

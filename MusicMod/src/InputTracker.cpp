@@ -12,8 +12,7 @@ void InputTracker::OnEvent(const ModEvent& event)
 	{
 		case ModEventType::ScanCompleted:
 		{
-			ZeroMemory(&lastGamepadState, sizeof(XINPUT_STATE));
-			logger.Log("Setup complete");
+			OnScanDone();
 			break;
 		}
 		case ModEventType::FrameRendered:
@@ -25,6 +24,40 @@ void InputTracker::OnEvent(const ModEvent& event)
 		default:
 			break;
 	}
+}
+
+void InputTracker::OnScanDone()
+{
+	bool hookResult = ModManager::TryHookFunction(
+		"GetInputBitmask",
+		reinterpret_cast<void*>(&InputTracker::GetInputBitmaskHook)
+	);
+	logger.Log(
+		"GetInputBitmask function hook %s",
+		hookResult ? "installed successfully" : "failed"
+	);
+
+	ZeroMemory(&lastGamepadState, sizeof(XINPUT_STATE));
+	logger.Log("Setup complete");
+}
+
+uint32_t InputTracker::GetInputBitmaskHook(void* arg1)
+{
+	Logger logger("Get Input Bitmask");
+
+	const FunctionData* functionData = ModManager::GetFunctionData("GetInputBitmask");
+	if (!functionData || !functionData->originalFunction)
+	{
+		logger.Log("Original GetInputBitmask function is not found, cannot call it");
+		return 0;
+	}
+
+	// original function returns a uint
+	using Func_t = uint32_t(*)(void*);
+	uint32_t bitmask = reinterpret_cast<Func_t>(functionData->originalFunction)(arg1);
+	//logger.Log("Called with arg1=%p, bitmask=%p", arg1, bitmask);
+
+	return bitmask;
 }
 
 bool InputTracker::IsCombinationActive(const std::vector<InputCode>& combination)
@@ -103,7 +136,7 @@ void InputTracker::PollGamepad()
 	{
 		if (gamepadConnected)
 		{
-			logger.Log("Gamepad disconnected.");
+			logger.Log("Gamepad disconnected");
 			gamepadConnected = false;
 		}
 		return;
@@ -111,7 +144,7 @@ void InputTracker::PollGamepad()
 
 	if (!gamepadConnected)
 	{
-		logger.Log("Gamepad connected.");
+		logger.Log("Gamepad connected");
 		gamepadConnected = true;
 	}
 

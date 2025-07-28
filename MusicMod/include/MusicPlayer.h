@@ -37,17 +37,14 @@ private:
 	void PlayNextSong();
 	void PlayPreviousSong();
 
-	void PlayNextAmbient();
-	void PlayPreviousAmbient();
-
-	void PlayNextUnknown();
-	void PlayPreviousUnknown();
-
 	void PlayByName(const std::string&);
 	void StopMusic();
 
+	void PlayNextInPool();
+	void PlayPreviousInPool();
+
 	static void PlayMusicHook(void*, void*, void*, void*);
-	static void PlayUISoundHook(void*, void*, void*, void*);
+	static void ShowMusicDescriptionCoreHook(void*, void*, void*, void*);
 
 private:
 	enum LoopMode
@@ -60,15 +57,20 @@ private:
 
 	Logger logger = Logger("Music Player");
 
-	inline static PlaybackQueue<const MusicData*> unknownQueue{};
-	inline static PlaybackQueue<const MusicData*> ambientQueue{};
 	inline static PlaybackQueue<const MusicData*> songQueue{};
+
+	// Pool queue is for dev purposes, helps speed up finding game music data
+	inline static PlaybackQueue<const MusicData*> poolQueue{};
+	inline static size_t poolMusicDataSize = 48; // Size of each entry in the pool, used to calculate potential next address
 
 	inline static uintptr_t playMusicFuncRCXAddress = 0;
 	inline static uintptr_t playMusicFuncRDXAddress = 0;
 	inline static uintptr_t offsetMenuToInGameRDX = -64;
-	inline static bool gameCalledMusic = false;
-	
+
+	inline static bool gameCalledSong = false;
+	inline static bool gameCalledInterruptor = false;
+	inline static std::atomic<long long> currentMusicPlayTime = 0; // in ms, used to track current playback time
+
 	inline static const MusicData* currentMusicData = nullptr;
 	inline static std::chrono::time_point<std::chrono::steady_clock> currentMusicStartTime;
 	inline static std::atomic<bool> currentMusicIsPlaying = false;

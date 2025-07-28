@@ -113,7 +113,7 @@ public:
 
 private:
 	static void InGameUIUpdateStaticPoolCallerHook(void*, void*, void*, void*);
-	static void AccessStaticPoolHook(void*, void*, void*, void*);
+	static void AccessStaticUIPoolHook(void*, void*, void*, void*);
 
 	static void UpdateRuntimeUITextHook(void*, void*, void*, void*);
 
@@ -129,8 +129,7 @@ private:
 private:
 	Logger logger{ "UI Manager" };
 
-	// The AccessStaticPool function has avx instruction in the prologue
-	// 4th argument is an address close to the ui static pool start (pool = arg + 0xC0)
+	// AccessStaticUIPool 4th argument is an address close to the ui static pool start (pool = arg + 0xC0)
 	// This is the closest we can get to the static pool from a function. Offsets from other pools change across versions
 	inline static size_t offsetToStaticUIPool = 0xC0;
 	inline static uintptr_t staticUIPoolAddress = 0;

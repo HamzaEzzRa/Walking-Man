@@ -19,12 +19,13 @@ static Logger logger{ "DllMain" };
 
 HANDLE gHookThread = NULL;
 
-void OpenDebugTerminal()
+void OpenDevTerminal()
 {
 	std::fstream terminalEnableFile;
-	terminalEnableFile.open(ModConfiguration::enableTerminalFilename, std::fstream::in);
+	terminalEnableFile.open(ModConfiguration::enableDevFilename, std::fstream::in);
 	if (terminalEnableFile.is_open())
 	{
+		ModConfiguration::devMode = true;
 		if (AllocConsole())
 		{
 			freopen_s((FILE**)stdout, "CONOUT$", "w", stdout);
@@ -61,7 +62,7 @@ BOOL WINAPI DllMain(HMODULE module, DWORD reason, LPVOID)
 {
 	if (reason == DLL_PROCESS_ATTACH)
 	{
-		OpenDebugTerminal();
+		OpenDevTerminal();
 		UPD::MuteLogging();
 		UPD::CreateProxy(module);
 		MH_Initialize();

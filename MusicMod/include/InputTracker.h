@@ -25,6 +25,8 @@ public:
 	inline static constexpr BYTE GAMEPAD_TRIGGER_THRESHOLD = 30; // Threshold for trigger activation
 
 private:
+	void OnScanDone();
+
 	void SendInputPress(const InputCode&);
 	void SendInputDown(const InputCode&);
 	void SendInputUp(const InputCode&);
@@ -34,6 +36,8 @@ private:
 	void HandleGamepadTrigger(BYTE, BYTE&, const InputCode&);
 
 	static std::string HashCombination(const std::vector<InputCode>&);
+
+	static uint32_t GetInputBitmaskHook(void*);
 
 private:
 	Logger logger = Logger("Input Tracker");
