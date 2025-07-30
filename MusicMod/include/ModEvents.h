@@ -20,6 +20,8 @@ enum class ModEventType
 	MusicPlayerStopped,
 	MusicPlayerInterrupted,
 
+	BTTerritoryStateChanged,
+	MuleTerritoryStateChanged,
 	ChiralNetworkStateChanged
 };
 

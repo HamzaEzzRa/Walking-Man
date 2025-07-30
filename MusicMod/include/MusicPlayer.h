@@ -44,6 +44,7 @@ private:
 	void PlayPreviousInPool();
 
 	static void PlayMusicHook(void*, void*, void*, void*);
+	static void PlayUISoundHook(void*, void*, void*, void*);
 	static void ShowMusicDescriptionCoreHook(void*, void*, void*, void*);
 
 private:

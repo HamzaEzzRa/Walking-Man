@@ -27,13 +27,17 @@ void MemoryWatcher::Uninstall()
     {
         monitorThread_.join();
     }
+	watchAddr_ = nullptr;
 }
 
 void MemoryWatcher::MonitorLoop() {
     std::vector<uint8_t> currentValue(watchSize_);
     while (active_)
     {
-        if (IsReadableAddress(watchAddr_, watchSize_))
+        std::this_thread::sleep_for(std::chrono::milliseconds(pollIntervalMs_));
+		if (!active_) break; // check again in case we were stopped
+
+        if (watchAddr_ && IsReadableAddress(watchAddr_, watchSize_))
         {
             std::memcpy(currentValue.data(), watchAddr_, watchSize_);
             if (currentValue != previousValue_)
@@ -42,7 +46,6 @@ void MemoryWatcher::MonitorLoop() {
                 if (onChanged_) onChanged_(currentValue.data());
             }
 		}
-        std::this_thread::sleep_for(std::chrono::milliseconds(pollIntervalMs_));
     }
 }
 

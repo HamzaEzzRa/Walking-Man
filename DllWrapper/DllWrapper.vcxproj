@@ -77,8 +77,8 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <TargetName>version</TargetName>
-    <IncludePath>$(SolutionDir)tsl\include;$(SolutionDir)MinHook\include;$(SolutionDir)DirectXHook\include;$(SolutionDir)MusicMod\include;$(VC_IncludePath);$(WindowsSDK_IncludePath)</IncludePath>
+    <TargetName>dxgi</TargetName>
+    <IncludePath>$(SolutionDir)tsl\include;$(SolutionDir)MinHook\include;$(SolutionDir)MusicMod\include;$(VC_IncludePath);$(WindowsSDK_IncludePath)</IncludePath>
     <SourcePath>$(VC_SourcePath);</SourcePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -88,7 +88,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
     <TargetName>dxgi</TargetName>
-    <IncludePath>$(SolutionDir)tsl\include;$(SolutionDir)MinHook\include;$(SolutionDir)DirectXHook\include;$(SolutionDir)MusicMod\include;$(VC_IncludePath);$(WindowsSDK_IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir)tsl\include;$(SolutionDir)MinHook\include;$(SolutionDir)DirectXHook\include;$(SolutionDir)MusicMod\include;$(SolutionDir)DllWrapper\include;$(VC_IncludePath);$(WindowsSDK_IncludePath)</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -128,7 +128,7 @@
       <EnableUAC>false</EnableUAC>
       <ModuleDefinitionFile>
       </ModuleDefinitionFile>
-      <AdditionalDependencies>imgui.lib;xinput.lib;d3d11.lib;d3d12.lib;d3dcompiler.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
       <AddModuleNamesToAssembly>
       </AddModuleNamesToAssembly>
     </Link>
@@ -167,7 +167,7 @@ COPY "$(SolutionDir)x64\Debug\dxgi.dll" "C:\Program Files (x86)\Steam\steamapps\
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;DLLWRAPPER_EXPORTS;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;NDEBUG;DLLWRAPPER_EXPORTS;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeaderFile>
       </PrecompiledHeaderFile>
@@ -180,9 +180,10 @@ COPY "$(SolutionDir)x64\Debug\dxgi.dll" "C:\Program Files (x86)\Steam\steamapps\
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
-      <ModuleDefinitionFile>
-      </ModuleDefinitionFile>
-      <AdditionalDependencies>imgui.lib;xinput.lib;d3d11.lib;d3d12.lib;d3dcompiler.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
+      <ModuleDefinitionFile>$(SolutionDir)dxgi.def</ModuleDefinitionFile>
+      <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
+      <IgnoreSpecificDefaultLibraries>
+      </IgnoreSpecificDefaultLibraries>
     </Link>
     <PostBuildEvent>
       <Command>COPY "$(SolutionDir)x64\Release\dxgi.dll" "C:\Program Files\Epic Games\DeathStranding\dxgi.dll
@@ -191,16 +192,6 @@ COPY "$(SolutionDir)x64\Release\dxgi.dll" "C:\Program Files (x86)\Steam\steamapp
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="..\DirectXHook\include\DirectXHook.h" />
-    <ClInclude Include="..\DirectXHook\include\ID3DRenderer.h" />
-    <ClInclude Include="..\DirectXHook\include\IRenderCallback.h" />
-    <ClInclude Include="..\DirectXHook\include\Logger.h" />
-    <ClInclude Include="..\DirectXHook\include\MemoryUtils.h" />
-    <ClInclude Include="..\DirectXHook\include\nmd_assembly.h" />
-    <ClInclude Include="..\DirectXHook\include\OverlayFramework.h" />
-    <ClInclude Include="..\DirectXHook\include\Renderer.h" />
-    <ClInclude Include="..\DirectXHook\include\Shaders.h" />
-    <ClInclude Include="..\DirectXHook\include\UniversalProxyDLL.h" />
     <ClInclude Include="..\MinHook\include\MinHook.h" />
     <ClInclude Include="..\MinHook\src\buffer.h" />
     <ClInclude Include="..\MinHook\src\hde\hde32.h" />
@@ -216,7 +207,6 @@ COPY "$(SolutionDir)x64\Release\dxgi.dll" "C:\Program Files (x86)\Steam\steamapp
     <ClInclude Include="..\MusicMod\include\InputCode.h" />
     <ClInclude Include="..\MusicMod\include\InputObserver.h" />
     <ClInclude Include="..\MusicMod\include\InputTracker.h" />
-    <ClInclude Include="..\MusicMod\include\IRenderCallbackObserver.h" />
     <ClInclude Include="..\MusicMod\include\BreakpointWatcher.h" />
     <ClInclude Include="..\MusicMod\include\MemoryWatcher.h" />
     <ClInclude Include="..\MusicMod\include\ModConfiguration.h" />
@@ -231,10 +221,12 @@ COPY "$(SolutionDir)x64\Release\dxgi.dll" "C:\Program Files (x86)\Steam\steamapp
     <ClInclude Include="..\tsl\include\ordered_hash.h" />
     <ClInclude Include="..\tsl\include\ordered_map.h" />
     <ClInclude Include="..\tsl\include\ordered_set.h" />
+    <ClInclude Include="include\Logger.h" />
+    <ClInclude Include="include\MemoryUtils.h" />
+    <ClInclude Include="include\nmd_assembly.h" />
+    <ClInclude Include="include\UniversalProxyDLL.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\DirectXHook\src\DirectXHook.cpp" />
-    <ClCompile Include="..\DirectXHook\src\Renderer.cpp" />
     <ClCompile Include="..\MinHook\src\buffer.c" />
     <ClCompile Include="..\MinHook\src\hde\hde32.c" />
     <ClCompile Include="..\MinHook\src\hde\hde64.c" />
@@ -248,9 +240,10 @@ COPY "$(SolutionDir)x64\Release\dxgi.dll" "C:\Program Files (x86)\Steam\steamapp
     <ClCompile Include="..\MusicMod\src\ModManager.cpp" />
     <ClCompile Include="..\MusicMod\src\MusicPlayer.cpp" />
     <ClCompile Include="..\MusicMod\src\UIManager.cpp" />
-    <ClCompile Include="DllMain.cpp" />
+    <ClCompile Include="src\DllMain.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="..\dxgi.def" />
     <None Include="packages.config" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

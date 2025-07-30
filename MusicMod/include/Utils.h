@@ -56,38 +56,25 @@ public:
 		return utf8Str;
 	}
 
-	static int highestBitSet(uint64_t value)
-	{
-		DWORD index;
-#if defined(_M_X64) || defined(_M_AMD64)
-		if (_BitScanReverse64(&index, value))
-			return static_cast<int>(index);
-#else
-		// 32-bit fallback: scan high part, then low part
-		if (_BitScanReverse(&index, static_cast<DWORD>(value >> 32)))
-			return static_cast<int>(index + 32);
-		if (_BitScanReverse(&index, static_cast<DWORD>(value)))
-			return static_cast<int>(index);
-#endif
-		return -1;
-	}
-
 	static uintptr_t KeepTopHex(uintptr_t addr, int hexDigitsToKeep)
 	{
 		if (addr == 0 || hexDigitsToKeep <= 0)
 			return 0;
 
-		int highestBit = highestBitSet(static_cast<uint64_t>(addr));
-		if (highestBit < 0)
-			return 0;
+		// Count how many hex digits are used (excluding leading 0s)
+		int totalHexDigits = 0;
+		uintptr_t tmp = addr;
+		while (tmp)
+		{
+			totalHexDigits++;
+			tmp >>= 4; // move 1 hex digit (4 bits) to the right
+		}
 
-		int totalHexDigits = (highestBit / 4) + 1;
 		if (hexDigitsToKeep >= totalHexDigits)
 			return addr;
 
-		int bitsToKeep = hexDigitsToKeep * 4;
-		int shift = highestBit + 1 - bitsToKeep;
-
-		return (addr >> shift) << shift;
+		int digitsToTruncate = totalHexDigits - hexDigitsToKeep;
+		uintptr_t mask = ~((uintptr_t{ 1 } << (digitsToTruncate * 4)) - 1);
+		return addr & mask;
 	}
 };

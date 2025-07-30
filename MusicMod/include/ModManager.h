@@ -2,9 +2,8 @@
 
 #include <atomic>
 #include <string>
+#include <unordered_set>
 #include <vector>
-
-#include "IRenderCallback.h"
 
 #include "FunctionHook.h"
 #include "IEventListener.h"
@@ -12,7 +11,7 @@
 
 #include "GameData.h"
 
-class ModManager : public IRenderCallback, public FunctionHook
+class ModManager : public FunctionHook
 {
 public:
 	ModManager();
@@ -23,14 +22,15 @@ public:
 	static bool TryUnhookFunction(const FunctionData&);
 	static const FunctionData* GetFunctionData(const std::string&);
 
-	void Setup();
-	void Render();
+	void Initialize();
+	static void OnRender();
 
 	void RegisterListener(IEventListener*);
 	void UnregisterListener(IEventListener*);
 	void DispatchEvent(const ModEvent&);
 
 private:
+	static void RenderTaskHook(void*, void*, void*, void*);
 	static void GamePreExitHook(void*, void*, void*, void*);
 
 	static void AccessMusicPoolHook(void*, void*, void*, void*);
@@ -46,7 +46,6 @@ private:
 	inline static bool gamePreLoadCalled = false;
 	inline static bool musicScanStarted = false;
 
-	inline static Microsoft::WRL::ComPtr<ID3D11DeviceContext> ofContext;
 	inline static PatternScanner::ScanProgress scanProgress{};
 	inline static std::atomic<bool> scanInProgress{ false };
 };

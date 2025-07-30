@@ -1,11 +1,17 @@
 #pragma once
 
-enum MusicType
+enum class MusicType
 {
 	UNKNOWN,
 	SFX,
 	AMBIENT,
 	SONG
+};
+
+enum class GameVersion
+{
+	DC,
+	STANDARD
 };
 
 struct MusicData
@@ -16,6 +22,7 @@ struct MusicData
 	const char* name; // name and artist are just for logging
 	const char* artist;
 	const char* signature;
+	bool exclusiveDC = false; // If true, this music is exclusive to the Director's Cut version of the game
 	uintptr_t address = 0;
 	bool active = false;
 };

@@ -16,14 +16,8 @@
     <Filter Include="Source Files\Music Mod">
       <UniqueIdentifier>{18f87d0f-2c78-4ebd-8972-3fc1be7da687}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\DirectX Hook">
-      <UniqueIdentifier>{75718d85-780d-48ab-bc7b-83a75f6c55f6}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Header Files\Music Mod">
       <UniqueIdentifier>{0dbab404-2637-498e-b71f-ad804bee2f2b}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Header Files\DirectX Hook">
-      <UniqueIdentifier>{4b811bbf-f97f-4809-af27-a0a1966b9452}</UniqueIdentifier>
     </Filter>
     <Filter Include="Header Files\MinHook">
       <UniqueIdentifier>{7702c831-79a8-47b9-9752-b27f94452afb}</UniqueIdentifier>
@@ -37,43 +31,13 @@
     <Filter Include="Header Files\tsl">
       <UniqueIdentifier>{9518ab1d-b549-4a31-9a63-9f61b0e324aa}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\DllWrapper">
+      <UniqueIdentifier>{afb23983-6578-4a46-97a3-7a01724fb19a}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\DirectXHook\include\UniversalProxyDLL.h">
-      <Filter>Header Files\DirectX Hook</Filter>
-    </ClInclude>
-    <ClInclude Include="..\DirectXHook\include\DirectXHook.h">
-      <Filter>Header Files\DirectX Hook</Filter>
-    </ClInclude>
-    <ClInclude Include="..\DirectXHook\include\ID3DRenderer.h">
-      <Filter>Header Files\DirectX Hook</Filter>
-    </ClInclude>
-    <ClInclude Include="..\DirectXHook\include\IRenderCallback.h">
-      <Filter>Header Files\DirectX Hook</Filter>
-    </ClInclude>
-    <ClInclude Include="..\DirectXHook\include\Logger.h">
-      <Filter>Header Files\DirectX Hook</Filter>
-    </ClInclude>
-    <ClInclude Include="..\DirectXHook\include\MemoryUtils.h">
-      <Filter>Header Files\DirectX Hook</Filter>
-    </ClInclude>
-    <ClInclude Include="..\DirectXHook\include\nmd_assembly.h">
-      <Filter>Header Files\DirectX Hook</Filter>
-    </ClInclude>
-    <ClInclude Include="..\DirectXHook\include\OverlayFramework.h">
-      <Filter>Header Files\DirectX Hook</Filter>
-    </ClInclude>
-    <ClInclude Include="..\DirectXHook\include\Renderer.h">
-      <Filter>Header Files\DirectX Hook</Filter>
-    </ClInclude>
-    <ClInclude Include="..\MusicMod\include\IRenderCallbackObserver.h">
-      <Filter>Header Files\Music Mod</Filter>
-    </ClInclude>
     <ClInclude Include="..\MusicMod\include\ModManager.h">
       <Filter>Header Files\Music Mod</Filter>
-    </ClInclude>
-    <ClInclude Include="..\DirectXHook\include\Shaders.h">
-      <Filter>Header Files\DirectX Hook</Filter>
     </ClInclude>
     <ClInclude Include="..\MusicMod\include\InputObserver.h">
       <Filter>Header Files\Music Mod</Filter>
@@ -159,19 +123,22 @@
     <ClInclude Include="..\MusicMod\include\GameData.h">
       <Filter>Header Files\Music Mod</Filter>
     </ClInclude>
+    <ClInclude Include="include\Logger.h">
+      <Filter>Header Files\DllWrapper</Filter>
+    </ClInclude>
+    <ClInclude Include="include\MemoryUtils.h">
+      <Filter>Header Files\DllWrapper</Filter>
+    </ClInclude>
+    <ClInclude Include="include\nmd_assembly.h">
+      <Filter>Header Files\DllWrapper</Filter>
+    </ClInclude>
+    <ClInclude Include="include\UniversalProxyDLL.h">
+      <Filter>Header Files\DllWrapper</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="DllMain.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\MusicMod\src\ModManager.cpp">
       <Filter>Source Files\Music Mod</Filter>
-    </ClCompile>
-    <ClCompile Include="..\DirectXHook\src\Renderer.cpp">
-      <Filter>Source Files\DirectX Hook</Filter>
-    </ClCompile>
-    <ClCompile Include="..\DirectXHook\src\DirectXHook.cpp">
-      <Filter>Source Files\DirectX Hook</Filter>
     </ClCompile>
     <ClCompile Include="..\MusicMod\src\InputTracker.cpp">
       <Filter>Source Files\Music Mod</Filter>
@@ -209,8 +176,14 @@
     <ClCompile Include="..\MusicMod\src\MemoryWatcher.cpp">
       <Filter>Source Files\Music Mod</Filter>
     </ClCompile>
+    <ClCompile Include="src\DllMain.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
+    <None Include="..\dxgi.def">
+      <Filter>Source Files</Filter>
+    </None>
   </ItemGroup>
 </Project>

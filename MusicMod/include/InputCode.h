@@ -8,7 +8,7 @@ enum class InputSource
 
 struct InputCode
 {
-	int code;
+	uint64_t code;
 	InputSource source;
 
 	bool operator==(const InputCode& other) const {

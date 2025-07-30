@@ -1,11 +1,5 @@
 ﻿#include "ModManager.h"
 
-#include <imgui.h>
-#include <imgui_impl_dx11.h>
-#include <imgui_impl_win32.h>
-
-#include "OverlayFramework.h"
-
 #include "MemoryUtils.h"
 #include "MinHook.h"
 #include "PatternScanner.h"
@@ -16,11 +10,9 @@
 
 #include "GameData.h"
 
-using namespace OF;
-
 ModManager::ModManager()
 {
-	logger.Log("Initialized...");
+	logger.Log("Initializing...");
 }
 
 void ModManager::SetInstance(ModManager* instance)
@@ -38,35 +30,39 @@ bool ModManager::TryHookFunction(const std::string& name, void* hookFunction)
 	auto it = ModConfiguration::Databases::functionDatabase.find(name);
 	if (it == ModConfiguration::Databases::functionDatabase.end())
 	{
-		return false;
+		it = ModConfiguration::Databases::earlyFunctionDatabase.find(name);
+		if (it == ModConfiguration::Databases::earlyFunctionDatabase.end())
+		{
+			return false;
+		}
 	}
 
-	auto& func = it->second;
-	if (!func.address)
+	auto& funcData = it->second;
+	if (!funcData.address)
 	{
 		return false;
 	}
 
-	if (func.usesAVX)
+	if (funcData.usesAVX)
 	{
 		MemoryUtils::PlaceHook(
-			func.address,
+			funcData.address,
 			reinterpret_cast<uintptr_t>(hookFunction),
-			reinterpret_cast<uintptr_t*>(&func.originalFunction)
+			reinterpret_cast<uintptr_t*>(&funcData.originalFunction)
 		);
 	}
 	else
 	{
 		auto created = MH_CreateHook(
-			reinterpret_cast<LPVOID>(func.address),
-			hookFunction, reinterpret_cast<LPVOID*>(&func.originalFunction)
+			reinterpret_cast<LPVOID>(funcData.address),
+			hookFunction, reinterpret_cast<LPVOID*>(&funcData.originalFunction)
 		);
 		if (created != MH_OK)
 		{
 			return false;
 		}
 
-		auto enabled = MH_EnableHook(reinterpret_cast<LPVOID>(func.address));
+		auto enabled = MH_EnableHook(reinterpret_cast<LPVOID>(funcData.address));
 		if (enabled != MH_OK)
 		{
 			return false;
@@ -104,28 +100,17 @@ const FunctionData* ModManager::GetFunctionData(const std::string& name)
 	auto it = ModConfiguration::Databases::functionDatabase.find(name);
 	if (it == ModConfiguration::Databases::functionDatabase.end())
 	{
-		return nullptr;
+		it = ModConfiguration::Databases::earlyFunctionDatabase.find(name);
+		if (it == ModConfiguration::Databases::earlyFunctionDatabase.end())
+		{
+			return nullptr;
+		}
 	}
 	return &(it->second);
 }
 
-void ModManager::Setup()
+void ModManager::Initialize()
 {
-	InitFramework(device, spriteBatch, window);
-	
-	if (!ofContext) {
-		ofDevice->GetImmediateContext(&ofContext);
-	}
-
-	IMGUI_CHECKVERSION();
-	ImGui::CreateContext();
-	ImGuiIO& io = ImGui::GetIO(); (void)io;
-	ImGui::StyleColorsDark();
-
-	// Hook to DX + Win32
-	ImGui_ImplWin32_Init(ofWindow);
-	ImGui_ImplDX11_Init(ofDevice.Get(), ofContext.Get());
-
 	bool configLoaded = ModConfiguration::LoadConfigFromFile();
 	logger.Log(
 		configLoaded ? "Ini configuration loaded successfully"
@@ -141,30 +126,36 @@ void ModManager::Setup()
 			logger.Log("Function signature scanning complete.");
 			scanInProgress.store(false);
 
-			bool result = TryHookFunction("GamePreExit", &GamePreExitHook);
+			bool hookResult = TryHookFunction("GamePreExit", &GamePreExitHook);
 			logger.Log(
 				"GamePreExit function hook %s",
-				result ? "installed successfully" : "failed"
+				hookResult ? "installed successfully" : "failed"
 			);
 
-			result = TryHookFunction("AccessMusicPool", &AccessMusicPoolHook);
+			hookResult = TryHookFunction("RenderTask", &RenderTaskHook);
 			logger.Log(
-				"AccessMusicPool function hook %s",
-				result ? "installed successfully" : "failed"
+				"RenderTask function hook %s",
+				hookResult ? "installed successfully" : "failed"
 			);
 
-			result = TryHookFunction("GamePreLoad", &GamePreLoadHook);
+			hookResult = TryHookFunction("GamePreLoad", &GamePreLoadHook);
 			logger.Log(
 				"GamePreLoad function hook %s",
-				result ? "installed successfully" : "failed"
+				hookResult ? "installed successfully" : "failed"
+			);
+
+			hookResult = TryHookFunction("AccessMusicPool", &AccessMusicPoolHook);
+			logger.Log(
+				"AccessMusicPool function hook %s",
+				hookResult ? "installed successfully" : "failed"
 			);
 		}, &scanProgress
 	);
 }
 
-void ModManager::Render()
+void ModManager::OnRender()
 {
-	if (!musicScanStarted && musicPoolScanStartAddress && gamePreLoadCalled)
+	if (!musicScanStarted && musicPoolScanStartAddress)
 	{
 		musicScanStarted = true;
 
@@ -185,6 +176,25 @@ void ModManager::Render()
 			allMusicTargets,
 			[]() {
 				scanInProgress.store(false);
+
+				// Determine game version based on exclusive DC songs
+				size_t dcCount = 0;
+				size_t dcNotFound = 0;
+				for (auto& [name, data] : ModConfiguration::Databases::songDatabase)
+				{
+					if (data.exclusiveDC)
+					{
+						dcCount++;
+						if (!data.address)
+						{
+							dcNotFound++;
+						}
+					}
+				}
+				ModConfiguration::gameVersion = dcCount == dcNotFound ? GameVersion::STANDARD : GameVersion::DC;
+				logger.Log("Game version is set to %s",
+					ModConfiguration::gameVersion == GameVersion::DC ? "DC" : "STANDARD"
+				);
 
 				for (auto& [name, data] : ModConfiguration::Databases::interruptorDatabase)
 				{
@@ -239,43 +249,7 @@ void ModManager::Render()
 		);
 	}
 
-	if (scanInProgress.load())
-	{
-		ImGui_ImplDX11_NewFrame();
-		ImGui_ImplWin32_NewFrame();
-		ImGui::NewFrame();
-
-		// Scanning overlay
-		ImGui::SetNextWindowPos(ImVec2(20, 20), ImGuiCond_Always);
-		ImGui::SetNextWindowBgAlpha(0.35f);
-
-		ImGui::Begin("Mod##ScanOverlay", nullptr,
-			ImGuiWindowFlags_NoDecoration |
-			ImGuiWindowFlags_AlwaysAutoResize |
-			ImGuiWindowFlags_NoSavedSettings);
-
-		ImGui::TextColored(
-			ImVec4(1, 0.7f, 0.2f, 1),
-			"%s (%s)",
-			ModConfiguration::modPublicName.c_str(),
-			ModConfiguration::modInternalVersion.c_str()
-		);
-		ImGui::Separator();
-
-		ImGui::Text(
-			"%s: %zu / %zu",
-			scanProgress.message,
-			scanProgress.matchedPatterns.load(),
-			scanProgress.totalPatterns
-		);
-		ImGui::ProgressBar(scanProgress.GetProgress(), ImVec2(300, 0));
-		ImGui::End();
-
-		ImGui::Render();
-		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
-	}
-
-	ModEvent renderEvent{ ModEventType::FrameRendered, this, nullptr };
+	ModEvent renderEvent{ ModEventType::FrameRendered, nullptr, nullptr };
 	ModManager* instance = ModManager::GetInstance();
 	if (instance)
 	{
@@ -311,6 +285,21 @@ void ModManager::DispatchEvent(const ModEvent& event)
 	{
 		listener->OnEvent(event);
 	}
+}
+
+void ModManager::RenderTaskHook(void* arg1, void* arg2, void* arg3, void* arg4)
+{
+	const FunctionData* renderTaskFuncData = ModManager::GetFunctionData("RenderTask");
+	if (!renderTaskFuncData || !renderTaskFuncData->originalFunction)
+	{
+		logger.Log("Original RenderTask function was not hooked, cannot call it");
+		return;
+	}
+	reinterpret_cast<GenericFunction_t>(renderTaskFuncData->originalFunction)(
+		arg1, arg2, arg3, arg4
+	);
+
+	OnRender();
 }
 
 void ModManager::GamePreExitHook(void* arg1, void* arg2, void* arg3, void* arg4)
@@ -349,7 +338,7 @@ void ModManager::AccessMusicPoolHook(void* arg1, void* arg2, void* arg3, void* a
 	if (!musicPoolScanStartAddress)
 	{
 		musicPoolScanStartAddress = Utils::KeepTopHex(reinterpret_cast<uintptr_t>(arg1), 4);
-		logger.Log("Music pool start address set to: %p", (void*)musicPoolScanStartAddress);
+		logger.Log("Music pool start address set to: %p (from %p)", (void*)musicPoolScanStartAddress, arg1);
 
 		bool unhookResult = TryUnhookFunction(*accessMusicPoolFuncData);
 		logger.Log("AccessMusicPool function unhooking %s",

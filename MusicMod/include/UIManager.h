@@ -64,7 +64,7 @@ public:
 			{
 				"A", UIButtonAction::TOGGLE_MUSIC, // Action is redundant but nice to have if button passed as event data
 				{ {0, "Play Music"}, {1, "Stop Music"} },
-				{ {XINPUT_GAMEPAD_A, InputSource::GAMEPAD}, {VK_SPACE, InputSource::KBM} }
+				{ {GAMEPAD_A, InputSource::GAMEPAD}, {VK_SPACE, InputSource::KBM} }
 			}
 		},
 		{
@@ -72,7 +72,7 @@ public:
 			{
 				"DPAD_UP", UIButtonAction::TOGGLE_LOOP_MODE,
 				{ {0, "Loop Mode (All)"}, {1, "Loop Mode (One)"}, {2, "Loop Mode (None)"} },
-				{ {XINPUT_GAMEPAD_DPAD_UP, InputSource::GAMEPAD}, {'4', InputSource::KBM}, {VK_NUMPAD4, InputSource::KBM} }
+				{ {GAMEPAD_DPAD_UP, InputSource::GAMEPAD}, {'4', InputSource::KBM}, {VK_NUMPAD4, InputSource::KBM} }
 			}
 		},
 		{
@@ -80,7 +80,7 @@ public:
 			{
 				"RT", UIButtonAction::SHUFFLE_PLAYLIST,
 				{ {0, "Shuffle Playlist"}, {1, "Reset Playlist"} },
-				{ {InputTracker::GAMEPAD_RIGHT_TRIGGER_CODE, InputSource::GAMEPAD}, {'R', InputSource::KBM}}
+				{ {GAMEPAD_RT, InputSource::GAMEPAD}, {'R', InputSource::KBM}}
 			}
 		}
 	};
@@ -100,9 +100,23 @@ public:
 	};
 	inline static std::unordered_map<CompassState, std::vector<CompassStateData>> compassStateReferenceMap =
 	{
-		{ OPEN, { CompassStateData{OPEN, 0x0, "Zoom In/Out"} } },
-		{ INCOMPATIBLE, { CompassStateData{INCOMPATIBLE, 0x0, "Stand Up"} } }
+		{OPEN, {
+			CompassStateData{OPEN, 0x0, "Zoom In/Out"}
+		}},
+		{INCOMPATIBLE, {
+			CompassStateData{INCOMPATIBLE, 0x0, "Stand Up"},
+			CompassStateData{INCOMPATIBLE, 0x0, "Descend/Ascend"}
+		}}
 	};
+
+	enum MusicPlayerUIBlocker: uint8_t
+	{
+		NONE = 0,
+		BT_BLOCK = 1 << 0, // Blocked by BT detection
+		MULE_BLOCK = 1 << 1, // Blocked by MULE detection
+		CHIRAL_BLOCK = 1 << 2, // Blocked by Chiral Network turned off
+	};
+	uint8_t musicPlayerUIBlockers = 0; // Bitmask of events preventing music player UI from showing
 
 	UIManager();
 	void OnEvent(const ModEvent&) override;
@@ -110,6 +124,8 @@ public:
 	void OnScanDone();
 	void OnRender();
 	void OnInputPress(const InputCode&);
+
+	void UpdateMusicPlayerUIBlockers(MusicPlayerUIBlocker, bool);
 
 private:
 	static void InGameUIUpdateStaticPoolCallerHook(void*, void*, void*, void*);

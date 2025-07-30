@@ -1,7 +1,6 @@
 #include "InputTracker.h"
 
 #include <Windows.h>
-#include <XInput.h>
 
 #include "MemoryUtils.h"
 #include "ModManager.h"
@@ -17,8 +16,7 @@ void InputTracker::OnEvent(const ModEvent& event)
 		}
 		case ModEventType::FrameRendered:
 		{
-			PollKeyboard();
-			PollGamepad();
+			OnRender();
 			break;
 		}
 		default:
@@ -29,35 +27,58 @@ void InputTracker::OnEvent(const ModEvent& event)
 void InputTracker::OnScanDone()
 {
 	bool hookResult = ModManager::TryHookFunction(
-		"GetInputBitmask",
-		reinterpret_cast<void*>(&InputTracker::GetInputBitmaskHook)
+		"ProcessControllerInput",
+		reinterpret_cast<void*>(&InputTracker::ProcessControllerInputHook)
 	);
 	logger.Log(
-		"GetInputBitmask function hook %s",
+		"ProcessControllerInput function hook %s",
 		hookResult ? "installed successfully" : "failed"
 	);
 
-	ZeroMemory(&lastGamepadState, sizeof(XINPUT_STATE));
 	logger.Log("Setup complete");
 }
 
-uint32_t InputTracker::GetInputBitmaskHook(void* arg1)
+void InputTracker::OnRender()
 {
-	Logger logger("Get Input Bitmask");
+	PollKeyboard();
+	PollGamepad();
+}
 
-	const FunctionData* functionData = ModManager::GetFunctionData("GetInputBitmask");
-	if (!functionData || !functionData->originalFunction)
+void InputTracker::OnPreExit()
+{
+	if (controllerInputMaskWatcher)
 	{
-		logger.Log("Original GetInputBitmask function is not found, cannot call it");
-		return 0;
+		controllerInputMaskWatcher->Uninstall();
+		controllerInputMaskWatcher.reset();
 	}
+}
 
-	// original function returns a uint
-	using Func_t = uint32_t(*)(void*);
-	uint32_t bitmask = reinterpret_cast<Func_t>(functionData->originalFunction)(arg1);
-	//logger.Log("Called with arg1=%p, bitmask=%p", arg1, bitmask);
+void InputTracker::ProcessControllerInputHook(void* arg1, void* arg2, void* arg3, void* arg4)
+{
+	Logger logger("Process Controller Input Hook");
+	const FunctionData* funcData = ModManager::GetFunctionData("ProcessControllerInput");
+	if (!funcData || !funcData->originalFunction)
+	{
+		logger.Log("Original ProcessControllerInput function was not hooked, cannot call it");
+		return;
+	}
+	reinterpret_cast<GenericFunction_t>(funcData->originalFunction)(arg1, arg2, arg3, arg4);
 
-	return bitmask;
+	controllerInputMaskAddress = reinterpret_cast<uintptr_t>(arg1) + controllerInputMaskOffset;
+	auto& controllerMaskRef = currentControllerInputMask;
+	controllerInputMaskWatcher = std::make_unique<MemoryWatcher>(
+		[&controllerMaskRef](const void* newValue) {
+			controllerMaskRef = *reinterpret_cast<const uint64_t*>(newValue);
+		},
+		controllerInputMaskPollingInterval
+	);
+	controllerInputMaskWatcher->Install((void*)controllerInputMaskAddress, sizeof(uint64_t));
+
+	bool unhookResult = ModManager::TryUnhookFunction(*funcData);
+	logger.Log(
+		"ProcessControllerInput function unhooking %s",
+		unhookResult ? "successful" : "failed"
+	);
 }
 
 bool InputTracker::IsCombinationActive(const std::vector<InputCode>& combination)
@@ -120,61 +141,23 @@ void InputTracker::PollKeyboard()
 
 void InputTracker::PollGamepad()
 {
-	XINPUT_STATE currentState;
-	ZeroMemory(&currentState, sizeof(XINPUT_STATE));
-	DWORD result;
-	for (DWORD i = 0; i < XUSER_MAX_COUNT; i++)
+	if (lastControllerInputMask == 0 && currentControllerInputMask == 0)
 	{
-		result = XInputGetState(i, &currentState);
-		if (result == ERROR_SUCCESS) // Controller found
-		{
-			break;
-		}
+		return; // No gamepad input detected
 	}
-
-	if (result != ERROR_SUCCESS)
-	{
-		if (gamepadConnected)
-		{
-			logger.Log("Gamepad disconnected");
-			gamepadConnected = false;
-		}
-		return;
-	}
-
-	if (!gamepadConnected)
-	{
-		logger.Log("Gamepad connected");
-		gamepadConnected = true;
-	}
-
-	// Handle triggers
-	HandleGamepadTrigger(
-		currentState.Gamepad.bLeftTrigger,
-		lastLeftTrigger,
-		{ GAMEPAD_LEFT_TRIGGER_CODE, InputSource::GAMEPAD }
-	);
-	HandleGamepadTrigger(
-		currentState.Gamepad.bRightTrigger,
-		lastRightTrigger,
-		{ GAMEPAD_RIGHT_TRIGGER_CODE, InputSource::GAMEPAD }
-	);
-
-	// Handle buttons
-	WORD oldButtons = lastGamepadState.Gamepad.wButtons;
-	WORD newButtons = currentState.Gamepad.wButtons;
 
 	activeGamepadButtons.clear();
-	for (WORD mask = 1; mask != 0; mask <<= 1)
+	for (const auto& [bit, name] : inGameBindings)
 	{
-		bool wasDown = (oldButtons & mask) != 0;
-		bool isDown = (newButtons & mask) != 0;
+		bool wasDown = (lastControllerInputMask & bit) != 0;
+		bool isDown = (currentControllerInputMask & bit) != 0;
+
 		if (isDown)
 		{
-			activeGamepadButtons.insert(mask);
+			activeGamepadButtons.insert(bit);
 		}
 
-		InputCode code{ static_cast<int>(mask), InputSource::GAMEPAD };
+		InputCode code{ bit, InputSource::GAMEPAD };
 		if (isDown)
 		{
 			if (!wasDown)
@@ -189,25 +172,7 @@ void InputTracker::PollGamepad()
 		}
 	}
 
-	lastGamepadState = currentState;
-}
-
-void InputTracker::HandleGamepadTrigger(BYTE currentValue,
-	BYTE& lastValue, const InputCode& code)
-{
-	if (currentValue > GAMEPAD_TRIGGER_THRESHOLD)
-	{
-		if (lastValue <= GAMEPAD_TRIGGER_THRESHOLD)
-		{
-			SendInputPress(code);
-		}
-		SendInputDown(code);
-	}
-	else if (lastValue > GAMEPAD_TRIGGER_THRESHOLD)
-	{
-		SendInputUp(code);
-	}
-	lastValue = currentValue;
+	lastControllerInputMask = currentControllerInputMask;
 }
 
 void InputTracker::SendInputPress(const InputCode& code)
@@ -245,4 +210,28 @@ std::string InputTracker::HashCombination(const std::vector<InputCode>& combinat
 		hash += std::to_string(static_cast<int>(code.source)) + ":" + std::to_string(code.code) + "|";
 	}
 	return hash;
+}
+
+const char* InputTracker::LookupBindingName(uint64_t bit)
+{
+	for (const auto& [b, name] : inGameBindings)
+	{
+		if (b == bit)
+		{
+			return name;
+		}
+	}
+	return nullptr;
+}
+
+uint64_t InputTracker::LookupBindingBit(const std::string& name)
+{
+	for (const auto& [bit, n] : inGameBindings)
+	{
+		if (name == n)
+		{
+			return bit;
+		}
+	}
+	return 0;
 }

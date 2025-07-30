@@ -1,9 +1,6 @@
-#include <Windows.h>
 #include "UniversalProxyDLL.h"
 
-#include "DirectXHook.h"
 #include "Logger.h"
-#include "MemoryUtils.h"
 
 #include "ModConfiguration.h"
 
@@ -16,8 +13,6 @@
 #include "MinHook.h"
 
 static Logger logger{ "DllMain" };
-
-HANDLE gHookThread = NULL;
 
 void OpenDevTerminal()
 {
@@ -37,12 +32,8 @@ void OpenDevTerminal()
 
 DWORD WINAPI HookThread(LPVOID lpParam)
 {
-	static Renderer renderer;
-	static DirectXHook dxHook(&renderer);
-
 	static ModManager modManager;
 	ModManager::SetInstance(&modManager);
-	dxHook.AddRenderCallback(&modManager);
 
 	static InputTracker inputTracker;
 	static MusicPlayer musicPlayer;
@@ -54,8 +45,50 @@ DWORD WINAPI HookThread(LPVOID lpParam)
 	modManager.RegisterListener(&uiManager);
 	modManager.RegisterListener(&gameStateManager);
 
-	dxHook.Hook();
+	modManager.Initialize();
 	return 0;
+}
+
+static HMODULE gRealDxgi = nullptr;
+typedef HRESULT(WINAPI* PFN_CreateDXGIFactory1)(REFIID, void**);
+static PFN_CreateDXGIFactory1 real_CreateDXGIFactory1 = nullptr;
+
+extern "C" __declspec(dllexport)
+HRESULT WINAPI CreateDXGIFactory1Hook(REFIID riid, void** ppFactory)
+{
+	if (!gRealDxgi) {
+		wchar_t path[MAX_PATH];
+		GetSystemDirectoryW(path, MAX_PATH);
+		wcscat_s(path, L"\\dxgi.dll");
+
+		gRealDxgi = LoadLibraryW(path);
+		if (!gRealDxgi) {
+			MessageBoxW(nullptr, L"Failed to load original dxgi.dll", L"dxgi proxy", MB_OK | MB_ICONERROR);
+			return E_FAIL;
+		}
+	}
+
+	if (!real_CreateDXGIFactory1) {
+		real_CreateDXGIFactory1 = (PFN_CreateDXGIFactory1)GetProcAddress(gRealDxgi, "CreateDXGIFactory1");
+		if (!real_CreateDXGIFactory1) {
+			MessageBoxW(nullptr, L"Failed to find CreateDXGIFactory1", L"dxgi proxy", MB_OK | MB_ICONERROR);
+			return E_FAIL;
+		}
+	}
+
+	HRESULT hr = real_CreateDXGIFactory1(riid, ppFactory);
+
+	if (SUCCEEDED(hr))
+	{
+		static bool initialized = false;
+		if (!initialized)
+		{
+			initialized = true;
+			CreateThread(nullptr, 0, HookThread, nullptr, 0, nullptr);
+		}
+	}
+
+	return hr;
 }
 
 BOOL WINAPI DllMain(HMODULE module, DWORD reason, LPVOID)
@@ -66,7 +99,6 @@ BOOL WINAPI DllMain(HMODULE module, DWORD reason, LPVOID)
 		UPD::MuteLogging();
 		UPD::CreateProxy(module);
 		MH_Initialize();
-		gHookThread = CreateThread(0, 0, &HookThread, 0, 0, NULL);
 	}
 	else if (reason == DLL_PROCESS_DETACH)
 	{

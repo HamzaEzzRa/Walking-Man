@@ -24,6 +24,8 @@ namespace ModConfiguration
 	extern const std::string enableDevFilename;
 	extern bool devMode;
 
+	extern GameVersion gameVersion;
+
 	extern const std::string configFilePath;
 	extern const std::unordered_map<std::string, Section> headerSectionMap;
 
@@ -44,9 +46,12 @@ namespace ModConfiguration
 
 	namespace Databases
 	{
+		extern std::unordered_map<std::string, FunctionData> earlyFunctionDatabase;
 		extern std::unordered_map<std::string, FunctionData> functionDatabase;
 
 		extern std::unordered_map<std::string, MusicData> interruptorDatabase;
 		extern std::unordered_map<std::string, MusicData> songDatabase;
+
+		extern std::unordered_map<std::string, MusicData> interruptorUIDatabase;
 	}
 }

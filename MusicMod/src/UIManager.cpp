@@ -18,7 +18,6 @@
 
 UIManager::UIManager()
 {
-	logger.Log("Initialized...");
 }
 
 void UIManager::OnEvent(const ModEvent& event)
@@ -41,21 +40,30 @@ void UIManager::OnEvent(const ModEvent& event)
 			OnInputPress(inputCode);
 			break;
 		}
+		case ModEventType::BTTerritoryStateChanged:
+		{
+			auto* territoryFlagState = std::any_cast<FlagState<EnemyTerritoryFlag>*>(event.data);
+			UpdateMusicPlayerUIBlockers(
+				MusicPlayerUIBlocker::BT_BLOCK, territoryFlagState->current != EnemyTerritoryFlag::SAFE
+			);
+			break;
+		}
+		case ModEventType::MuleTerritoryStateChanged:
+		{
+			auto* territoryFlagState = std::any_cast<FlagState<EnemyTerritoryFlag>*>(event.data);
+			UpdateMusicPlayerUIBlockers(
+				MusicPlayerUIBlocker::MULE_BLOCK, territoryFlagState->current != EnemyTerritoryFlag::SAFE
+			);
+			break;
+		}
 		case ModEventType::ChiralNetworkStateChanged:
 		{
 			if (ModConfiguration::connectToChiralNetwork)
 			{
-				ChiralNetworkState* chiralNetworkState = std::any_cast<ChiralNetworkState*>(event.data);
-				for (auto it = musicPlayerActionButtonMap.begin(); it != musicPlayerActionButtonMap.end(); it++)
-				{
-					UIButton& button = it.value();
-					button.Toggle(*chiralNetworkState == ChiralNetworkState::ON);
-				}
-
-				const char* notificationText = (*chiralNetworkState == ChiralNetworkState::ON)
-					? "Chiral network on: music player can be activated."
-					: "Chiral network off: music player deactivated.";
-				ShowNotificationText(notificationText);
+				auto* chiralNetworkFlag = std::any_cast<FlagState<ChiralNetworkFlag>*>(event.data);
+				UpdateMusicPlayerUIBlockers(
+					MusicPlayerUIBlocker::CHIRAL_BLOCK, chiralNetworkFlag->current == ChiralNetworkFlag::OFF
+				);
 			}
 			break;
 		}
@@ -192,6 +200,52 @@ void UIManager::OnInputPress(const InputCode& inputCode)
 					}
 				}
 			}
+		}
+	}
+}
+
+void UIManager::UpdateMusicPlayerUIBlockers(MusicPlayerUIBlocker blocker, bool enable)
+{
+	uint8_t previousBlockers = musicPlayerUIBlockers;
+	if (enable)
+	{
+		musicPlayerUIBlockers |= blocker;
+	}
+	else
+	{
+		musicPlayerUIBlockers &= ~blocker;
+	}
+	/*logger.Log(
+		"Music player UI blockers updated: 0x%02X -> 0x%02X (blocker: 0x%02X, enable: %s)",
+		previousBlockers, musicPlayerUIBlockers, blocker, enable ? "true" : "false"
+	);*/
+
+	for (auto it = musicPlayerActionButtonMap.begin(); it != musicPlayerActionButtonMap.end(); it++)
+	{
+		UIButton& button = it.value();
+		button.Toggle(musicPlayerUIBlockers == MusicPlayerUIBlocker::NONE);
+	}
+
+	if ((blocker & MusicPlayerUIBlocker::BT_BLOCK) || (blocker & MusicPlayerUIBlocker::MULE_BLOCK))
+	{
+		if (musicPlayerUIBlockers > 0 && previousBlockers == 0)
+		{
+			ShowNotificationText("Threat nearby: music player deactivated.");
+		}
+		else if (musicPlayerUIBlockers == 0 && previousBlockers > 0)
+		{
+			ShowNotificationText("Threat cleared: music player can be activated.");
+		}
+	}
+	else if (blocker & MusicPlayerUIBlocker::CHIRAL_BLOCK)
+	{
+		if (musicPlayerUIBlockers > 0 && previousBlockers == 0)
+		{
+			ShowNotificationText("Chiral network off: music player deactivated.");
+		}
+		else if (musicPlayerUIBlockers == 0 && previousBlockers > 0)
+		{
+			ShowNotificationText("Chiral network on: music player can be activated.");
 		}
 	}
 }

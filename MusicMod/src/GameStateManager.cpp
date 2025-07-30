@@ -10,7 +10,6 @@
 
 GameStateManager::GameStateManager()
 {
-	logger.Log("Initialized...");
 }
 
 void GameStateManager::OnEvent(const ModEvent& event)
@@ -57,30 +56,27 @@ void GameStateManager::OnScanDone()
 
 void GameStateManager::OnRender()
 {
-	if (chiralNetworkFlagWatcher)
-	{
-		if (previousChiralNetworkEnabled != chiralNetworkEnabled)
-		{
-			previousChiralNetworkEnabled = chiralNetworkEnabled;
-			ModManager* instance = ModManager::GetInstance();
-			if (instance)
-			{
-				instance->DispatchEvent(ModEvent{
-					ModEventType::ChiralNetworkStateChanged,
-					this,
-					&chiralNetworkEnabled
-				});
-			}
-		}
-	}
+	OnFlagStateChanged(btTerritoryState);
+	OnFlagStateChanged(muleTerritoryState);
+	OnFlagStateChanged(chiralNetworkState);
 }
 
 void GameStateManager::OnPreExit()
 {
-	if (chiralNetworkFlagWatcher)
+	if (btTerritoryState.flagWatcher)
 	{
-		chiralNetworkFlagWatcher->Uninstall();
-		chiralNetworkFlagWatcher.reset();
+		btTerritoryState.flagWatcher->Uninstall();
+		btTerritoryState.flagWatcher.reset();
+	}
+	if (muleTerritoryState.flagWatcher)
+	{
+		muleTerritoryState.flagWatcher->Uninstall();
+		muleTerritoryState.flagWatcher.reset();
+	}
+	if (chiralNetworkState.flagWatcher)
+	{
+		chiralNetworkState.flagWatcher->Uninstall();
+		chiralNetworkState.flagWatcher.reset();
 	}
 }
 
@@ -89,8 +85,8 @@ void GameStateManager::InGameFlagUpdateHook(void* arg1, void* arg2, void* arg3, 
 	Logger logger("Game State Manager");
 
 	// This function param signature is VERY complex, we avoid calling it
-	// It's alright since we only skip it one time to get the flag pool address and install a watcher
-	//originalInGameFlagUpdateFunc(arg1, arg2, arg3, arg4);
+	// It's alright since we only skip it one time to get the flag pool address and install memory watchers
+	//originalInGameFlagUpdateFunc(...);
 
 	uintptr_t flagPoolAddress = reinterpret_cast<uintptr_t>(arg4);
 	if (flagPoolAddress)
@@ -98,30 +94,54 @@ void GameStateManager::InGameFlagUpdateHook(void* arg1, void* arg2, void* arg3, 
 		logger.Log("Flag pool address: %p", (void*)flagPoolAddress);
 		inGameFlagPoolAddress = flagPoolAddress;
 
-		auto state = *reinterpret_cast<const uint8_t*>(flagPoolAddress + chiralNetworkFlagOffset);
-		chiralNetworkEnabled = (state != 0) ? ChiralNetworkState::ON : ChiralNetworkState::OFF;
+		// **Dispatch events on render, safer that way, especially on game exit**
 
-		chiralNetworkFlagWatcher = std::make_unique<MemoryWatcher>(
-			[](const void* newValue) {
-				auto state = *reinterpret_cast<const uint8_t*>(newValue);
-				chiralNetworkEnabled = (state != 0) ? ChiralNetworkState::ON : ChiralNetworkState::OFF;
+		bool useDCOffset = ModConfiguration::gameVersion == GameVersion::DC;
 
-				// Makes the mod crash when exiting the game, we dispatch on render instead
-				/*ModManager* instance = ModManager::GetInstance();
-				if (instance)
-				{
-					instance->DispatchEvent(ModEvent{
-						ModEventType::ChiralNetworkStateChanged,
-						nullptr,
-						&chiralNetworkEnabled
-					});
-				}*/
+		uintptr_t btFlagAddress = flagPoolAddress
+			+ (useDCOffset ? btTerritoryState.dcFlagPoolOffset : btTerritoryState.standardFlagPoolOffset);
+		auto btFlag = *reinterpret_cast<const uint8_t*>(btFlagAddress);
+		UpdateEnemyFlagState(btTerritoryState, btFlag);
+
+		auto& btStateRef = btTerritoryState;
+		btTerritoryState.flagWatcher = std::make_unique<MemoryWatcher>(
+			[&btStateRef](const void* newValue) {
+				auto btFlag = *reinterpret_cast<const uint8_t*>(newValue);
+				UpdateEnemyFlagState(btStateRef, btFlag);
 			},
-			chiralNetworkWatcherPollingInterval
+			btTerritoryState.pollingInterval
 		);
-		chiralNetworkFlagWatcher->Install(
-			(void*)(flagPoolAddress + chiralNetworkFlagOffset), sizeof(uint8_t)
+		btTerritoryState.flagWatcher->Install((void*)(btFlagAddress), sizeof(uint8_t));
+
+		uintptr_t muleFlagAddress = flagPoolAddress
+			+ (useDCOffset ? muleTerritoryState.dcFlagPoolOffset : muleTerritoryState.standardFlagPoolOffset);
+		auto muleFlag = *reinterpret_cast<const uint8_t*>(muleFlagAddress);
+		UpdateEnemyFlagState(muleTerritoryState, muleFlag);
+		
+		auto& muleStateRef = muleTerritoryState;
+		muleTerritoryState.flagWatcher = std::make_unique<MemoryWatcher>(
+			[&muleStateRef](const void* newValue) {
+				auto muleFlag = *reinterpret_cast<const uint8_t*>(newValue);
+				UpdateEnemyFlagState(muleStateRef, muleFlag);
+			},
+			muleTerritoryState.pollingInterval
 		);
+		muleTerritoryState.flagWatcher->Install((void*)(muleFlagAddress), sizeof(uint8_t));
+
+		uintptr_t chiralNetworkFlagAddress = flagPoolAddress
+			+ (useDCOffset ? chiralNetworkState.dcFlagPoolOffset : chiralNetworkState.standardFlagPoolOffset);
+		auto chiralFlag = *reinterpret_cast<const uint8_t*>(chiralNetworkFlagAddress);
+		chiralNetworkState.current = (chiralFlag != 0) ? ChiralNetworkFlag::ON : ChiralNetworkFlag::OFF;
+		
+		auto& chiralStateRef = chiralNetworkState;
+		chiralNetworkState.flagWatcher = std::make_unique<MemoryWatcher>(
+			[&chiralStateRef](const void* newValue) {
+				auto chiralFlag = *reinterpret_cast<const uint8_t*>(newValue);
+				chiralStateRef.current = (chiralFlag != 0) ? ChiralNetworkFlag::ON : ChiralNetworkFlag::OFF;
+			},
+			chiralNetworkState.pollingInterval
+		);
+		chiralNetworkState.flagWatcher->Install((void*)(chiralNetworkFlagAddress), sizeof(uint8_t));
 
 		const FunctionData* functionData = ModManager::GetFunctionData("InGameFlagUpdate");
 		if (!functionData || !functionData->originalFunction)
@@ -134,5 +154,49 @@ void GameStateManager::InGameFlagUpdateHook(void* arg1, void* arg2, void* arg3, 
 			"InGameFlagUpdate function unhook %s",
 			result ? "successful" : "failed"
 		);
+	}
+}
+
+template<typename T>
+void GameStateManager::OnFlagStateChanged(FlagState<T>& flagState)
+{
+	if (flagState.flagWatcher)
+	{
+		if (flagState.current != flagState.previous)
+		{
+			ModManager* instance = ModManager::GetInstance();
+			if (instance)
+			{
+				instance->DispatchEvent(ModEvent{
+					flagState.dispatchEventType,
+					this,
+					&flagState
+				});
+			}
+			flagState.previous = flagState.current;
+		}
+	}
+}
+
+template<typename T>
+void GameStateManager::UpdateEnemyFlagState(FlagState<T>& flagState, uint8_t flagValue)
+{
+	switch (flagValue)
+	{
+		case 0:
+			flagState.current = EnemyTerritoryFlag::SAFE;
+			break;
+		case 1:
+			flagState.current = EnemyTerritoryFlag::THREATENED;
+			break;
+		case 2:
+			flagState.current = EnemyTerritoryFlag::DETECTING;
+			break;
+		case 3:
+			flagState.current = EnemyTerritoryFlag::DETECTED;
+			break;
+		default:
+			flagState.current = EnemyTerritoryFlag::UNKNOWN;
+			break;
 	}
 }

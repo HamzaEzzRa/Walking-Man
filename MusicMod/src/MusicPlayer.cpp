@@ -22,7 +22,6 @@
 
 MusicPlayer::MusicPlayer()
 {
-	logger.Log("Initialized...");
 }
 
 void MusicPlayer::OnEvent(const ModEvent& event)
@@ -56,12 +55,30 @@ void MusicPlayer::OnEvent(const ModEvent& event)
 		OnInputPress(inputCode);
 		break;
 	}
+	case ModEventType::BTTerritoryStateChanged:
+	case ModEventType::MuleTerritoryStateChanged:
+	{
+		auto* territoryFlagState = std::any_cast<FlagState<EnemyTerritoryFlag>*>(event.data);
+		if (territoryFlagState->current != EnemyTerritoryFlag::SAFE && currentMusicData)
+		{
+			StopMusic();
+
+			ModManager* instance = ModManager::GetInstance();
+			if (instance)
+			{
+				instance->DispatchEvent(
+					ModEvent{ ModEventType::MusicPlayerStopped, this, nullptr }
+				);
+			}
+		}
+		break;
+	}
 	case ModEventType::ChiralNetworkStateChanged:
 	{
 		if (ModConfiguration::connectToChiralNetwork)
 		{
-			ChiralNetworkState* chiralNetworkState = std::any_cast<ChiralNetworkState*>(event.data);
-			if (*chiralNetworkState == ChiralNetworkState::OFF && currentMusicData)
+			auto* chiralNetworkFlagState = std::any_cast<FlagState<ChiralNetworkFlag>*>(event.data);
+			if (chiralNetworkFlagState->current == ChiralNetworkFlag::OFF && currentMusicData)
 			{
 				StopMusic();
 
@@ -101,6 +118,15 @@ void MusicPlayer::OnScanDone()
 	{
 		playingLoopAddress = playingLoopData->address;
 	}
+
+	hookResult = ModManager::TryHookFunction(
+		"PlayUISound",
+		reinterpret_cast<void*>(&MusicPlayer::PlayUISoundHook)
+	);
+	logger.Log(
+		"PlayUISound function hook %s",
+		hookResult ? "installed successfully" : "failed"
+	);
 
 	hookResult = ModManager::TryHookFunction(
 		"ShowMusicDescriptionCore",
@@ -408,7 +434,7 @@ void MusicPlayer::PlayMusicHook(void* arg1, void* arg2, void* arg3, void* arg4)
 	gameCalledInterruptor = false;
 	for (const auto& [name, interruptorData] : ModConfiguration::Databases::interruptorDatabase)
 	{
-		if (reinterpret_cast<uintptr_t>(arg3) == interruptorData.address)
+		if (name != "Silence" && reinterpret_cast<uintptr_t>(arg3) == interruptorData.address)
 		{
 			gameCalledInterruptor = true;
 			break;
@@ -422,25 +448,31 @@ void MusicPlayer::PlayMusicHook(void* arg1, void* arg2, void* arg3, void* arg4)
 		return;
 	}
 
-	MusicData songToPlay;
+	gameCalledSong = false;
+	const MusicData* songToPlay = nullptr;
 	if (!gameCalledInterruptor)
 	{
 		for (const auto& [name, musicData] : ModConfiguration::Databases::songDatabase)
 		{
+			if (name == "Music Pool Start")
+			{
+				continue; // Skip pool music start, it's in the database for dev purposes
+			}
+
 			if (reinterpret_cast<uintptr_t>(arg3) == musicData.address)
 			{
 				gameCalledSong = true;
-				songToPlay = musicData;
+				songToPlay = &musicData;
 				break;
 			}
 		}
 	}
 
-	if (gameCalledSong && !ModConfiguration::allowScriptedSongs)
+	if (songToPlay && gameCalledSong && !ModConfiguration::allowScriptedSongs)
 	{
 		logger.Log(
 			"Configuration does not allow scripted songs, skipping song %s",
-			songToPlay.name
+			songToPlay->name
 		);
 		return;
 	}
@@ -451,6 +483,67 @@ void MusicPlayer::PlayMusicHook(void* arg1, void* arg2, void* arg3, void* arg4)
 	}*/
 	
 	reinterpret_cast<GenericFunction_t>(playMusicFuncData->originalFunction)(arg1, arg2, arg3, arg4);
+}
+
+void MusicPlayer::PlayUISoundHook(void* arg1, void* arg2, void* arg3, void* arg4)
+{
+	Logger logger("Play UI Sound");
+
+	if (currentMusicData && arg1 && arg2)
+	{
+		std::vector<uint8_t> targetBytes;
+		std::vector<bool> masks;
+		for (const auto& nameInterruptorPair : ModConfiguration::Databases::interruptorUIDatabase)
+		{
+			bool match = true;
+			const MusicData& interruptor = nameInterruptorPair.second;
+
+			targetBytes.clear();
+			masks.clear();
+			MemoryUtils::ParseHexString(interruptor.signature, targetBytes, masks);
+			for (size_t i = 0; i < targetBytes.size(); i++)
+			{
+				if (masks[i])
+				{
+					if (*reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(arg2) + i) != targetBytes[i])
+					{
+						//logger.Log("Interruptor %s not matched at offset %zu", interruptor.name, i);
+						match = false;
+						break; // not matched, skip to next interruptor
+					}
+				}
+			}
+
+			if (match)
+			{
+				logger.Log("Interruptor %s matched, stopping autoplay", interruptor.name);
+				currentMusicData = nullptr;
+				currentMusicIsPlaying.store(false);
+
+				ModManager* instance = ModManager::GetInstance();
+				if (instance)
+				{
+					std::string interruptionReasonStr = std::string(interruptor.name) + ": music player interrupted.";
+					const char* interruptionReason = interruptionReasonStr.c_str();
+					instance->DispatchEvent(ModEvent{
+						ModEventType::MusicPlayerInterrupted,
+						nullptr,
+						&interruptionReason
+					});
+				}
+
+				break;
+			}
+		}
+	}
+
+	const FunctionData* playUISoundFuncData = ModManager::GetFunctionData("PlayUISound");
+	if (!playUISoundFuncData || !playUISoundFuncData->originalFunction)
+	{
+		logger.Log("Original play UI sound function is not found, cannot play sound.");
+		return;
+	}
+	reinterpret_cast<GenericFunction_t>(playUISoundFuncData->originalFunction)(arg1, arg2, arg3, arg4);
 }
 
 void MusicPlayer::ShowMusicDescriptionCoreHook(void* arg1, void* arg2, void* arg3, void* arg4)

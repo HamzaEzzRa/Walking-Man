@@ -16,10 +16,12 @@
 namespace ModConfiguration
 {
 	const std::string modPublicName = "Walking Man";
-	const std::string modInternalVersion = "1.0.3";
+	const std::string modInternalVersion = "1.0.4";
 	const std::string modLogFilename = "walkingman.log";
 	const std::string enableDevFilename = "walkingman.dev";
 	bool devMode = false;
+
+	GameVersion gameVersion = GameVersion::DC;
 
 	const std::string configFilePath = "walkingman.ini";
 	const std::unordered_map<std::string, Section> headerSectionMap =
@@ -166,14 +168,29 @@ namespace ModConfiguration
 
 	namespace Databases
 	{
+		std::unordered_map<std::string, FunctionData> earlyFunctionDatabase =
+		{
+			{
+				"GamePreLoad",
+				{"GamePreLoad",
+				"48 89 5C 24 08 48 89 74 24 10 48 89 7C 24 18 55 41 54 41 55 41 "
+				"56 41 57 48 8D AC 24 10 FB FF FF 48 81 EC F0 05 00 00 48 8B 05"}
+			}
+		};
+
 		std::unordered_map<std::string, FunctionData> functionDatabase =
 		{
 			// Management functions
 			{
-				"AccessMusicPool",
-				{"AccessMusicPool",
-				"48 89 5C 24 ?? 57 48 83 EC ?? 48 83 79 ?? ?? 75 0B 48 83 79 ?? ?? "
-				"0F 84 ?? ?? ?? ?? 48 8B 01 FF 10 4C 8B 15 ?? ?? ?? ?? 48 8B F8"}
+				"RenderTask",
+				{"RenderTask",
+				"40 53 48 83 EC ?? 48 8B 01 45 33 D2 48 8B D9 "
+				"44 0F B6 88 ?? ?? ?? ?? 45 84 C9 74 1D 8B 90"}
+			},
+			{
+				"GamePreExit",
+				{"GamePreExit",
+				"40 53 48 83 EC ?? 80 3D ?? ?? ?? ?? ?? 8B DA 74 06 48 83 C4 ?? 5B C3"}
 			},
 			{
 				"GamePreLoad",
@@ -182,16 +199,18 @@ namespace ModConfiguration
 				"56 41 57 48 8D AC 24 10 FB FF FF 48 81 EC F0 05 00 00 48 8B 05"}
 			},
 			{
-				"GamePreExit",
-				{"GamePreExit",
-				"40 53 48 83 EC ?? 80 3D ?? ?? ?? ?? ?? 8B DA 74 06 48 83 C4 ?? 5B C3"}
+				"AccessMusicPool",
+				{"AccessMusicPool",
+				"48 89 5C 24 ?? 57 48 83 EC ?? 48 83 79 ?? ?? 75 0B 48 83 79 ?? ?? "
+				"0F 84 ?? ?? ?? ?? 48 8B 01 FF 10 4C 8B 15 ?? ?? ?? ?? 48 8B F8"}
 			},
 
 			// Input tracking functions
 			{
-				"GetInputBitmask",
-				{"GetInputBitmask",
-				"48 8B 91 ?? ?? ?? ?? 33 C0 48 85 D2 74 31 4C 63 82 ?? ?? ?? ?? 4D 85 C0 7E 25"}
+				"ProcessControllerInput",
+				{"ProcessControllerInput",
+				"4C 8B DC ?? 41 56 41 57 48 81 EC ?? ?? ?? ?? 48 8B 05 "
+				"?? ?? ?? ?? 48 33 C4 48 89 84 24 ?? ?? ?? ?? 8B 41"}
 			},
 
 			// Game state functions
@@ -283,12 +302,12 @@ namespace ModConfiguration
 				{"PlayingLoop",
 				"4C 39 48 08 75 06 4C 39 40 10 74 0B"}
 			},
-			/*{ // No longer needed for the time being, might be useful to control UI sounds in the future
+			{
 				"PlayUISound",
 				{"PlayUISound",
 				"48 89 5C 24 08 48 89 74 24 10 48 89 7C 24 18 41 56 48 83 "
 				"EC 20 48 8B 01 41 0F B6 F1 41 8B D8 4C 8B F2 48 8B F9"}
-			},*/
+			},
 			{
 				"ShowMusicDescription",
 				{"ShowMusicDescription",
@@ -310,18 +329,14 @@ namespace ModConfiguration
 			"?? ?? ?? ?? ?? 7F 00 00 01 E6 29 73 28 09 48 F8 "
 			"A3 26 69 44 AD 31 EC 71 ?? 00 00 00 00 00 00 00";*/
 
-		// Music interruptors are sounds played through PlayMusic, that should stop music in-game
+		// Music interruptors are sounds played through PlayMusic, that stop music in-game
 		// Tracking them helps detect when autoplay should stop
 		std::unordered_map<std::string, MusicData> interruptorDatabase = {
-			{
+			{	// While "Silence" is an interruptor, it is also played when a song naturally ends
+				// Ignore it and use other indicators, such as game state flags, to decide if playback should be interrupted
 				"Silence",
 				{0, MusicType::SFX, 0, "Silence", "",
 				"?? ?? ?? ?? ?? 7F 00 00 E4 77 3B F0 67 6B 41 DB BB CC E6 75 2F 25 5B F2"}
-			},
-			{
-				"Enemy Detection",
-				{0, MusicType::SFX, 0, "Enemy Detection", "",
-				"?? ?? ?? ?? ?? 7F 00 00 7C 36 82 98 27 D7 46 B9 9A 4E 66 C4 C0 6D B0 D6"}
 			}
 		};
 
@@ -479,27 +494,27 @@ namespace ModConfiguration
 			{
 				"Pale Yellow",
 				{104, MusicType::SONG, 0, "Pale Yellow", "Woodkid",
-				"?? ?? ?? ?? ?? 7F 00 00 56 1A C5 A0 0F 5E 45 DE 86 02 71 4E 23 70 4C B8"}
+				"?? ?? ?? ?? ?? 7F 00 00 56 1A C5 A0 0F 5E 45 DE 86 02 71 4E 23 70 4C B8", true} // true for DC exclusive
 			},
 			{
 				"Goliath",
 				{105, MusicType::SONG, 0, "Goliath", "Woodkid",
-				"?? ?? ?? ?? ?? 7F 00 00 A0 E8 B6 72 C9 60 41 76 87 A7 B6 98 0B 1A E9 40"}
+				"?? ?? ?? ?? ?? 7F 00 00 A0 E8 B6 72 C9 60 41 76 87 A7 B6 98 0B 1A E9 40", true}
 			},
 			{
 				"Control",
 				{102, MusicType::SONG, 0, "Control", "Biting Elbows",
-				"?? ?? ?? ?? ?? 7F 00 00 7B A6 DF 4F 6C D4 4C 7D 86 50 F5 39 32 00 54 DC"}
+				"?? ?? ?? ?? ?? 7F 00 00 7B A6 DF 4F 6C D4 4C 7D 86 50 F5 39 32 00 54 DC", true}
 			},
 			{
 				"Other Me",
 				{103, MusicType::SONG, 0, "Other Me", "Biting Elbows",
-				"?? ?? ?? ?? ?? 7F 00 00 3D 21 BE 31 6B BC 42 4A 96 03 04 9B F8 0B 58 F9"}
+				"?? ?? ?? ?? ?? 7F 00 00 3D 21 BE 31 6B BC 42 4A 96 03 04 9B F8 0B 58 F9", true}
 			},
 			{
 				"Fragile",
 				{100, MusicType::SONG, 0, "Fragile", "Midge Ure",
-				"?? ?? ?? ?? ?? 7F 00 00 FE D0 78 11 11 50 43 8F BB 02 5C 1F E4 6F 81 48"}
+				"?? ?? ?? ?? ?? 7F 00 00 FE D0 78 11 11 50 43 8F BB 02 5C 1F E4 6F 81 48", true}
 			},
 
 			// Ambient music, max duration is set to 3 minutes (180000 ms)
@@ -595,6 +610,23 @@ namespace ModConfiguration
 				{22, MusicType::SONG, 0, "Bones (duplicate 3)", "Low Roar",
 				"?? ?? ?? ?? ?? 7F 00 00 F9 11 18 09 E1 ED 40 BF 89 71 17 49 FC 70 D8 15"}
 			},
+		};
+
+		// Basically similar to interruptorDatabase, but these are UI sounds that indicate a music interruption
+		// We don't scan for these, instead signature is matched again PlayUISound function arg2 bytes
+		std::unordered_map<std::string, MusicData> interruptorUIDatabase = {
+			{
+				"Entering facility",
+				{0, MusicType::UNKNOWN, 0, "Entering facility", "",
+				"00 00 00 00 01 00 00 00 02 00 00 00 03 00 00 00 04 00 00 00 "
+				"FF FF FF FF 05 00 00 00 FF FF FF FF 06 00 00 00 FF FF FF FF"}
+			},
+			{
+				"Entering facility 2",
+				{0, MusicType::UNKNOWN, 0, "Entering facility", "",
+				"02 00 00 00 03 00 00 00 04 00 00 00 FF FF FF FF "
+				"05 00 00 00 FF FF FF FF 06 00 00 00 FF FF FF FF"}
+			}
 		};
 	}
 }
