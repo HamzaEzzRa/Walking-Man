@@ -181,7 +181,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="packages.config" />
     <None Include="..\dxgi.def">
       <Filter>Source Files</Filter>
     </None>

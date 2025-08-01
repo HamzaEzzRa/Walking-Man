@@ -30,6 +30,14 @@ void OpenDevTerminal()
 	}
 }
 
+bool IsStandalone(HMODULE hModule)
+{
+	wchar_t path[MAX_PATH];
+	GetModuleFileNameW(hModule, path, MAX_PATH);
+	wchar_t* filename = wcsrchr(path, L'\\');
+	return filename && _wcsicmp(filename + 1, L"dxgi.dll") == 0;
+}
+
 DWORD WINAPI HookThread(LPVOID lpParam)
 {
 	static ModManager modManager;
@@ -96,8 +104,17 @@ BOOL WINAPI DllMain(HMODULE module, DWORD reason, LPVOID)
 	if (reason == DLL_PROCESS_ATTACH)
 	{
 		OpenDevTerminal();
-		UPD::MuteLogging();
-		UPD::CreateProxy(module);
+
+		if (IsStandalone(module))
+		{
+			UPD::MuteLogging();
+			UPD::CreateProxy(module);
+		}
+		else
+		{
+			CreateThread(nullptr, 0, HookThread, nullptr, 0, nullptr);
+		}
+
 		MH_Initialize();
 	}
 	else if (reason == DLL_PROCESS_DETACH)

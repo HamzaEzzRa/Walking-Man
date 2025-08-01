@@ -44,15 +44,6 @@ void InputTracker::OnRender()
 	PollGamepad();
 }
 
-void InputTracker::OnPreExit()
-{
-	if (controllerInputMaskWatcher)
-	{
-		controllerInputMaskWatcher->Uninstall();
-		controllerInputMaskWatcher.reset();
-	}
-}
-
 void InputTracker::ProcessControllerInputHook(void* arg1, void* arg2, void* arg3, void* arg4)
 {
 	Logger logger("Process Controller Input Hook");
@@ -64,21 +55,21 @@ void InputTracker::ProcessControllerInputHook(void* arg1, void* arg2, void* arg3
 	}
 	reinterpret_cast<GenericFunction_t>(funcData->originalFunction)(arg1, arg2, arg3, arg4);
 
-	controllerInputMaskAddress = reinterpret_cast<uintptr_t>(arg1) + controllerInputMaskOffset;
-	auto& controllerMaskRef = currentControllerInputMask;
-	controllerInputMaskWatcher = std::make_unique<MemoryWatcher>(
-		[&controllerMaskRef](const void* newValue) {
-			controllerMaskRef = *reinterpret_cast<const uint64_t*>(newValue);
-		},
-		controllerInputMaskPollingInterval
-	);
-	controllerInputMaskWatcher->Install((void*)controllerInputMaskAddress, sizeof(uint64_t));
+	uintptr_t newAddress = reinterpret_cast<uintptr_t>(arg1) + controllerInputMaskOffset;
+	if ((newAddress & 0xFF) == 0x40)
+	{
+		if (!controllerInputMaskAddress)
+		{
+			controllerInputMaskAddress = newAddress;
+			logger.Log(
+				"Controller input mask address: %p",
+				(void*)newAddress
+			);
+		}
 
-	bool unhookResult = ModManager::TryUnhookFunction(*funcData);
-	logger.Log(
-		"ProcessControllerInput function unhooking %s",
-		unhookResult ? "successful" : "failed"
-	);
+		// Update here to avoid debounce issues
+		currentControllerInputMask = *reinterpret_cast<uint64_t*>(controllerInputMaskAddress);
+	}
 }
 
 bool InputTracker::IsCombinationActive(const std::vector<InputCode>& combination)
@@ -141,9 +132,14 @@ void InputTracker::PollKeyboard()
 
 void InputTracker::PollGamepad()
 {
+	if (controllerInputMaskAddress == 0)
+	{
+		return;
+	}
+
 	if (lastControllerInputMask == 0 && currentControllerInputMask == 0)
 	{
-		return; // No gamepad input detected
+		return; // No gamepad input detected and no change
 	}
 
 	activeGamepadButtons.clear();
@@ -152,14 +148,11 @@ void InputTracker::PollGamepad()
 		bool wasDown = (lastControllerInputMask & bit) != 0;
 		bool isDown = (currentControllerInputMask & bit) != 0;
 
+		InputCode code{ bit, InputSource::GAMEPAD };
+
 		if (isDown)
 		{
 			activeGamepadButtons.insert(bit);
-		}
-
-		InputCode code{ bit, InputSource::GAMEPAD };
-		if (isDown)
-		{
 			if (!wasDown)
 			{
 				SendInputPress(code);

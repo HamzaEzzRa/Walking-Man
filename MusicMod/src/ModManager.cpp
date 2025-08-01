@@ -155,7 +155,7 @@ void ModManager::Initialize()
 
 void ModManager::OnRender()
 {
-	if (!musicScanStarted && musicPoolScanStartAddress)
+	if (!musicScanStarted && musicPoolScanStartAddress && gamePreLoadCalled)
 	{
 		musicScanStarted = true;
 

@@ -61,7 +61,8 @@ void MusicPlayer::OnEvent(const ModEvent& event)
 		auto* territoryFlagState = std::any_cast<FlagState<EnemyTerritoryFlag>*>(event.data);
 		if (territoryFlagState->current != EnemyTerritoryFlag::SAFE && currentMusicData)
 		{
-			StopMusic();
+			currentMusicData = nullptr;
+			currentMusicIsPlaying.store(false);
 
 			ModManager* instance = ModManager::GetInstance();
 			if (instance)

@@ -62,12 +62,11 @@ private:
 
 	inline static uintptr_t controllerInputMaskAddress = 0; // Address to watch for controller input mask
 	inline static uintptr_t controllerInputMaskOffset = 0x10; // Offset from the base address to the mask
-	inline static std::unique_ptr<MemoryWatcher> controllerInputMaskWatcher = nullptr;
-	inline static uint32_t controllerInputMaskPollingInterval = 100; // Watcher polling interval in ms
 	inline static uint64_t currentControllerInputMask = 0;
 	inline static uint64_t lastControllerInputMask = 0;
 
-	inline static std::vector<std::pair<uint64_t, const char*>> inGameBindings = {
+	inline static std::vector<std::pair<uint64_t, const char*>> inGameBindings =
+	{
 		{0x0000000011000000, "DPAD_RIGHT"},
 		{0x0000000024000000, "DPAD_LEFT"},
 		{0x0000000048000000, "DPAD_UP"},
@@ -88,7 +87,6 @@ private:
 	};
 	
 	inline static bool keyStates[256] = { false };
-	inline static std::set<int> activeGamepadButtons = {};
-
+	inline static std::set<uint64_t> activeGamepadButtons = {};
 	inline static std::unordered_set<std::string> lastActiveCombinations = {};
 };
