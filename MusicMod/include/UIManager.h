@@ -7,10 +7,11 @@
 #include <string>
 #include <vector>
 
+#include "FunctionHook.h"
 #include "IEventListener.h"
 #include "InputCode.h"
 #include "InputTracker.h"
-#include "FunctionHook.h"
+#include "LanguageManager.h"
 #include "UIButton.h"
 
 #include "ordered_map.h"
@@ -89,14 +90,34 @@ public:
 	{
 		CLOSED,
 		OPEN,
-		INCOMPATIBLE, // When sitting down, etc. Music player UI should not display
+		INCOMPATIBLE, // When sitting down, using the watchtower, etc. Music player UI should not display
 	};
 	struct CompassStateData
 	{
-		// Consecutive calls to draw icon func with RDX following these values indicate state
 		CompassState state;
 		uint8_t expectedIconValue; // icon values seem to change across versions, we skip them in checks for now
 		const char* expectedUITextContent; // we check only text content, icon values are not reliable
+
+		std::wstring cachedExpectedWideString;
+		std::wstring_view cachedExpectedWideView;
+		std::string cachedExpectedACPText;
+
+		const std::string& GetLocalizedExpectedText() const
+		{
+			return LanguageManager::GetLocalizedText(expectedUITextContent);
+		}
+
+		void UpdateCachedText()
+		{
+			const std::string& localizedText = GetLocalizedExpectedText();
+			cachedExpectedWideString = Utils::DecodeGameText(localizedText);
+			if (!cachedExpectedWideString.empty() && cachedExpectedWideString.back() == L'\0')
+			{
+				cachedExpectedWideString.pop_back();
+			}
+			cachedExpectedWideView = std::wstring_view(cachedExpectedWideString);
+			cachedExpectedACPText = localizedText;
+		}
 	};
 	inline static std::unordered_map<CompassState, std::vector<CompassStateData>> compassStateReferenceMap =
 	{
@@ -124,6 +145,7 @@ public:
 	void OnScanDone();
 	void OnRender();
 	void OnInputPress(const InputCode&);
+	void OnTextLanguageChange();
 
 	void UpdateMusicPlayerUIBlockers(MusicPlayerUIBlocker, bool);
 

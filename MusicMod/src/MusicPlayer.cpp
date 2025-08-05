@@ -538,6 +538,8 @@ void MusicPlayer::PlayUISoundHook(void* arg1, void* arg2, void* arg3, void* arg4
 		}
 	}
 
+	//logger.Log("PlayUISound called with arg2: %p", arg2);
+
 	const FunctionData* playUISoundFuncData = ModManager::GetFunctionData("PlayUISound");
 	if (!playUISoundFuncData || !playUISoundFuncData->originalFunction)
 	{
@@ -594,7 +596,6 @@ void MusicPlayer::PlayMusic(const MusicData* data, bool displayDescription=true)
 
 	if (
 		ModConfiguration::showSongDescription && displayDescription
-		&& data->type == MusicType::SONG && data->descriptionID
 	)
 	{
 		const FunctionData* showMusicDescriptionFuncData = ModManager::GetFunctionData("ShowMusicDescription");
@@ -604,21 +605,25 @@ void MusicPlayer::PlayMusic(const MusicData* data, bool displayDescription=true)
 		}
 		else
 		{
-			//if (descriptionDisplayed)
-			//{
-			//	descriptionDisplayed = false;
-			//	drawDescriptionFunc(nullptr, nullptr, nullptr, nullptr); // clear
-			//}
-
-			void* descriptionId = reinterpret_cast<void*>(data->descriptionID);
-			logger.Log("Showing song description for ID: %p", descriptionId);
 			GenericFunction_t showMusicDescriptionFunc = reinterpret_cast<GenericFunction_t>(
 				showMusicDescriptionFuncData->address
 			);
-			showMusicDescriptionFunc(nullptr, descriptionId, nullptr, nullptr);
 
-			lastDisplayTime = std::chrono::steady_clock::now();
-			descriptionDisplayed = true;
+			if (descriptionDisplayed)
+			{
+				descriptionDisplayed = false;
+				showMusicDescriptionFunc(nullptr, nullptr, nullptr, nullptr); // clear
+			}
+
+			if (data->type == MusicType::SONG && data->descriptionID)
+			{
+				void* descriptionId = reinterpret_cast<void*>(data->descriptionID);
+				logger.Log("Showing song description for ID: %p", descriptionId);
+				showMusicDescriptionFunc(nullptr, descriptionId, nullptr, nullptr);
+
+				lastDisplayTime = std::chrono::steady_clock::now();
+				descriptionDisplayed = true;
+			}
 		}
 	}
 

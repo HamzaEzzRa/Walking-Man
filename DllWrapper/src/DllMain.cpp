@@ -9,6 +9,7 @@
 #include "MusicPlayer.h"
 #include "UIManager.h"
 #include "GameStateManager.h"
+#include "LanguageManager.h"
 
 #include "MinHook.h"
 
@@ -47,11 +48,13 @@ DWORD WINAPI HookThread(LPVOID lpParam)
 	static MusicPlayer musicPlayer;
 	static UIManager uiManager;
 	static GameStateManager gameStateManager;
+	static LanguageManager languageManager;
 
 	modManager.RegisterListener(&inputTracker);
 	modManager.RegisterListener(&musicPlayer);
 	modManager.RegisterListener(&uiManager);
 	modManager.RegisterListener(&gameStateManager);
+	modManager.RegisterListener(&languageManager);
 
 	modManager.Initialize();
 	return 0;

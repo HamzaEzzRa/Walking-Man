@@ -8,6 +8,8 @@ enum class ModEventType
 	ScanCompleted,
 	FrameRendered,
 
+	TextLanguageChanged,
+
 	InputPressResolved,
 	InputDownResolved,
 	InputUpResolved,

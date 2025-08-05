@@ -67,23 +67,23 @@ private:
 
 	inline static std::vector<std::pair<uint64_t, const char*>> inGameBindings =
 	{
-		{0x0000000011000000, "DPAD_RIGHT"},
-		{0x0000000024000000, "DPAD_LEFT"},
-		{0x0000000048000000, "DPAD_UP"},
-		{0x0000000082000000, "DPAD_DOWN"},
+		{GAMEPAD_DPAD_RIGHT, "DPAD_RIGHT"},
+		{GAMEPAD_DPAD_LEFT, "DPAD_LEFT"},
+		{GAMEPAD_DPAD_UP, "DPAD_UP"},
+		{GAMEPAD_DPAD_DOWN, "DPAD_DOWN"},
 
-		{0x0000004000000000, "A"},
-		{0x0000008000000000, "B"},
-		{0x0000010000000000, "Y"},
-		{0x0000020000000000, "X"},
+		{GAMEPAD_A, "A"},
+		{GAMEPAD_B, "B"},
+		{GAMEPAD_Y, "Y"},
+		{GAMEPAD_X, "X"},
 
-		{0x0001040000000000, "LB"},
-		{0x0002080000000000, "RB"},
-		{0x0004100000000000, "LT"},
-		{0x0008200000000000, "RT"},
+		{GAMEPAD_LB, "LB"},
+		{GAMEPAD_RB, "RB"},
+		{GAMEPAD_LT, "LT"},
+		{GAMEPAD_RT, "RT"},
 		
-		{0x0010000000000000, "LS"},
-		{0x0020000000000000, "RS"}
+		{GAMEPAD_LS, "LS"},
+		{GAMEPAD_RS, "RS"}
 	};
 	
 	inline static bool keyStates[256] = { false };

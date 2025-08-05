@@ -208,6 +208,7 @@ COPY "$(SolutionDir)x64\Release\dxgi.dll" "C:\Program Files (x86)\Steam\steamapp
     <ClInclude Include="..\MusicMod\include\InputObserver.h" />
     <ClInclude Include="..\MusicMod\include\InputTracker.h" />
     <ClInclude Include="..\MusicMod\include\BreakpointWatcher.h" />
+    <ClInclude Include="..\MusicMod\include\LanguageManager.h" />
     <ClInclude Include="..\MusicMod\include\MemoryWatcher.h" />
     <ClInclude Include="..\MusicMod\include\ModConfiguration.h" />
     <ClInclude Include="..\MusicMod\include\ModEvents.h" />
@@ -235,6 +236,7 @@ COPY "$(SolutionDir)x64\Release\dxgi.dll" "C:\Program Files (x86)\Steam\steamapp
     <ClCompile Include="..\MusicMod\src\GameStateManager.cpp" />
     <ClCompile Include="..\MusicMod\src\InputTracker.cpp" />
     <ClCompile Include="..\MusicMod\src\BreakpointWatcher.cpp" />
+    <ClCompile Include="..\MusicMod\src\LanguageManager.cpp" />
     <ClCompile Include="..\MusicMod\src\MemoryWatcher.cpp" />
     <ClCompile Include="..\MusicMod\src\ModConfiguration.cpp" />
     <ClCompile Include="..\MusicMod\src\ModManager.cpp" />

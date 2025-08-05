@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 enum class MusicType
 {
 	UNKNOWN,
@@ -12,6 +14,32 @@ enum class GameVersion
 {
 	DC,
 	STANDARD
+};
+
+enum class TextLanguage: uint8_t
+{
+	UNKNOWN = 0,
+	ENGLISH_US = 1,
+	FRENCH = 2,
+	ITALIAN = 5,
+	GERMAN = 4,
+	SPANISH_SPAIN = 3,
+	PORTUGUESE_PORTUGAL = 7,
+	GREEK = 23,
+	POLISH = 11,
+	RUSSIAN = 10,
+	SPANISH_LATIN_AMERICA = 17,
+	PORTUGUESE_LATIN_AMERICA = 18,
+	JAPANESE = 16,
+	ENGLISH_UK = 22,
+	ARABIC = 20,
+	DUTCH = 6,
+	CZECH = 24,
+	TURKISH = 19,
+	HUNGARIAN = 25,
+	KOREAN = 9,
+	CHINESE_TRADITIONAL = 8,
+	CHINESE_SIMPLIFIED = 21
 };
 
 struct MusicData
@@ -34,6 +62,21 @@ struct FunctionData
 	bool usesAVX = false; // If function uses AVX instructions, use disassembly-based MemoryUtils::PlaceHook, not MinHook
 	uintptr_t address = 0;
 	void* originalFunction = nullptr;
+};
+
+struct LocalizedText
+{
+	std::unordered_map<TextLanguage, std::u16string> textMap;
+
+	const std::u16string& GetText(TextLanguage language) const
+	{
+		auto it = textMap.find(language);
+		if (it != textMap.end())
+		{
+			return it->second;
+		}
+		return 0;
+	}
 };
 
 template<typename T>

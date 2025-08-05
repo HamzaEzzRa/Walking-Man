@@ -46,12 +46,13 @@ namespace ModConfiguration
 
 	namespace Databases
 	{
-		extern std::unordered_map<std::string, FunctionData> earlyFunctionDatabase;
 		extern std::unordered_map<std::string, FunctionData> functionDatabase;
 
 		extern std::unordered_map<std::string, MusicData> interruptorDatabase;
 		extern std::unordered_map<std::string, MusicData> songDatabase;
 
 		extern std::unordered_map<std::string, MusicData> interruptorUIDatabase;
+
+		extern std::unordered_map<std::string, LocalizedText> localizedTextDatabase;
 	}
 }

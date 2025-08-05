@@ -1,4 +1,4 @@
-#include "UIManager.h"
+﻿#include "UIManager.h"
 
 #include <locale>
 #include <codecvt>
@@ -38,6 +38,11 @@ void UIManager::OnEvent(const ModEvent& event)
 		{
 			const InputCode& inputCode = std::any_cast<InputCode>(event.data);
 			OnInputPress(inputCode);
+			break;
+		}
+		case ModEventType::TextLanguageChanged:
+		{
+			OnTextLanguageChange();
 			break;
 		}
 		case ModEventType::BTTerritoryStateChanged:
@@ -89,7 +94,9 @@ void UIManager::OnEvent(const ModEvent& event)
 						notificationMessage = *interruptorNamePtr;
 					}
 				}
-				ShowNotificationText(notificationMessage);
+				ShowNotificationText(
+					LanguageManager::GetLocalizedText(std::string(notificationMessage)).c_str()
+				);
 			}
 		} // We fall through here intentionally to update the button state
 		case ModEventType::MusicPlayerStopped:
@@ -204,6 +211,26 @@ void UIManager::OnInputPress(const InputCode& inputCode)
 	}
 }
 
+void UIManager::OnTextLanguageChange()
+{
+	for (auto it = musicPlayerActionButtonMap.begin(); it != musicPlayerActionButtonMap.end(); it++)
+	{
+		UIButton& button = it.value();
+		for (auto& buttonState : button.states)
+		{
+			buttonState.UpdateCachedText();
+		}
+	}
+
+	for (auto& [state, data] : compassStateReferenceMap)
+	{
+		for (auto& compassStateData : data)
+		{
+			compassStateData.UpdateCachedText();
+		}
+	}
+}
+
 void UIManager::UpdateMusicPlayerUIBlockers(MusicPlayerUIBlocker blocker, bool enable)
 {
 	uint8_t previousBlockers = musicPlayerUIBlockers;
@@ -230,22 +257,30 @@ void UIManager::UpdateMusicPlayerUIBlockers(MusicPlayerUIBlocker blocker, bool e
 	{
 		if (musicPlayerUIBlockers > 0 && previousBlockers == 0)
 		{
-			ShowNotificationText("Threat nearby: music player deactivated.");
+			ShowNotificationText(
+				LanguageManager::GetLocalizedText("Threat nearby: music player deactivated.").c_str()
+			);
 		}
 		else if (musicPlayerUIBlockers == 0 && previousBlockers > 0)
 		{
-			ShowNotificationText("Threat cleared: music player can be activated.");
+			ShowNotificationText(
+				LanguageManager::GetLocalizedText("Threat cleared: music player can be activated.").c_str()
+			);
 		}
 	}
 	else if (blocker & MusicPlayerUIBlocker::CHIRAL_BLOCK)
 	{
 		if (musicPlayerUIBlockers > 0 && previousBlockers == 0)
 		{
-			ShowNotificationText("Chiral network off: music player deactivated.");
+			ShowNotificationText(
+				LanguageManager::GetLocalizedText("Chiral network off: music player deactivated.").c_str()
+			);
 		}
 		else if (musicPlayerUIBlockers == 0 && previousBlockers > 0)
 		{
-			ShowNotificationText("Chiral network on: music player can be activated.");
+			ShowNotificationText(
+				LanguageManager::GetLocalizedText("Chiral network on: music player can be activated.").c_str()
+			);
 		}
 	}
 }
@@ -309,12 +344,11 @@ void UIManager::InGameUIUpdateStaticPoolCallerHook(void* arg1, void* arg2, void*
 				if (currentRuntimeText && currentRuntimeText->data)
 				{
 					std::wstring_view currentView(currentRuntimeText->data);
-					std::wstring expectedW = Utils::Utf8ToWstring(buttonState.text);
-					std::wstring_view expectedView(expectedW);
+					const std::wstring_view& expectedView = buttonState.cachedWideView;
 					textNeedsUpdate = currentView != expectedView;
 
 					/*logger.Log("====================================");
-					logger.Log("Text: %s", buttonState.text);
+					logger.Log("Text: %s", buttonState.GetLocalizedText());
 					logger.Log("Current View:");
 					for (wchar_t wc : currentView)
 					{
@@ -363,9 +397,10 @@ void UIManager::InGameUIUpdateStaticPoolCallerHook(void* arg1, void* arg2, void*
 						continue;
 					}
 
+					const std::string& localizedText = buttonState.cachedACPText;
 					logger.Log(
 						"Updating runtime text for button %s, slot index: %zu, current text: %s",
-						button.name, runtimeSlotIndex, buttonState.text
+						button.name, runtimeSlotIndex, localizedText.c_str()
 					);
 
 					void* newRuntimeText = nullptr;
@@ -373,7 +408,7 @@ void UIManager::InGameUIUpdateStaticPoolCallerHook(void* arg1, void* arg2, void*
 						reinterpret_cast<GenericFunction_t>(createRuntimeUITextFromStringFuncData->address);
 					createRuntimeUITextFromStringFunc(
 						&newRuntimeText,
-						(void*)buttonState.text,
+						(void*)localizedText.c_str(),
 						nullptr,
 						nullptr
 					);
@@ -438,7 +473,8 @@ void UIManager::InGameUIUpdateStaticPoolCallerHook(void* arg1, void* arg2, void*
 void UIManager::AccessStaticUIPoolHook(void* arg1, void* arg2, void* arg3, void* arg4)
 {
 	Logger logger("Access Static UI Pool Hook");
-	staticUIPoolAddress = reinterpret_cast<uintptr_t>(arg4) + offsetToStaticUIPool;
+	uintptr_t newAddress = reinterpret_cast<uintptr_t>(arg4) + offsetToStaticUIPool;
+	staticUIPoolAddress = newAddress;
 
 	const FunctionData* functionData = ModManager::GetFunctionData("AccessStaticUIPool");
 	if (!functionData || !functionData->originalFunction)
@@ -564,7 +600,7 @@ void UIManager::InGameUIDrawElementHook(void* arg1, void* arg2, void* arg3, void
 	{
 		logger.Log(
 			"Found text \"%s\" at runtime slot index %zu. Compass state set to OPEN",
-			Utils::WstringToUtf8(std::wstring(currentView)),
+			Utils::DecodeGameText(std::wstring(currentView)),
 			runtimeSlotIndex
 		);
 		currentCompassState = OPEN;
@@ -648,7 +684,7 @@ void UIManager::ShowNotificationText(const char* text)
 		uint8_t param5,
 		uint8_t param6,
 		float param7,		// some sort of priority, timestamp?
-		uint32_t param8,	// gets OR�d with 1
+		uint32_t param8,	// gets OR’d with 1
 		uint32_t* param9	// pointer to a uint32_t (?)
 	);
 
@@ -696,6 +732,8 @@ void UIManager::ShowNotificationText(const char* text)
 bool UIManager::CheckForCompassState(CompassState stateToCheck,
 	uint8_t iconIdToMatch, const std::wstring_view& textViewToMatch)
 {
+	//Logger logger("UI Manager");
+
 	//bool iconMatched = false;
 	bool textMatched = false;
 
@@ -705,13 +743,23 @@ bool UIManager::CheckForCompassState(CompassState stateToCheck,
 		//if (compassStateData.expectedIconValue == iconIdToMatch)
 		{
 			//iconMatched = true;
-			std::wstring expectedW = Utils::Utf8ToWstring(compassStateData.expectedUITextContent);
-			std::wstring_view expectedView(expectedW);
+			const std::wstring_view& expectedView = compassStateData.cachedExpectedWideView;
 			if (textViewToMatch == expectedView)
 			{
 				textMatched = true;
 				break;
 			}
+			//else
+			//{
+			//	for (size_t i = 0; i < textViewToMatch.size(); i++)
+			//	{
+			//		logger.Log("view[%zu] = U+%04X", i, textViewToMatch[i]);
+			//	}
+			//	for (size_t i = 0; i < expectedView.size(); ++i)
+			//	{
+			//		logger.Log("expected[%zu] = U+%04X", i, expectedView[i]);
+			//	}
+			//}
 		}
 		//else
 		//{

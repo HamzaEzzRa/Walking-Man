@@ -135,6 +135,9 @@
     <ClInclude Include="include\UniversalProxyDLL.h">
       <Filter>Header Files\DllWrapper</Filter>
     </ClInclude>
+    <ClInclude Include="..\MusicMod\include\LanguageManager.h">
+      <Filter>Header Files\Music Mod</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\MusicMod\src\ModManager.cpp">
@@ -178,6 +181,9 @@
     </ClCompile>
     <ClCompile Include="src\DllMain.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\MusicMod\src\LanguageManager.cpp">
+      <Filter>Source Files\Music Mod</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

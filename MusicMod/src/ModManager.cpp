@@ -30,11 +30,7 @@ bool ModManager::TryHookFunction(const std::string& name, void* hookFunction)
 	auto it = ModConfiguration::Databases::functionDatabase.find(name);
 	if (it == ModConfiguration::Databases::functionDatabase.end())
 	{
-		it = ModConfiguration::Databases::earlyFunctionDatabase.find(name);
-		if (it == ModConfiguration::Databases::earlyFunctionDatabase.end())
-		{
-			return false;
-		}
+		return false;
 	}
 
 	auto& funcData = it->second;
@@ -100,11 +96,7 @@ const FunctionData* ModManager::GetFunctionData(const std::string& name)
 	auto it = ModConfiguration::Databases::functionDatabase.find(name);
 	if (it == ModConfiguration::Databases::functionDatabase.end())
 	{
-		it = ModConfiguration::Databases::earlyFunctionDatabase.find(name);
-		if (it == ModConfiguration::Databases::earlyFunctionDatabase.end())
-		{
-			return nullptr;
-		}
+		return nullptr;
 	}
 	return &(it->second);
 }
