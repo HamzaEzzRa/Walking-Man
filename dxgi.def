@@ -1,5 +1,3 @@
 LIBRARY dxgi
 EXPORTS
-    CreateDXGIFactory=CreateDXGIFactoryHook
     CreateDXGIFactory1=CreateDXGIFactory1Hook
-    CreateDXGIFactory2=CreateDXGIFactory2Hook

@@ -65,13 +65,8 @@ DWORD WINAPI HookThread(LPVOID lpParam)
 static HMODULE gRealDxgi = nullptr;
 static std::once_flag gHookThreadOnce;
 
-typedef HRESULT(WINAPI* PFN_CreateDXGIFactory)(REFIID, void**);
 typedef HRESULT(WINAPI* PFN_CreateDXGIFactory1)(REFIID, void**);
-typedef HRESULT(WINAPI* PFN_CreateDXGIFactory2)(UINT, REFIID, void**);
-
-static PFN_CreateDXGIFactory real_CreateDXGIFactory = nullptr;
 static PFN_CreateDXGIFactory1 real_CreateDXGIFactory1 = nullptr;
-static PFN_CreateDXGIFactory2 real_CreateDXGIFactory2 = nullptr;
 
 static void InitHookThreadOnce()
 {
@@ -99,32 +94,6 @@ static HMODULE LoadRealDxgi()
 }
 
 extern "C" __declspec(dllexport)
-HRESULT WINAPI CreateDXGIFactoryHook(REFIID riid, void** ppFactory)
-{
-	if (!LoadRealDxgi()) {
-		MessageBoxW(nullptr, L"Failed to load original dxgi.dll", L"dxgi proxy", MB_OK | MB_ICONERROR);
-		return E_FAIL;
-	}
-
-	if (!real_CreateDXGIFactory) {
-		real_CreateDXGIFactory = (PFN_CreateDXGIFactory)GetProcAddress(gRealDxgi, "CreateDXGIFactory");
-		if (!real_CreateDXGIFactory) {
-			MessageBoxW(nullptr, L"Failed to find CreateDXGIFactory", L"dxgi proxy", MB_OK | MB_ICONERROR);
-			return E_FAIL;
-		}
-	}
-
-	HRESULT hr = real_CreateDXGIFactory(riid, ppFactory);
-
-	if (SUCCEEDED(hr))
-	{
-		InitHookThreadOnce();
-	}
-
-	return hr;
-}
-
-extern "C" __declspec(dllexport)
 HRESULT WINAPI CreateDXGIFactory1Hook(REFIID riid, void** ppFactory)
 {
 	if (!LoadRealDxgi()) {
@@ -141,32 +110,6 @@ HRESULT WINAPI CreateDXGIFactory1Hook(REFIID riid, void** ppFactory)
 	}
 
 	HRESULT hr = real_CreateDXGIFactory1(riid, ppFactory);
-
-	if (SUCCEEDED(hr))
-	{
-		InitHookThreadOnce();
-	}
-
-	return hr;
-}
-
-extern "C" __declspec(dllexport)
-HRESULT WINAPI CreateDXGIFactory2Hook(UINT Flags, REFIID riid, void** ppFactory)
-{
-	if (!LoadRealDxgi()) {
-		MessageBoxW(nullptr, L"Failed to load original dxgi.dll", L"dxgi proxy", MB_OK | MB_ICONERROR);
-		return E_FAIL;
-	}
-
-	if (!real_CreateDXGIFactory2) {
-		real_CreateDXGIFactory2 = (PFN_CreateDXGIFactory2)GetProcAddress(gRealDxgi, "CreateDXGIFactory2");
-		if (!real_CreateDXGIFactory2) {
-			MessageBoxW(nullptr, L"Failed to find CreateDXGIFactory2", L"dxgi proxy", MB_OK | MB_ICONERROR);
-			return E_FAIL;
-		}
-	}
-
-	HRESULT hr = real_CreateDXGIFactory2(Flags, riid, ppFactory);
 
 	if (SUCCEEDED(hr))
 	{
