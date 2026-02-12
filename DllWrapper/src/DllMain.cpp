@@ -13,6 +13,8 @@
 
 #include "MinHook.h"
 
+#include <mutex>
+
 static Logger logger{ "DllMain" };
 
 void OpenDevTerminal()
@@ -61,22 +63,86 @@ DWORD WINAPI HookThread(LPVOID lpParam)
 }
 
 static HMODULE gRealDxgi = nullptr;
+static std::once_flag gHookThreadOnce;
+
+typedef HRESULT(WINAPI* PFN_CreateDXGIFactory)(REFIID, void**);
 typedef HRESULT(WINAPI* PFN_CreateDXGIFactory1)(REFIID, void**);
+typedef HRESULT(WINAPI* PFN_CreateDXGIFactory2)(UINT, REFIID, void**);
+
+static PFN_CreateDXGIFactory real_CreateDXGIFactory = nullptr;
 static PFN_CreateDXGIFactory1 real_CreateDXGIFactory1 = nullptr;
+static PFN_CreateDXGIFactory2 real_CreateDXGIFactory2 = nullptr;
+
+static void InitHookThreadOnce()
+{
+	std::call_once(gHookThreadOnce, []() {
+		CreateThread(nullptr, 0, HookThread, nullptr, 0, nullptr);
+	});
+}
+
+static HMODULE LoadRealDxgi()
+{
+	if (gRealDxgi)
+		return gRealDxgi;
+
+	// Try loading a chained proxy DLL first (e.g. ReShade renamed to _dxgi.dll)
+	wchar_t modulePath[MAX_PATH];
+	GetModuleFileNameW(nullptr, modulePath, MAX_PATH);
+	wchar_t* lastSlash = wcsrchr(modulePath, L'\\');
+	if (lastSlash)
+	{
+		*(lastSlash + 1) = L'\0';
+		wchar_t chainPath[MAX_PATH];
+		wcscpy_s(chainPath, modulePath);
+		wcscat_s(chainPath, L"_dxgi.dll");
+
+		gRealDxgi = LoadLibraryW(chainPath);
+	}
+
+	// Fall back to system dxgi.dll
+	if (!gRealDxgi) {
+		wchar_t sysPath[MAX_PATH];
+		GetSystemDirectoryW(sysPath, MAX_PATH);
+		wcscat_s(sysPath, L"\\dxgi.dll");
+
+		gRealDxgi = LoadLibraryW(sysPath);
+	}
+
+	return gRealDxgi;
+}
+
+extern "C" __declspec(dllexport)
+HRESULT WINAPI CreateDXGIFactoryHook(REFIID riid, void** ppFactory)
+{
+	if (!LoadRealDxgi()) {
+		MessageBoxW(nullptr, L"Failed to load original dxgi.dll", L"dxgi proxy", MB_OK | MB_ICONERROR);
+		return E_FAIL;
+	}
+
+	if (!real_CreateDXGIFactory) {
+		real_CreateDXGIFactory = (PFN_CreateDXGIFactory)GetProcAddress(gRealDxgi, "CreateDXGIFactory");
+		if (!real_CreateDXGIFactory) {
+			MessageBoxW(nullptr, L"Failed to find CreateDXGIFactory", L"dxgi proxy", MB_OK | MB_ICONERROR);
+			return E_FAIL;
+		}
+	}
+
+	HRESULT hr = real_CreateDXGIFactory(riid, ppFactory);
+
+	if (SUCCEEDED(hr))
+	{
+		InitHookThreadOnce();
+	}
+
+	return hr;
+}
 
 extern "C" __declspec(dllexport)
 HRESULT WINAPI CreateDXGIFactory1Hook(REFIID riid, void** ppFactory)
 {
-	if (!gRealDxgi) {
-		wchar_t path[MAX_PATH];
-		GetSystemDirectoryW(path, MAX_PATH);
-		wcscat_s(path, L"\\dxgi.dll");
-
-		gRealDxgi = LoadLibraryW(path);
-		if (!gRealDxgi) {
-			MessageBoxW(nullptr, L"Failed to load original dxgi.dll", L"dxgi proxy", MB_OK | MB_ICONERROR);
-			return E_FAIL;
-		}
+	if (!LoadRealDxgi()) {
+		MessageBoxW(nullptr, L"Failed to load original dxgi.dll", L"dxgi proxy", MB_OK | MB_ICONERROR);
+		return E_FAIL;
 	}
 
 	if (!real_CreateDXGIFactory1) {
@@ -91,12 +157,33 @@ HRESULT WINAPI CreateDXGIFactory1Hook(REFIID riid, void** ppFactory)
 
 	if (SUCCEEDED(hr))
 	{
-		static bool initialized = false;
-		if (!initialized)
-		{
-			initialized = true;
-			CreateThread(nullptr, 0, HookThread, nullptr, 0, nullptr);
+		InitHookThreadOnce();
+	}
+
+	return hr;
+}
+
+extern "C" __declspec(dllexport)
+HRESULT WINAPI CreateDXGIFactory2Hook(UINT Flags, REFIID riid, void** ppFactory)
+{
+	if (!LoadRealDxgi()) {
+		MessageBoxW(nullptr, L"Failed to load original dxgi.dll", L"dxgi proxy", MB_OK | MB_ICONERROR);
+		return E_FAIL;
+	}
+
+	if (!real_CreateDXGIFactory2) {
+		real_CreateDXGIFactory2 = (PFN_CreateDXGIFactory2)GetProcAddress(gRealDxgi, "CreateDXGIFactory2");
+		if (!real_CreateDXGIFactory2) {
+			MessageBoxW(nullptr, L"Failed to find CreateDXGIFactory2", L"dxgi proxy", MB_OK | MB_ICONERROR);
+			return E_FAIL;
 		}
+	}
+
+	HRESULT hr = real_CreateDXGIFactory2(Flags, riid, ppFactory);
+
+	if (SUCCEEDED(hr))
+	{
+		InitHookThreadOnce();
 	}
 
 	return hr;
