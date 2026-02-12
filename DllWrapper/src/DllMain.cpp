@@ -85,28 +85,15 @@ static HMODULE LoadRealDxgi()
 	if (gRealDxgi)
 		return gRealDxgi;
 
-	// Try loading a chained proxy DLL first (e.g. ReShade renamed to _dxgi.dll)
-	wchar_t modulePath[MAX_PATH];
-	GetModuleFileNameW(nullptr, modulePath, MAX_PATH);
-	wchar_t* lastSlash = wcsrchr(modulePath, L'\\');
-	if (lastSlash)
-	{
-		*(lastSlash + 1) = L'\0';
-		wchar_t chainPath[MAX_PATH];
-		wcscpy_s(chainPath, modulePath);
-		wcscat_s(chainPath, L"_dxgi.dll");
+	// Always load the real system dxgi.dll for factory creation.
+	// Chaining with other proxy DLLs (e.g. ReShade as _dxgi.dll) is handled
+	// by the UPD proxy system in DllMain, which forwards all other DXGI
+	// exports through _dxgi.dll automatically.
+	wchar_t sysPath[MAX_PATH];
+	GetSystemDirectoryW(sysPath, MAX_PATH);
+	wcscat_s(sysPath, L"\\dxgi.dll");
 
-		gRealDxgi = LoadLibraryW(chainPath);
-	}
-
-	// Fall back to system dxgi.dll
-	if (!gRealDxgi) {
-		wchar_t sysPath[MAX_PATH];
-		GetSystemDirectoryW(sysPath, MAX_PATH);
-		wcscat_s(sysPath, L"\\dxgi.dll");
-
-		gRealDxgi = LoadLibraryW(sysPath);
-	}
+	gRealDxgi = LoadLibraryW(sysPath);
 
 	return gRealDxgi;
 }
