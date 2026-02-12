@@ -63,6 +63,7 @@ DWORD WINAPI HookThread(LPVOID lpParam)
 }
 
 static HMODULE gRealDxgi = nullptr;
+static HMODULE gChainedProxy = nullptr;
 static std::once_flag gHookThreadOnce;
 
 typedef HRESULT(WINAPI* PFN_CreateDXGIFactory1)(REFIID, void**);
@@ -81,14 +82,30 @@ static HMODULE LoadRealDxgi()
 		return gRealDxgi;
 
 	// Always load the real system dxgi.dll for factory creation.
-	// Chaining with other proxy DLLs (e.g. ReShade as _dxgi.dll) is handled
-	// by the UPD proxy system in DllMain, which forwards all other DXGI
-	// exports through _dxgi.dll automatically.
 	wchar_t sysPath[MAX_PATH];
 	GetSystemDirectoryW(sysPath, MAX_PATH);
 	wcscat_s(sysPath, L"\\dxgi.dll");
 
 	gRealDxgi = LoadLibraryW(sysPath);
+
+	// After loading system dxgi.dll, load any chained proxy DLL (e.g. ReShade
+	// renamed to _dxgi.dll) so it can install its in-memory hooks on the
+	// now-loaded system dxgi.dll. This is separate from UPD's proxy forwarding.
+	if (gRealDxgi && !gChainedProxy)
+	{
+		wchar_t modulePath[MAX_PATH];
+		GetModuleFileNameW(nullptr, modulePath, MAX_PATH);
+		wchar_t* lastSlash = wcsrchr(modulePath, L'\\');
+		if (lastSlash)
+		{
+			*(lastSlash + 1) = L'\0';
+			wchar_t chainPath[MAX_PATH];
+			wcscpy_s(chainPath, modulePath);
+			wcscat_s(chainPath, L"_dxgi.dll");
+
+			gChainedProxy = LoadLibraryW(chainPath);
+		}
+	}
 
 	return gRealDxgi;
 }
@@ -119,6 +136,13 @@ HRESULT WINAPI CreateDXGIFactory1Hook(REFIID riid, void** ppFactory)
 	return hr;
 }
 
+static std::string GetSystemDirectoryString()
+{
+	char buf[MAX_PATH];
+	GetSystemDirectoryA(buf, MAX_PATH);
+	return std::string(buf);
+}
+
 BOOL WINAPI DllMain(HMODULE module, DWORD reason, LPVOID)
 {
 	if (reason == DLL_PROCESS_ATTACH)
@@ -128,7 +152,10 @@ BOOL WINAPI DllMain(HMODULE module, DWORD reason, LPVOID)
 		if (IsStandalone(module))
 		{
 			UPD::MuteLogging();
-			UPD::CreateProxy(module);
+			// Always proxy the real system dxgi.dll, not _dxgi.dll.
+			// If a chained proxy like ReShade exists as _dxgi.dll, it will be
+			// loaded separately below so it can install its own in-memory hooks.
+			UPD::CreateProxy(module, GetSystemDirectoryString());
 		}
 		else
 		{
