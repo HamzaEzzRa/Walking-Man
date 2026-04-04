@@ -1,6 +1,8 @@
 name: Build and Release Mod
 
 on:
+  push:
+    branches: [ "**" ]
   workflow_dispatch:
     inputs:
       version:
@@ -10,6 +12,9 @@ on:
 
 permissions:
   contents: write
+
+env:
+  RELEASE_VERSION: ${{ github.event.inputs.version || 'v1.0.6' }}
 
 jobs:
   build-and-release:
@@ -25,13 +30,13 @@ jobs:
       run: msbuild DllWrapper.sln /p:Configuration=Release /p:Platform=x64 /p:PostBuildEventUseInBuild=false
 
     - name: Create ZIP Archive
-      run: Compress-Archive -Path x64\Release\dxgi.dll, walkingman.ini -DestinationPath walkingman_${{ github.event.inputs.version }}.zip
+      run: Compress-Archive -Path x64\Release\dxgi.dll, walkingman.ini -DestinationPath walkingman_${{ env.RELEASE_VERSION }}.zip
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: ${{ github.event.inputs.version }}
-        name: ${{ github.event.inputs.version }}
+        tag_name: ${{ env.RELEASE_VERSION }}
+        name: ${{ env.RELEASE_VERSION }}
         draft: false
         prerelease: false
-        files: walkingman_${{ github.event.inputs.version }}.zip
+        files: walkingman_${{ env.RELEASE_VERSION }}.zip
