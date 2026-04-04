@@ -1,0 +1,37 @@
+name: Build and Release Mod
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version name (e.g. v1.0.6)'
+        required: true
+        default: 'v1.0.6'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Add msbuild to PATH
+      uses: microsoft/setup-msbuild@v1.1
+
+    - name: Build
+      run: msbuild DllWrapper.sln /p:Configuration=Release /p:Platform=x64 /p:PostBuildEventUseInBuild=false
+
+    - name: Create ZIP Archive
+      run: Compress-Archive -Path x64\Release\dxgi.dll, walkingman.ini -DestinationPath walkingman_${{ github.event.inputs.version }}.zip
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ github.event.inputs.version }}
+        name: ${{ github.event.inputs.version }}
+        draft: false
+        prerelease: false
+        files: walkingman_${{ github.event.inputs.version }}.zip
