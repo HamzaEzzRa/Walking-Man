@@ -1,4 +1,6 @@
-﻿#include "ModManager.h"
+#include "ModManager.h"
+
+#include <cstring>
 
 #include "MemoryUtils.h"
 #include "MinHook.h"
@@ -55,12 +57,20 @@ bool ModManager::TryHookFunction(const std::string& name, void* hookFunction)
 		);
 		if (created != MH_OK)
 		{
+			logger.Log(
+				"Failed to create hook for function \"%s\" at address %p",
+				name.c_str(), funcData.address
+			);
 			return false;
 		}
 
 		auto enabled = MH_EnableHook(reinterpret_cast<LPVOID>(funcData.address));
 		if (enabled != MH_OK)
 		{
+			logger.Log(
+				"Failed to enable hook for function \"%s\" at address %p",
+				name.c_str(), funcData.address
+			);
 			return false;
 		}
 	}
@@ -84,6 +94,10 @@ bool ModManager::TryUnhookFunction(const FunctionData& func)
 		auto disabled = MH_DisableHook(reinterpret_cast<LPVOID>(func.address));
 		if (disabled != MH_OK)
 		{
+			logger.Log(
+				"Failed to disable hook for function \"%s\" at address %p",
+				func.name, func.address
+			);
 			return false;
 		}
 	}
@@ -107,6 +121,18 @@ void ModManager::Initialize()
 	logger.Log(
 		configLoaded ? "Ini configuration loaded successfully"
 		: "Failed to load ini configuration, using default settings"
+	);
+
+	ModConfiguration::gameProvider = DetectProvider();
+	logger.Log(
+		"Detected game provider: %s",
+		ModConfiguration::gameProvider == GameProvider::XBOX_GAMEPASS ? "Xbox Gamepass" : "Steam/Epic"
+	);
+
+	ModConfiguration::gameVersion = DetectVersion();
+	logger.Log(
+		"Detected game version: %s",
+		ModConfiguration::gameVersion == GameVersion::DC ? "DC" : "Standard"
 	);
 
 	logger.Log("Scanning for function signatures...");
@@ -168,25 +194,6 @@ void ModManager::OnRender()
 			allMusicTargets,
 			[]() {
 				scanInProgress.store(false);
-
-				// Determine game version based on exclusive DC songs
-				size_t dcCount = 0;
-				size_t dcNotFound = 0;
-				for (auto& [name, data] : ModConfiguration::Databases::songDatabase)
-				{
-					if (data.exclusiveDC)
-					{
-						dcCount++;
-						if (!data.address)
-						{
-							dcNotFound++;
-						}
-					}
-				}
-				ModConfiguration::gameVersion = dcCount == dcNotFound ? GameVersion::STANDARD : GameVersion::DC;
-				logger.Log("Game version is set to %s",
-					ModConfiguration::gameVersion == GameVersion::DC ? "DC" : "STANDARD"
-				);
 
 				for (auto& [name, data] : ModConfiguration::Databases::interruptorDatabase)
 				{
@@ -279,7 +286,43 @@ void ModManager::DispatchEvent(const ModEvent& event)
 	}
 }
 
-void ModManager::RenderTaskHook(void* arg1, void* arg2, void* arg3, void* arg4)
+GameProvider ModManager::DetectProvider()
+{
+	const std::vector<const char*> gamePassModules = {
+		"xgameruntime.dll",
+		"Microsoft.Xbox.Services.dll",
+		"MicrosoftGame.Config.dll",
+		"xg.dll"
+	};
+	for (const auto* moduleName : gamePassModules)
+	{
+		if (GetModuleHandleA(moduleName))
+		{
+			return GameProvider::XBOX_GAMEPASS;
+		}
+	}
+
+	return GameProvider::STEAM;
+}
+
+GameVersion ModManager::DetectVersion()
+{
+	const std::vector<const wchar_t*> dcFiles = {
+		L"XeFX.dll",
+		L"XeFX_Loader.dll"
+	};
+	for (const auto* filename : dcFiles)
+	{
+		if (MemoryUtils::IsFileNextToExecutable(filename))
+		{
+			return GameVersion::DC;
+		}
+	}
+
+	return GameVersion::STANDARD;
+}
+
+void ModManager::RenderTaskHook(void* arg1, void* arg2, void* arg3, void* arg4, void* arg5)
 {
 	const FunctionData* renderTaskFuncData = ModManager::GetFunctionData("RenderTask");
 	if (!renderTaskFuncData || !renderTaskFuncData->originalFunction)
@@ -287,8 +330,9 @@ void ModManager::RenderTaskHook(void* arg1, void* arg2, void* arg3, void* arg4)
 		logger.Log("Original RenderTask function was not hooked, cannot call it");
 		return;
 	}
-	reinterpret_cast<GenericFunction_t>(renderTaskFuncData->originalFunction)(
-		arg1, arg2, arg3, arg4
+	using Function_t = void* (*)(void*, void*, void*, void*, void*);
+	reinterpret_cast<Function_t>(renderTaskFuncData->originalFunction)(
+		arg1, arg2, arg3, arg4, arg5
 	);
 
 	OnRender();
@@ -326,11 +370,20 @@ void ModManager::AccessMusicPoolHook(void* arg1, void* arg2, void* arg3, void* a
 		arg1, arg2, arg3, arg4
 	);
 
-	// take the first 4 non-zero hex digits of arg1 as music pool start address
-	if (!musicPoolScanStartAddress)
+	uintptr_t entryAddress = reinterpret_cast<uintptr_t>(arg1);
+	logger.Log(
+		"AccessMusicPool function called with entry pointer: %p",
+		(void*)entryAddress
+	);
+
+	if (!musicPoolScanStartAddress && entryAddress)
 	{
-		musicPoolScanStartAddress = Utils::KeepTopHex(reinterpret_cast<uintptr_t>(arg1), 4);
-		logger.Log("Music pool start address set to: %p (from %p)", (void*)musicPoolScanStartAddress, arg1);
+		musicPoolScanStartAddress = Utils::KeepTopHex(entryAddress, 4);
+		logger.Log(
+			"Music pool start address set to: %p (from %p)",
+			(void*)musicPoolScanStartAddress,
+			(void*)entryAddress
+		);
 
 		bool unhookResult = TryUnhookFunction(*accessMusicPoolFuncData);
 		logger.Log("AccessMusicPool function unhooking %s",
@@ -352,6 +405,7 @@ void ModManager::GamePreLoadHook(void* arg1, void* arg2, void* arg3, void* arg4)
 		arg1, arg2, arg3, arg4
 	);
 	gamePreLoadCalled = true;
+	logger.Log("GamePreLoad function called, gamePreLoadCalled set to true");
 
 	bool unhookResult = TryUnhookFunction(*gamePreLoadFuncData);
 	logger.Log(

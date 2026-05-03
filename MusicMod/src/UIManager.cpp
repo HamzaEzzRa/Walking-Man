@@ -1,8 +1,5 @@
 ﻿#include "UIManager.h"
 
-#include <locale>
-#include <codecvt>
-
 #include "GameStateManager.h"
 #include "ModConfiguration.h"
 #include "ModManager.h"
@@ -141,15 +138,6 @@ void UIManager::OnScanDone()
 	);
 
 	hookResult = ModManager::TryHookFunction(
-		"UpdateRuntimeUIText",
-		reinterpret_cast<void*>(&UIManager::UpdateRuntimeUITextHook)
-	);
-	logger.Log(
-		"UpdateRuntimeUIText function hook %s",
-		hookResult ? "installed successfully" : "failed"
-	);
-
-	hookResult = ModManager::TryHookFunction(
 		"InGameUIDrawElement",
 		reinterpret_cast<void*>(&UIManager::InGameUIDrawElementHook)
 	);
@@ -219,14 +207,6 @@ void UIManager::OnTextLanguageChange()
 		for (auto& buttonState : button.states)
 		{
 			buttonState.UpdateCachedText();
-		}
-	}
-
-	for (auto& [state, data] : compassStateReferenceMap)
-	{
-		for (auto& compassStateData : data)
-		{
-			compassStateData.UpdateCachedText();
 		}
 	}
 }
@@ -333,8 +313,9 @@ void UIManager::InGameUIUpdateStaticPoolCallerHook(void* arg1, void* arg2, void*
 			}
 			//logger.Log("Runtime slot index for button %s: %u", button.name, runtimeSlotIndex);
 
-			if (currentRuntimeUIPoolStart && runtimeUITextPoolOffset && runtimeSlotSize)
+			if (currentRuntimeUIPoolStart && runtimeSlotSize)
 			{
+				uintptr_t runtimeUITextPoolOffset = GetRuntimeUITextPoolOffset();
 				void** destinationRuntimeTextPtr = (void**)(
 					currentRuntimeUIPoolStart + runtimeUITextPoolOffset + runtimeSlotIndex * runtimeSlotSize
 				);
@@ -389,18 +370,20 @@ void UIManager::InGameUIUpdateStaticPoolCallerHook(void* arg1, void* arg2, void*
 
 					const FunctionData* updateRuntimeUITextFuncData =
 						ModManager::GetFunctionData("UpdateRuntimeUIText");
-					if (!updateRuntimeUITextFuncData || !updateRuntimeUITextFuncData->originalFunction)
+					if (!updateRuntimeUITextFuncData || !updateRuntimeUITextFuncData->address)
 					{
 						logger.Log(
-							"UpdateRuntimeUIText function was not hooked, cannot update runtime text."
+							"UpdateRuntimeUIText function was not found, cannot update runtime text."
 						);
 						continue;
 					}
 
 					const std::string& localizedText = buttonState.cachedACPText;
+					const std::string currentText = RuntimeUITextToUtf8(currentRuntimeText);
+					const std::string newText = Utils::GameTextToUtf8(localizedText);
 					logger.Log(
-						"Updating runtime text for button %s, slot index: %zu, current text: %s",
-						button.name, runtimeSlotIndex, localizedText.c_str()
+						"Updating runtime text for button %s, slot index: %zu, current text: %s, new text: %s",
+						button.name, runtimeSlotIndex, currentText.c_str(), newText.c_str()
 					);
 
 					void* newRuntimeText = nullptr;
@@ -427,7 +410,7 @@ void UIManager::InGameUIUpdateStaticPoolCallerHook(void* arg1, void* arg2, void*
 						+ runtimeSlotIndex * runtimeSlotSize
 					);
 					GenericFunction_t updateRuntimeUITextFunc =
-						reinterpret_cast<GenericFunction_t>(updateRuntimeUITextFuncData->originalFunction);
+						reinterpret_cast<GenericFunction_t>(updateRuntimeUITextFuncData->address);
 					updateRuntimeUITextFunc(
 						richTextInstance,
 						destinationRuntimeTextPtr,
@@ -473,8 +456,9 @@ void UIManager::InGameUIUpdateStaticPoolCallerHook(void* arg1, void* arg2, void*
 void UIManager::AccessStaticUIPoolHook(void* arg1, void* arg2, void* arg3, void* arg4)
 {
 	Logger logger("Access Static UI Pool Hook");
-	uintptr_t newAddress = reinterpret_cast<uintptr_t>(arg4) + offsetToStaticUIPool;
-	staticUIPoolAddress = newAddress;
+	uintptr_t ownerAddress = reinterpret_cast<uintptr_t>(arg1);
+	uintptr_t poolRootAddress = *(uintptr_t*)(ownerAddress + staticUIPoolOwnerOffset);
+	staticUIPoolAddress = poolRootAddress + GetStaticUIPoolOffset();
 
 	const FunctionData* functionData = ModManager::GetFunctionData("AccessStaticUIPool");
 	if (!functionData || !functionData->originalFunction)
@@ -483,37 +467,6 @@ void UIManager::AccessStaticUIPoolHook(void* arg1, void* arg2, void* arg3, void*
 		return;
 	}
 	reinterpret_cast<GenericFunction_t>(functionData->originalFunction)(arg1, arg2, arg3, arg4);
-}
-
-void UIManager::UpdateRuntimeUITextHook(void* arg1, void* arg2, void* arg3, void* arg4)
-{
-	Logger logger("Update Runtime UI Text Hook");
-	if (currentRuntimeUIPoolStart && !runtimeUITextPoolOffset)
-	{
-		// First time this is called, calculate offset of runtime UI text pool from the runtime pool start
-		// Arg 2 is the runtime pool start + offset + slotSize * slotIndex. First call, slotIndex is 0.
-		// this changes between game versions (0x248 for standard, and 0x258 for director's cut)
-		if (arg2 > (void*)currentRuntimeUIPoolStart)
-		{
-			uintptr_t runtimeTextPoolStart = reinterpret_cast<uintptr_t>(arg2);
-			runtimeUITextPoolOffset = runtimeTextPoolStart - currentRuntimeUIPoolStart;
-			logger.Log("Runtime UI pool start address: %p, runtime text pool address: %p, offset: %p",
-				(void*)currentRuntimeUIPoolStart, (void*)(runtimeTextPoolStart),
-				(void*)runtimeUITextPoolOffset
-			);
-		}
-	}
-
-	const FunctionData* updateRuntimeUITextFuncData =
-		ModManager::GetFunctionData("UpdateRuntimeUIText");
-	if (!updateRuntimeUITextFuncData || !updateRuntimeUITextFuncData->originalFunction)
-	{
-		logger.Log("Original UpdateRuntimeUIText function was not hooked, cannot call it.");
-		return;
-	}
-	reinterpret_cast<GenericFunction_t>(updateRuntimeUITextFuncData->originalFunction)(
-		arg1, arg2, arg3, arg4
-	);
 }
 
 void UIManager::InGameUIUpdateElementHook(void* arg1, void* arg2, void* arg3, void* arg4)
@@ -563,47 +516,27 @@ void UIManager::InGameUIDrawElementHook(void* arg1, void* arg2, void* arg3, void
 	{
 		ResetModCompassState();
 	}
-	if (currentCompassState == INCOMPATIBLE)
-	{
-		return; // Don't update compass state if it's incompatible, wait until reset
-	}
 
-	// Update compass state
-	void** destinationRuntimeTextPtr = (void**)(
-		currentRuntimeUIPoolStart + runtimeUITextPoolOffset + runtimeSlotIndex * runtimeSlotSize
-	);
-	RuntimeUIText* currentRuntimeText = *(RuntimeUIText**)destinationRuntimeTextPtr;
-	std::wstring_view currentView(currentRuntimeText->data);
-
-	uint8_t* runtimeActiveFlagAddress = (uint8_t*)(
-		reinterpret_cast<uintptr_t>(destinationRuntimeTextPtr) + runtimeUITextOffsetToActiveFlag
-	);
-	uint8_t* runtimeIconIdAddress = (uint8_t*)(
-		reinterpret_cast<uintptr_t>(destinationRuntimeTextPtr) + runtimeUITextOffsetToIconId
-	);
-	
-	// We check for INCOMPATIBLE state first, then OPEN state
-	bool incompatibleMatched = CheckForCompassState(INCOMPATIBLE, *runtimeIconIdAddress, currentView);
-	if (*runtimeActiveFlagAddress && incompatibleMatched)
-	{
-		logger.Log(
-			"Found text \"%s\" at runtime slot index %zu. Compass state set to INCOMPATIBLE",
-			Utils::WstringToUtf8(std::wstring(currentView)),
-			runtimeSlotIndex
+	if (currentRuntimeUIPoolStart) {
+		uintptr_t compassFlagOffset = GetRuntimeCompassFlagOffset();
+		uint8_t* runtimeCompassOpenFlagAddress1 = (uint8_t*)(
+			currentRuntimeUIPoolStart + compassFlagOffset
 		);
-		currentCompassState = INCOMPATIBLE;
-		return; // No need to check for OPEN state if INCOMPATIBLE matched
-	}
-
-	bool openMatched = CheckForCompassState(OPEN, *runtimeIconIdAddress, currentView);
-	if (*runtimeActiveFlagAddress && openMatched)
-	{
-		logger.Log(
-			"Found text \"%s\" at runtime slot index %zu. Compass state set to OPEN",
-			Utils::DecodeGameText(std::wstring(currentView)),
-			runtimeSlotIndex
+		uint8_t* runtimeCompassOpenFlagAddress2 = (uint8_t*)(
+			currentRuntimeUIPoolStart + compassFlagOffset + 1
 		);
-		currentCompassState = OPEN;
+		if (*runtimeCompassOpenFlagAddress1 == 1 && *runtimeCompassOpenFlagAddress2 == 1)
+		{
+			logger.Log(
+				"Compass UI detected as OPEN based on runtime flags %p and %p",
+				(void*)runtimeCompassOpenFlagAddress1, (void*)runtimeCompassOpenFlagAddress2
+			);
+			currentCompassState = OPEN;
+		}
+		else
+		{
+			currentCompassState = CLOSED;
+		}
 	}
 }
 
@@ -729,58 +662,36 @@ void UIManager::ShowNotificationText(const char* text)
 	}
 }
 
-bool UIManager::CheckForCompassState(CompassState stateToCheck,
-	uint8_t iconIdToMatch, const std::wstring_view& textViewToMatch)
-{
-	//Logger logger("UI Manager");
-
-	//bool iconMatched = false;
-	bool textMatched = false;
-
-	std::vector<CompassStateData> compassStateReference = UIManager::compassStateReferenceMap[stateToCheck];
-	for (const auto& compassStateData : compassStateReference)
-	{
-		//if (compassStateData.expectedIconValue == iconIdToMatch)
-		{
-			//iconMatched = true;
-			const std::wstring_view& expectedView = compassStateData.cachedExpectedWideView;
-			if (textViewToMatch == expectedView)
-			{
-				textMatched = true;
-				break;
-			}
-			//else
-			//{
-			//	for (size_t i = 0; i < textViewToMatch.size(); i++)
-			//	{
-			//		logger.Log("view[%zu] = U+%04X", i, textViewToMatch[i]);
-			//	}
-			//	for (size_t i = 0; i < expectedView.size(); ++i)
-			//	{
-			//		logger.Log("expected[%zu] = U+%04X", i, expectedView[i]);
-			//	}
-			//}
-		}
-		//else
-		//{
-			//logger.Log(
-				//"Icon %02X does not match expected icon %02X for state %d",
-				//iconIdToMatch, compassStateData.expectedIconValue, stateToCheck
-			//);
-		//}
-
-		// Reset if either didn't match
-		/*if (!textMatched)
-		{
-			iconMatched = false;
-			textMatched = false;
-		}*/
-	}
-
-	return textMatched;
-}
-
 void UIManager::ResetModCompassState()
 {
 	currentCompassState = CLOSED; // reset compass state on menu exit
+}
+
+std::string UIManager::RuntimeUITextToUtf8(const RuntimeUIText* text)
+{
+	if (!text)
+	{
+		return "<null>";
+	}
+	if (!MemoryUtils::IsReadablePointer((void*)text, 0x10))
+	{
+		return "<unreadable>";
+	}
+	if (text->length <= 0 || text->length > 4096)
+	{
+		return "<invalid length>";
+	}
+
+	size_t length = static_cast<size_t>(text->length);
+	if (!MemoryUtils::IsReadablePointer((void*)text->data, length * sizeof(wchar_t)))
+	{
+		return "<unreadable data>";
+	}
+
+	if (length > 0 && text->data[length - 1] == L'\0')
+	{
+		length--;
+	}
+
+	return Utils::WstringViewToUtf8(std::wstring_view(text->data, length));
 }

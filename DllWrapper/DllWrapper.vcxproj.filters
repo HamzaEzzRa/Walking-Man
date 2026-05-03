@@ -34,12 +34,12 @@
     <Filter Include="Header Files\DllWrapper">
       <UniqueIdentifier>{afb23983-6578-4a46-97a3-7a01724fb19a}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\DllWrapper">
+      <UniqueIdentifier>{25a9496a-4ce1-4e89-b0df-f82e77ab7f9f}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\MusicMod\include\ModManager.h">
-      <Filter>Header Files\Music Mod</Filter>
-    </ClInclude>
-    <ClInclude Include="..\MusicMod\include\InputObserver.h">
       <Filter>Header Files\Music Mod</Filter>
     </ClInclude>
     <ClInclude Include="..\MusicMod\include\InputTracker.h">
@@ -179,11 +179,11 @@
     <ClCompile Include="..\MusicMod\src\MemoryWatcher.cpp">
       <Filter>Source Files\Music Mod</Filter>
     </ClCompile>
-    <ClCompile Include="src\DllMain.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\MusicMod\src\LanguageManager.cpp">
       <Filter>Source Files\Music Mod</Filter>
+    </ClCompile>
+    <ClCompile Include="src\DllMain.cpp">
+      <Filter>Source Files\DllWrapper</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

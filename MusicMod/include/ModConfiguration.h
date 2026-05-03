@@ -24,6 +24,7 @@ namespace ModConfiguration
 	extern const std::string enableDevFilename;
 	extern bool devMode;
 
+	extern GameProvider gameProvider;
 	extern GameVersion gameVersion;
 
 	extern const std::string configFilePath;

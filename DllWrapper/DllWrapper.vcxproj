@@ -186,9 +186,10 @@ COPY "$(SolutionDir)x64\Debug\dxgi.dll" "C:\Program Files (x86)\Steam\steamapps\
       </IgnoreSpecificDefaultLibraries>
     </Link>
     <PostBuildEvent>
-      <Command>COPY "$(SolutionDir)x64\Release\dxgi.dll" "C:\Program Files\Epic Games\DeathStranding\dxgi.dll
-COPY "$(SolutionDir)x64\Release\dxgi.dll" "C:\Program Files\Epic Games\DeathStrandingDC\dxgi.dll
-COPY "$(SolutionDir)x64\Release\dxgi.dll" "C:\Program Files (x86)\Steam\steamapps\common\DEATH STRANDING DIRECTORS CUT\dxgi.dll</Command>
+      <Command>COPY "$(SolutionDir)x64\Release\dxgi.dll" "C:\Program Files\Epic Games\DeathStranding\dxgi.dll"
+COPY "$(SolutionDir)x64\Release\dxgi.dll" "C:\Program Files\Epic Games\DeathStrandingDC\dxgi.dll"
+COPY "$(SolutionDir)x64\Release\dxgi.dll" "C:\Program Files (x86)\Steam\steamapps\common\DEATH STRANDING DIRECTORS CUT\dxgi.dll"
+COPY "$(SolutionDir)x64\Release\dxgi.dll" "C:\XboxGames\DSDC\Content\dxgi.dll"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -205,7 +206,6 @@ COPY "$(SolutionDir)x64\Release\dxgi.dll" "C:\Program Files (x86)\Steam\steamapp
     <ClInclude Include="..\MusicMod\include\GameStateManager.h" />
     <ClInclude Include="..\MusicMod\include\IEventListener.h" />
     <ClInclude Include="..\MusicMod\include\InputCode.h" />
-    <ClInclude Include="..\MusicMod\include\InputObserver.h" />
     <ClInclude Include="..\MusicMod\include\InputTracker.h" />
     <ClInclude Include="..\MusicMod\include\BreakpointWatcher.h" />
     <ClInclude Include="..\MusicMod\include\LanguageManager.h" />

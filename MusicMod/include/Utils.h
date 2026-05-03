@@ -5,6 +5,7 @@
 
 #include <sstream>
 #include <string>
+#include <string_view>
 
 #include <Windows.h>
 
@@ -64,6 +65,43 @@ public:
 
 		std::string utf8Str(utf8Len - 1, '\0'); // exclude null terminator
 		WideCharToMultiByte(CP_UTF8, 0, wideStr.c_str(), -1, &utf8Str[0], utf8Len - 1, nullptr, nullptr);
+
+		return utf8Str;
+	}
+
+	static std::string WstringViewToUtf8(const std::wstring_view& wideView)
+	{
+		if (wideView.empty())
+		{
+			return std::string();
+		}
+
+		int utf8Len = WideCharToMultiByte(
+			CP_UTF8,
+			0,
+			wideView.data(),
+			static_cast<int>(wideView.size()),
+			nullptr,
+			0,
+			nullptr,
+			nullptr
+		);
+		if (utf8Len == 0)
+		{
+			return std::string();
+		}
+
+		std::string utf8Str(utf8Len, '\0');
+		WideCharToMultiByte(
+			CP_UTF8,
+			0,
+			wideView.data(),
+			static_cast<int>(wideView.size()),
+			&utf8Str[0],
+			utf8Len,
+			nullptr,
+			nullptr
+		);
 
 		return utf8Str;
 	}
@@ -139,6 +177,17 @@ public:
 		}
 
 		return result;
+	}
+
+	static std::string GameTextToUtf8(const std::string& encoded)
+	{
+		std::wstring decoded = DecodeGameText(encoded);
+		if (!decoded.empty() && decoded.back() == L'\0')
+		{
+			decoded.pop_back();
+		}
+
+		return WstringToUtf8(decoded);
 	}
 
 	static const char* DecodeGameText(const std::wstring& wide)

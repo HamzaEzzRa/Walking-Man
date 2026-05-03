@@ -2,7 +2,6 @@
 
 #include <atomic>
 #include <string>
-#include <unordered_set>
 #include <vector>
 
 #include "FunctionHook.h"
@@ -30,7 +29,10 @@ public:
 	void DispatchEvent(const ModEvent&);
 
 private:
-	static void RenderTaskHook(void*, void*, void*, void*);
+	static GameProvider DetectProvider();
+	static GameVersion DetectVersion();
+
+	static void RenderTaskHook(void*, void*, void*, void*, void*);
 	static void GamePreExitHook(void*, void*, void*, void*);
 
 	static void AccessMusicPoolHook(void*, void*, void*, void*);

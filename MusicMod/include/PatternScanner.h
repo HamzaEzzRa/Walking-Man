@@ -13,6 +13,7 @@
 #include <Windows.h>
 
 #include "GameData.h"
+#include "ModConfiguration.h"
 
 #include "Logger.h"
 
@@ -300,11 +301,16 @@ public:
             auto startTime = std::chrono::high_resolution_clock::now();
 
             std::unordered_map<std::string, std::vector<uint16_t>> parsedPatterns;
+            std::unordered_map<std::string, std::vector<uint16_t>> parsedPatternsGP;
             std::unordered_map<std::string, std::atomic<bool>> foundFlags;
             size_t maxPatternSize = 0;
             for (const auto& [name, target] : scanTargets) {
                 auto pattern = ParsePattern(ScanTarget<T>::GetSignature(target));
+				auto gpSignature = ScanTarget<T>::GetSignatureGP(target);
+				auto patternGP = gpSignature ? ParsePattern(gpSignature) : std::vector<uint16_t>{};
                 maxPatternSize = std::max(maxPatternSize, pattern.size());
+                maxPatternSize = std::max(maxPatternSize, patternGP.size());
+				parsedPatternsGP[name] = std::move(patternGP);
                 parsedPatterns[name] = std::move(pattern);
                 foundFlags[name] = false;
             }
@@ -356,48 +362,91 @@ public:
                     uint8_t* end = start + region.size;
 
                     for (auto& [name, pattern] : parsedPatterns) {
-                        if (done.load()) return; // new: early exit
+                        if (done.load()) return; // early exit
                         if (foundFlags[name].load(std::memory_order_acquire))
                             continue;
 
-                        for (uint8_t* it = start; it <= end - pattern.size(); ++it) {
-                            if (done.load()) return; // new: double check early exit
-                            bool match = true;
-                            for (size_t j = 0; j < pattern.size(); ++j) {
-                                if (pattern[j] == WILDCARD) continue;
-                                if (it[j] != static_cast<uint8_t>(pattern[j])) {
-                                    match = false;
+                        if (ModConfiguration::gameProvider == GameProvider::STEAM) {
+                            for (uint8_t* it = start; it <= end - pattern.size(); ++it) {
+                                if (done.load()) return; // double check early exit
+                                bool match = true;
+                                for (size_t j = 0; j < pattern.size(); ++j) {
+                                    if (pattern[j] == WILDCARD) continue;
+                                    if (it[j] != static_cast<uint8_t>(pattern[j])) {
+                                        match = false;
+                                        break;
+                                    }
+                                }
+
+                                if (match) {
+                                    foundFlags[name].store(true, std::memory_order_release);
+                                    {
+                                        std::lock_guard<std::mutex> lock(resultMutex);
+                                        foundAddresses[name] = reinterpret_cast<uintptr_t>(it);
+                                    }
+
+                                    if (progress)
+                                        progress->matchedPatterns.fetch_add(1);
+
+                                    size_t matched = patternsFound.fetch_add(1) + 1;
+                                    if (matched == totalPatterns) {
+                                        done.store(true);
+                                    }
+
                                     break;
                                 }
                             }
+                        }
+                        else if (ModConfiguration::gameProvider == GameProvider::XBOX_GAMEPASS) {
+                            if (!foundFlags[name].load(std::memory_order_acquire) && !parsedPatternsGP[name].empty())
+                            {
+                                auto& patternGP = parsedPatternsGP[name];
+                                for (uint8_t* it = start; it <= end - patternGP.size(); ++it) {
+                                    if (done.load()) return;
+                                    bool match = true;
+                                    for (size_t j = 0; j < patternGP.size(); ++j) {
+                                        if (patternGP[j] == WILDCARD) continue;
+                                        if (it[j] != static_cast<uint8_t>(patternGP[j])) {
+                                            match = false;
+                                            break;
+                                        }
+                                    }
+                                    if (match) {
+                                        foundFlags[name].store(true, std::memory_order_release);
+                                        {
+                                            std::lock_guard<std::mutex> lock(resultMutex);
+                                            foundAddresses[name] = reinterpret_cast<uintptr_t>(it);
+                                        }
 
-                            if (match) {
-                                foundFlags[name].store(true, std::memory_order_release);
-                                {
-                                    std::lock_guard<std::mutex> lock(resultMutex);
-                                    foundAddresses[name] = reinterpret_cast<uintptr_t>(it);
+                                        if (progress)
+                                            progress->matchedPatterns.fetch_add(1);
+
+                                        size_t matched = patternsFound.fetch_add(1) + 1;
+                                        if (matched == totalPatterns) {
+                                            done.store(true);
+                                        }
+
+                                        break;
+                                    }
                                 }
-
-                                if (progress)
-                                    progress->matchedPatterns.fetch_add(1);
-
-                                size_t matched = patternsFound.fetch_add(1) + 1;
-                                if (matched == totalPatterns) {
-                                    done.store(true);
-                                }
-
-                                break;
                             }
                         }
                     }
                 }
-                };
+            };
 
             std::vector<std::thread> threads;
             for (int i = 0; i < maxThreads; ++i)
                 threads.emplace_back(worker);
             for (auto& t : threads)
                 t.join();
+
+            for (const auto& [name, target] : scanTargets) {
+                auto it = foundAddresses.find(name);
+                if (it == foundAddresses.end()) {
+                    logger.Log("ScanAsync: pattern for target \"%s\" not found", name.c_str());
+                }
+			}
 
             for (const auto& [name, addr] : foundAddresses) {
                 auto it = scanTargets.find(name);

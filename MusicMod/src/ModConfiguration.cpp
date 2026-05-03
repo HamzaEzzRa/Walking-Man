@@ -16,11 +16,12 @@
 namespace ModConfiguration
 {
 	const std::string modPublicName = "Walking Man";
-	const std::string modInternalVersion = "1.0.4";
+	const std::string modInternalVersion = "1.0.6";
 	const std::string modLogFilename = "walkingman.log";
 	const std::string enableDevFilename = "walkingman.dev";
 	bool devMode = false;
 
+	GameProvider gameProvider = GameProvider::STEAM;
 	GameVersion gameVersion = GameVersion::DC;
 
 	const std::string configFilePath = "walkingman.ini";
@@ -175,28 +176,40 @@ namespace ModConfiguration
 				"RenderTask",
 				{"RenderTask",
 				"40 53 48 83 EC ?? 48 8B 01 45 33 D2 48 8B D9 "
-				"44 0F B6 88 ?? ?? ?? ?? 45 84 C9 74 1D 8B 90"}
+				"44 0F B6 88 ?? ?? ?? ?? 45 84 C9 74 1D 8B 90",
+				// gp version
+				"40 53 48 83 EC 70 48 89 6C 24 68 48 8D 99 B0"}
 			},
 			{
 				"GamePreExit",
 				{"GamePreExit",
-				"40 53 48 83 EC ?? 80 3D ?? ?? ?? ?? ?? 8B DA 74 06 48 83 C4 ?? 5B C3"}
+				"40 53 48 83 EC ?? 80 3D ?? ?? ?? ?? ?? 8B DA 74 06 48 83 C4 ?? 5B C3",
+				// gp version
+				"40 53 48 83 EC ?? 80 3D ?? ?? ?? ?? ?? 8B DA ?? ?? 48"}
 			},
 			{
 				"GamePreLoad",
 				{"GamePreLoad",
 				"48 89 5C 24 08 48 89 74 24 10 48 89 7C 24 18 55 41 54 41 55 41 "
-				"56 41 57 48 8D AC 24 10 FB FF FF 48 81 EC F0 05 00 00 48 8B 05"}
+				"56 41 57 48 8D AC 24 10 FB FF FF 48 81 EC F0 05 00 00 48 8B 05",
+				// gp version
+				"48 89 5C 24 08 48 89 74 24 10 48 89 7C 24 18 4C 89 "
+				"64 24 20 55 41 56 41 57 48 8D AC 24 00 FB FF FF"}
 			},
 			{
 				"AccessMusicPool",
 				{"AccessMusicPool",
 				"48 89 5C 24 ?? 57 48 83 EC ?? 48 83 79 ?? ?? 75 0B 48 83 79 ?? ?? "
-				"0F 84 ?? ?? ?? ?? 48 8B 01 FF 10 4C 8B 15 ?? ?? ?? ?? 48 8B F8"}
+				"0F 84 ?? ?? ?? ?? 48 8B 01 FF 10 4C 8B 15 ?? ?? ?? ?? 48 8B F8",
+				// gp version
+				"48 83 EC 48 48 8B 05 15 FC D5 02"}
 			},
 			{
 				"AccessLanguagePool",
 				{"AccessLanguagePool",
+				"48 8B 01 48 FF A0 ?? ?? ?? ?? CC CC CC "
+				"CC CC CC 48 89 5C 24 ?? 57 4C 8B 51",
+				// gp version (same)
 				"48 8B 01 48 FF A0 ?? ?? ?? ?? CC CC CC "
 				"CC CC CC 48 89 5C 24 ?? 57 4C 8B 51"}
 			},
@@ -206,7 +219,9 @@ namespace ModConfiguration
 				"ProcessControllerInput",
 				{"ProcessControllerInput",
 				"4C 8B DC ?? 41 56 41 57 48 81 EC ?? ?? ?? ?? 48 8B 05 "
-				"?? ?? ?? ?? 48 33 C4 48 89 84 24 ?? ?? ?? ?? 8B 41"}
+				"?? ?? ?? ?? 48 33 C4 48 89 84 24 ?? ?? ?? ?? 8B 41",
+				// gp version
+				"41 56 48 81 EC 20 01 00 00 48 8B 05 80 24 9B 01"}
 			},
 
 			// Game state functions
@@ -214,7 +229,10 @@ namespace ModConfiguration
 				"InGameFlagUpdate",
 				{"InGameFlagUpdate",
 				"41 57 41 56 41 55 41 54 56 57 55 53 B8 ?? ?? "
-				"?? ?? E8 ?? ?? ?? ?? 48 29 C4 44 0F 29 9C 24"}
+				"?? ?? E8 ?? ?? ?? ?? 48 29 C4 44 0F 29 9C 24",
+				// gp version (same)
+				"41 57 41 56 41 55 41 54 56 57 55 53 B8 ?? ?? "
+				"00 00 E8 ?? ?? ?? ?? 48 29 C4 44 0F 29 9C 24"}
 			},
 
 			// In-game UI functions
@@ -222,60 +240,83 @@ namespace ModConfiguration
 				"InGameUIUpdateStaticPoolCaller",
 				{"InGameUIUpdateStaticPoolCaller",
 				"44 89 4C 24 20 41 54 48 83 EC 40 48 89 74 24 60 4C "
-				"8B E2 4C 89 74 24 28 4D 8B F0 48 8B F1 48 85 D2"}
+				"8B E2 4C 89 74 24 28 4D 8B F0 48 8B F1 48 85 D2",
+				// gp version
+				"41 54 48 83 EC 60 48 89 74 24 50"}
 			},
 			{
 				"AccessStaticUIPool",
 				{"AccessStaticUIPool",
-				//"4C 8B DC 57 48 81 EC ?? ?? ?? ?? C4 C1 78 29 73 C8 "
-				//"48 8D 05 ?? ?? ?? ?? C4 C1 78 29 7B B8 48 8B F9", // Hooking this caused a weird bug where facility elevators wouldn't work
-				//true} // this function has AVX instructions in the prologue
-				"48 89 ?? 24 20 55 48 8D 6C 24 A9 48 81 EC ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? " // Child function that shares the same arg4
+				"48 89 ?? 24 20 55 48 8D 6C 24 A9 48 81 EC ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? "
+				"48 33 C4 48 89 45 ?? 48 8B 41 50 48 8B ?? 48 8B 88 ?? ?? ?? ?? 48 85 C9",
+				// gp version (same)
+				"48 89 ?? 24 20 55 48 8D 6C 24 A9 48 81 EC ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? "
 				"48 33 C4 48 89 45 ?? 48 8B 41 50 48 8B ?? 48 8B 88 ?? ?? ?? ?? 48 85 C9"}
 			},
 			{
 				"GetNotificationPool",
 				{"GetNotificationPool",
 				"48 83 EC 28 E8 ?? ?? ?? FF 48 8B 40 ?? 48 83 C4 28 C3 CC CC CC "
-				"CC CC CC CC CC CC CC CC CC CC CC 48 89 5C 24 18 55 56 57 41 54"}
+				"CC CC CC CC CC CC CC CC CC CC CC 48 89 5C 24 18 55 56 57 41 54",
+				// gp version
+				"48 83 EC 28 E8 87 6C F7 FF 48 8B 40 48 48 83 C4 28 C3"}
 			},
 			{
 				"DrawNotificationText",
 				{"DrawNotificationText",
 				"44 88 4C 24 20 44 89 44 24 18 48 89 54 24 10 53 55 "
-				"56 41 54 41 55 41 56 41 57 48 83 EC ?? 44 8B B9"}
+				"56 41 54 41 55 41 56 41 57 48 83 EC ?? 44 8B B9",
+				// gp version
+				"48 8B C4 44 88 48 20 44 89 40 18 48 89 50 10 53"}
 			},
 			{
 				"CreateRuntimeUITextFromString",
 				{"CreateRuntimeUITextFromString",
 				"40 53 48 83 EC 20 48 8B D9 48 C7 01 00 00 00 00 49 C7 C0 FF FF FF FF 66 "
-				"0F 1F 84 00 00 00 00 00 49 FF C0 42 80 3C 02 00 75 F6 E8 51 08 00 00"}
+				"0F 1F 84 00 00 00 00 00 49 FF C0 42 80 3C 02 00 75 F6 E8 51 08 00 00",
+				// gp version
+				"40 53 48 83 EC 20 48 8B D9 48 C7 01 00 00 00 00 49 C7 C0 FF FF FF FF 66 "
+				"0F 1F 84 00 00 00 00 00 49 FF C0 42 80 3C 02 00 75 F6 E8 41 0C 00 00"}
 			},
 			{
 				"TryFreeRuntimeUIText",
 				{"TryFreeRuntimeUIText",
+				"48 8B 09 B8 FF FF FF FF F0 0F C1 01 83 F8 01 0F 84 ?? ?? ?? ?? C3",
+				// gp version (same)
 				"48 8B 09 B8 FF FF FF FF F0 0F C1 01 83 F8 01 0F 84 ?? ?? ?? ?? C3"}
 			},
 			{
 				"AssignRuntimeUIText",
 				{"AssignRuntimeUIText",
-				"48 89 5C 24 08 57 48 83 EC 20 48 8B D9 48 8B FA 48 8B 09 48 3B 0A"}
+				"48 89 5C 24 08 57 48 83 EC 20 48 8B D9 48 8B FA 48 8B 09 48 3B 0A",
+				// gp version
+				"48 89 5C 24 08 57 48 83 EC 20 48 8B D9 48 8B FA 48 8B 09 48 "
+				"3B 0A 74 1C B8 FF FF FF FF F0 0F C1 01 83 F8 01 75 05 E8 65"}
 			},
 			{
 				"UpdateRuntimeUIText",
 				{"UpdateRuntimeUIText",
 				"48 89 5C 24 08 48 89 74 24 10 57 48 83 EC ?? 48 8B D9 48 "
-				"8B FA 48 81 C1 ?? ?? ?? ?? E8 ?? ?? ?? ?? 84 C0 74 1F"}
+				"8B FA 48 81 C1 ?? ?? ?? ?? E8 ?? ?? ?? ?? 84 C0 74 1F",
+				// gp version
+				"48 89 5C 24 08 48 89 74 24 10 57 48 83 EC ?? 48 8B D9 48 "
+				"8B FA 48 81 C1 ?? ?? ?? ?? E8 ?? ?? ?? ?? 84 C0 74 3C"}
 			},
 			{
 				"InGameUIDrawElement",
 				{"InGameUIDrawElement",
 				"48 89 5C 24 18 55 56 57 41 54 41 55 41 56 41 57 48 83 EC ?? C5 F8 "
-				"29 74 24 ?? 48 8B 05 ?? ?? ?? ?? 48 33 C4 48 89 44 24 ?? 48 63 EA"}
+				"29 74 24 ?? 48 8B 05 ?? ?? ?? ?? 48 33 C4 48 89 44 24 ?? 48 63 EA",
+				// gp version
+				"48 89 5C 24 18 55 56 57 41 54 41 55 41 56 41 57 "
+				"48 83 EC 70 C5 F8 29 74 24 60 C5 F8 29 7C 24 50"}
 			},
 			{
 				"InGameUIUpdateElement",
 				{"InGameUIUpdateElement",
+				"48 89 5C 24 08 57 48 83 EC 20 48 63 FA 48 "
+				"8B D9 E8 ?? ?? ?? ?? 45 33 C0 4C 8B CF",
+				// gp version (same)
 				"48 89 5C 24 08 57 48 83 EC 20 48 63 FA 48 "
 				"8B D9 E8 ?? ?? ?? ?? 45 33 C0 4C 8B CF"}
 			},
@@ -283,7 +324,9 @@ namespace ModConfiguration
 				"PostMenuExit",
 				{"PostMenuExit",
 				"40 57 48 83 EC 40 F6 41 64 02 48 8B F9 48 89 74 24 58 74 24 C5 "
-				"F8 10 41 40 44 8B 49 60 48 8D 54 24 30 48 8B 49 08 41 B0 01"}
+				"F8 10 41 40 44 8B 49 60 48 8D 54 24 30 48 8B 49 08 41 B0 01",
+				// gp version
+				"4C 8B DC 57 48 81 EC B0 00 00 00 48 8B 05 1E 3C 1A 02"}
 			},
 
 			// Music player functions
@@ -291,42 +334,57 @@ namespace ModConfiguration
 				"PlayMusic",
 				{"PlayMusic",
 				"48 85 D2 74 ?? 48 83 EC 58 48 8B 05 ?? ?? ?? "
-				"?? 48 33 C4 48 89 44 24 40 4D 85 C0 74 ??"}
+				"?? 48 33 C4 48 89 44 24 40 4D 85 C0 74",
+				// gp version (same)
+				"48 85 D2 74 ?? 48 83 EC 58 48 8B 05 ?? ?? ?? "
+				"?? 48 33 C4 48 89 44 24 40 4D 85 C0 74"}
 			},
 			{
 				"PlayingLoop",
 				{"PlayingLoop",
-				"4C 39 48 08 75 06 4C 39 40 10 74 0B"}
+				"4C 39 48 08 75 06 4C 39 40 10 74 0B",
+				// gp version
+				"4C 39 48 08 75 06 4C 39 40 10 74 0B 48 "
+				"83 C1 08 48 3B CA 75 E8 33 C0 48 8B 4C"}
 			},
 			{
 				"PlayUISound",
 				{"PlayUISound",
 				"48 89 5C 24 08 48 89 74 24 10 48 89 7C 24 18 41 56 48 83 "
-				"EC 20 48 8B 01 41 0F B6 F1 41 8B D8 4C 8B F2 48 8B F9"}
+				"EC 20 48 8B 01 41 0F B6 F1 41 8B D8 4C 8B F2 48 8B F9",
+				// gp version
+				"48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 20 48 8B 01 41 0F B6 F9"}
 			},
 			{
 				"ShowMusicDescription",
 				{"ShowMusicDescription",
 				"40 53 56 57 48 81 EC 80 00 00 00 C5 F8 29 74 24 70 48 "
 				"8B 05 ?? ?? ?? ?? 48 33 C4 48 89 44 24 60 8B D9 8B FA",
-				true} // has AVX instructions in the prologue, avoid hooking it
+				// gp version
+				"48 89 5C 24 20 57 48 81 EC 80 00 00 00 C5 F8 29 74 24 70 "
+				"48 8B 05 ?? ?? ?? ?? 48 33 C4 48 89 44 24 60 8B D9 8B FA",
+				true} // has AVX instructions in the prologue
 			},
 			{
 				"ShowMusicDescriptionCore",
 				{"ShowMusicDescriptionCore",
 				"4C 8B DC 55 49 8D AB ?? ?? ?? ?? 48 81 EC ?? ?? ?? ?? 48 8B 05 ?? ?? "
-				"?? ?? 48 33 C4 48 89 85 ?? ?? ?? ?? 49 89 73 F0 33 F6 4D 89 73 D0"}
+				"?? ?? 48 33 C4 48 89 85 ?? ?? ?? ?? 49 89 73 F0 33 F6 4D 89 73 D0",
+				// gp version
+				"4C 8B DC 55 49 8D AB ?? ?? ?? ?? 48 81 EC ?? ?? ?? ?? 48 8B 05 "
+				"?? ?? ?? ?? 48 33 C4 48 89 85 ?? ?? ?? ?? 49 89 5B 18 33 DB"}
 			}
 		};
 
-		// sadly music doesn't keep the same offsets inside this table across versions (most likely because of new music in DC)
-		// ended up going for a stable aob per audio
+		// Songs don't keep the same offsets inside this table across versions
+		// (most likely because of new music added in DC)
+		// Ended up going for a stable aob per audio
 		/*std::string audioTableSig =
 			"?? ?? ?? ?? ?? 7F 00 00 01 E6 29 73 28 09 48 F8 "
 			"A3 26 69 44 AD 31 EC 71 ?? 00 00 00 00 00 00 00";*/
 
-			// Music interruptors are sounds played through PlayMusic, that stop music in-game
-			// Tracking them helps detect when autoplay should stop
+		// Music interruptors are sounds played through PlayMusic, that stop music in-game
+		// Tracking them helps detect when autoplay should stop
 		std::unordered_map<std::string, MusicData> interruptorDatabase = {
 			{	// While "Silence" is an interruptor, it is also played when a song naturally ends
 				// Ignore it and use other indicators, such as game state flags, to decide if playback should be interrupted
@@ -540,7 +598,7 @@ namespace ModConfiguration
 				"?? ?? ?? ?? ?? 7F 00 00 A6 0B 21 84 06 51 4E 8C A1 F6 8B 01 2E 73 D1 C9"}
 			},
 			{
-				"Ambient 6", // no more music a bit earlier than 3 minutes, but keeps going
+				"Ambient 6", // sound stops a bit earlier than 3 minutes
 				{0, MusicType::AMBIENT, 170000, "Ambient 6", "",
 				"?? ?? ?? ?? ?? 7F 00 00 C2 9E 42 90 99 DE 44 A0 8F 13 02 EC 23 F3 46 A2"}
 			},
@@ -633,76 +691,6 @@ namespace ModConfiguration
 
 		std::unordered_map<std::string, LocalizedText> localizedTextDatabase =
 		{
-			{"Zoom In/Out", LocalizedText{{
-				{TextLanguage::ENGLISH_US, u"Zoom In/Out"},
-				{TextLanguage::ENGLISH_UK, u"Zoom In/Out"},
-				{TextLanguage::FRENCH, u"Zoom avant/arrière"},
-				{TextLanguage::ITALIAN, u"Zoom avanti/indietro"},
-				{TextLanguage::GERMAN, u"Heran-/Herauszoomen"},
-				{TextLanguage::SPANISH_SPAIN, u"Acercar/Alejar"},
-				{TextLanguage::PORTUGUESE_PORTUGAL, u"Usar zoom"},
-				{TextLanguage::GREEK, u"Εστίασε/Απομάκρυνε"},
-				{TextLanguage::POLISH, u"Przybliż/oddal"},
-				{TextLanguage::RUSSIAN, u"Изменить масштаб"},
-				{TextLanguage::SPANISH_LATIN_AMERICA, u"Acercar/alejar vista"},
-				{TextLanguage::PORTUGUESE_LATIN_AMERICA, u"Ampliar/Reduzir"},
-				{TextLanguage::JAPANESE, u"拡大"},
-				{TextLanguage::ARABIC, u"تكبير/تصغير"},
-				{TextLanguage::DUTCH, u"In-/uitzoomen"},
-				{TextLanguage::CZECH, u"Přiblížit/oddálit"},
-				{TextLanguage::TURKISH, u"Yakınlaştır/Uzaklaştır"},
-				{TextLanguage::HUNGARIAN, u"Nagyítás/Kicsinyítés"},
-				{TextLanguage::KOREAN, u"확대하기"},
-				{TextLanguage::CHINESE_TRADITIONAL, u"放大／縮小"},
-				{TextLanguage::CHINESE_SIMPLIFIED, u"放大/缩小"},
-			}}},
-			{"Stand Up", LocalizedText{{
-				{TextLanguage::ENGLISH_US, u"Stand Up"},
-				{TextLanguage::ENGLISH_UK, u"Stand Up"},
-				{TextLanguage::FRENCH, u"Se lever"},
-				{TextLanguage::ITALIAN, u"Alzati"},
-				{TextLanguage::GERMAN, u"Aufstehen"},
-				{TextLanguage::SPANISH_SPAIN, u"Levantarte"},
-				{TextLanguage::PORTUGUESE_PORTUGAL, u"Levantar"},
-				{TextLanguage::GREEK, u"Σήκω"},
-				{TextLanguage::POLISH, u"Wstań"},
-				{TextLanguage::RUSSIAN, u"Встать"},
-				{TextLanguage::SPANISH_LATIN_AMERICA, u"Levantarse"},
-				{TextLanguage::PORTUGUESE_LATIN_AMERICA, u"Levantar"},
-				{TextLanguage::JAPANESE, u"立ち上がる"},
-				{TextLanguage::ARABIC, u"وقوف"},
-				{TextLanguage::DUTCH, u"Opstaan"},
-				{TextLanguage::CZECH, u"Stoupnout si"},
-				{TextLanguage::TURKISH, u"Kalk"},
-				{TextLanguage::HUNGARIAN, u"Felállás"},
-				{TextLanguage::KOREAN, u"일어서기"},
-				{TextLanguage::CHINESE_TRADITIONAL, u"站立"},
-				{TextLanguage::CHINESE_SIMPLIFIED, u"站起来"},
-			}}},
-			{"Descend/Ascend", LocalizedText{{
-				{TextLanguage::ENGLISH_US, u"Descend/Ascend"},
-				{TextLanguage::ENGLISH_UK, u"Descend/Ascend"},
-				{TextLanguage::FRENCH, u"Plus bas/Plus haut"},
-				{TextLanguage::ITALIAN, u"Scendi/sali"},
-				{TextLanguage::GERMAN, u"Nach oben/unten"},
-				{TextLanguage::SPANISH_SPAIN, u"Bajar/Subir"},
-				{TextLanguage::PORTUGUESE_PORTUGAL, u"Descer/Subir câmara"},
-				{TextLanguage::GREEK, u"Πάνω/Κάτω"},
-				{TextLanguage::POLISH, u"Niżej/wyżej"},
-				{TextLanguage::RUSSIAN, u"Спуск/подъем"},
-				{TextLanguage::SPANISH_LATIN_AMERICA, u"Descender/Ascender"},
-				{TextLanguage::PORTUGUESE_LATIN_AMERICA, u"Descer/Subir"},
-				{TextLanguage::JAPANESE, u"下降/上昇"},
-				{TextLanguage::ARABIC, u"أسفل/أعلى"},
-				{TextLanguage::DUTCH, u"Omlaag/omhoog"},
-				{TextLanguage::CZECH, u"Sestoupit/vystoupit"},
-				{TextLanguage::TURKISH, u"Alçal/Yüksel"},
-				{TextLanguage::HUNGARIAN, u"Emelkedés/Ereszkedés"},
-				{TextLanguage::KOREAN, u"하강/상승"},
-				{TextLanguage::CHINESE_TRADITIONAL, u"上升／下降"},
-				{TextLanguage::CHINESE_SIMPLIFIED, u"上升/下降"},
-			}}},
-
 			{"Play Music", LocalizedText{{
 				{TextLanguage::ENGLISH_US, u"Play Music"},
 				{TextLanguage::ENGLISH_UK, u"Play Music"},

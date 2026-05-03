@@ -12,6 +12,7 @@
 #include "InputCode.h"
 #include "InputTracker.h"
 #include "LanguageManager.h"
+#include "ModConfiguration.h"
 #include "UIButton.h"
 
 #include "ordered_map.h"
@@ -90,44 +91,6 @@ public:
 	{
 		CLOSED,
 		OPEN,
-		INCOMPATIBLE, // When sitting down, using the watchtower, etc. Music player UI should not display
-	};
-	struct CompassStateData
-	{
-		CompassState state;
-		uint8_t expectedIconValue; // icon values seem to change across versions, we skip them in checks for now
-		const char* expectedUITextContent; // we check only text content, icon values are not reliable
-
-		std::wstring cachedExpectedWideString;
-		std::wstring_view cachedExpectedWideView;
-		std::string cachedExpectedACPText;
-
-		const std::string& GetLocalizedExpectedText() const
-		{
-			return LanguageManager::GetLocalizedText(expectedUITextContent);
-		}
-
-		void UpdateCachedText()
-		{
-			const std::string& localizedText = GetLocalizedExpectedText();
-			cachedExpectedWideString = Utils::DecodeGameText(localizedText);
-			if (!cachedExpectedWideString.empty() && cachedExpectedWideString.back() == L'\0')
-			{
-				cachedExpectedWideString.pop_back();
-			}
-			cachedExpectedWideView = std::wstring_view(cachedExpectedWideString);
-			cachedExpectedACPText = localizedText;
-		}
-	};
-	inline static std::unordered_map<CompassState, std::vector<CompassStateData>> compassStateReferenceMap =
-	{
-		{OPEN, {
-			CompassStateData{OPEN, 0x0, "Zoom In/Out"}
-		}},
-		{INCOMPATIBLE, {
-			CompassStateData{INCOMPATIBLE, 0x0, "Stand Up"},
-			CompassStateData{INCOMPATIBLE, 0x0, "Descend/Ascend"}
-		}}
 	};
 
 	enum MusicPlayerUIBlocker: uint8_t
@@ -153,24 +116,27 @@ private:
 	static void InGameUIUpdateStaticPoolCallerHook(void*, void*, void*, void*);
 	static void AccessStaticUIPoolHook(void*, void*, void*, void*);
 
-	static void UpdateRuntimeUITextHook(void*, void*, void*, void*);
-
 	static void InGameUIDrawElementHook(void*, void*, void*, void*);
 	static void InGameUIUpdateElementHook(void*, void*, void*, void*);
 	static void PostMenuExitHook(void*, void*, void*, void*);
 
 	static void ShowNotificationText(const char*);
-
-	static bool CheckForCompassState(CompassState, uint8_t, const std::wstring_view&);
 	static void ResetModCompassState();
+
+	static std::string RuntimeUITextToUtf8(const RuntimeUIText*);
 
 private:
 	Logger logger{ "UI Manager" };
 
-	// AccessStaticUIPool 4th argument is an address close to the ui static pool start (pool = arg + 0xC0)
-	// This is the closest we can get to the static pool from a function. Offsets from other pools change across versions
-	inline static size_t offsetToStaticUIPool = 0xC0;
+	// Standard and DC both resolve the static UI pool from the owner object, but the pool offset differs.
+	inline static uintptr_t staticUIPoolOwnerOffset = 0x60;
 	inline static uintptr_t staticUIPoolAddress = 0;
+	inline static uintptr_t GetStaticUIPoolOffset()
+	{
+		return ModConfiguration::gameVersion == GameVersion::STANDARD
+			? 0x3548
+			: 0x3760;
+	}
 
 	inline static uintptr_t staticSlotTextIdOffset = 0x20; // Offset of the text ID in the static pool
 	inline static uintptr_t staticSlotFlagOffset = 0x25; // Offset of the active flag in the static pool
@@ -184,7 +150,12 @@ private:
 	inline static size_t notificationLockOffset = 0xFD0; // Need to acquire this lock before drawing notification text
 
 	inline static uintptr_t updateRuntimeUITextRCXOffset = 0xD0;
-	inline static uintptr_t runtimeUITextPoolOffset = 0;
+	inline static uintptr_t GetRuntimeUITextPoolOffset()
+	{
+		return ModConfiguration::gameVersion == GameVersion::STANDARD
+			? 0x248
+			: 0x258;
+	}
 
 	// Runtime slot size changes across versions (0x1D8 for standard, 0x228 for director's cut)
 	// Calculate dynamically from inGameUIDrawElementFunc 1st arg instead
@@ -192,11 +163,11 @@ private:
 	inline static size_t maxRuntimeSlots = 8;
 
 	inline static uintptr_t currentRuntimeUIPoolStart = 0;
-	inline static uintptr_t runtimeUITextOffsetToIconId = -20; // Offset to the icon ID from the runtime UI text
 	inline static uintptr_t runtimeUITextOffsetToActiveFlag = -24; // Offset to the active flag from the runtime UI text
 	
-	inline static uint8_t expectedCompassIconValue = 0xF6; // Expected icon value to confirm that compass UI is open
-	inline static const char* expectedCompassUITextMatch = "Zoom In/Out";
-
 	inline static CompassState currentCompassState = CLOSED;
+	inline static uintptr_t GetRuntimeCompassFlagOffset()
+	{
+		return ModConfiguration::gameVersion == GameVersion::STANDARD? 0xF9E : 0x121E;
+	}
 };

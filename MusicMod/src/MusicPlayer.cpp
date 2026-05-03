@@ -416,19 +416,26 @@ void MusicPlayer::OnUIButtonAction(const UIButtonAction& action)
 void MusicPlayer::PlayMusicHook(void* arg1, void* arg2, void* arg3, void* arg4)
 {
 	Logger logger("Play Music Hook");
+	logger.Log("PlayMusic called with arg1: %p, arg2: %p, arg3: %p, arg4: %p", arg1, arg2, arg3, arg4);
 	if (!playMusicFuncRCXAddress)
 	{
 		playMusicFuncRCXAddress = reinterpret_cast<uintptr_t>(arg1);
 		logger.Log("1st arg address set to: %p", (void*)playMusicFuncRCXAddress);
 	}
 
-	if (!playMusicFuncRDXAddress)
+	auto it = ModConfiguration::Databases::interruptorDatabase.find("Silence");
+	if (it != ModConfiguration::Databases::interruptorDatabase.end())
 	{
-		uintptr_t arg2Address = reinterpret_cast<uintptr_t>(arg2);
-		if ((arg2Address & 0xFF) == 0x80)
+		const MusicData& silenceData = it->second;
+		if (reinterpret_cast<uintptr_t>(arg3) == silenceData.address)
 		{
-			playMusicFuncRDXAddress = arg2Address;
-			logger.Log("2nd arg address set to: %p", (void*)playMusicFuncRDXAddress);
+			// Game called the silence interruptor, good time to update rdx
+			uintptr_t arg2Address = reinterpret_cast<uintptr_t>(arg2);
+			if (playMusicFuncRDXAddress != arg2Address)
+			{
+				playMusicFuncRDXAddress = arg2Address;
+				logger.Log("2nd arg address set to: %p", (void*)playMusicFuncRDXAddress);
+			}
 		}
 	}
 

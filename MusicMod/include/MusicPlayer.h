@@ -66,7 +66,11 @@ private:
 
 	inline static uintptr_t playMusicFuncRCXAddress = 0;
 	inline static uintptr_t playMusicFuncRDXAddress = 0;
-	inline static uintptr_t offsetMenuToInGameRDX = -64;
+	inline static uint8_t GetRDXLowByte() {
+		return ModConfiguration::gameProvider == GameProvider::STEAM
+			? 0x80
+			: 0x00;
+	}
 
 	inline static bool gameCalledSong = false;
 	inline static bool gameCalledInterruptor = false;

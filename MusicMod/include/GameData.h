@@ -2,6 +2,12 @@
 
 #include <string>
 
+enum class GameProvider
+{
+	STEAM,  // applies to both Steam and Epic Games
+	XBOX_GAMEPASS
+};
+
 enum class MusicType
 {
 	UNKNOWN,
@@ -50,7 +56,7 @@ struct MusicData
 	const char* name; // name and artist are just for logging
 	const char* artist;
 	const char* signature;
-	bool exclusiveDC = false; // If true, this music is exclusive to the Director's Cut version of the game
+	bool exclusiveDC = false; // If true, music is exclusive to DC version
 	uintptr_t address = 0;
 	bool active = false;
 };
@@ -59,6 +65,7 @@ struct FunctionData
 {
 	const char* name;
 	const char* signature;
+	const char* signature_gp = nullptr; // signature for the xbox gamepass version, if different from the steam version
 	bool usesAVX = false; // If function uses AVX instructions, use disassembly-based MemoryUtils::PlaceHook, not MinHook
 	uintptr_t address = 0;
 	void* originalFunction = nullptr;
@@ -93,5 +100,6 @@ template<>
 struct ScanTarget<FunctionData>
 {
 	static const char* GetSignature(const FunctionData& func) { return func.signature; }
+	static const char* GetSignatureGP(const FunctionData& func) { return func.signature_gp ? func.signature_gp : nullptr; }
 	static void SetAddress(FunctionData& func, uintptr_t address) { func.address = address; }
 };

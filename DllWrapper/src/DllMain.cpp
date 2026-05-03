@@ -39,6 +39,21 @@ bool IsStandalone(HMODULE hModule)
 	return filename && _wcsicmp(filename + 1, L"dxgi.dll") == 0;
 }
 
+bool IsValidProcess()
+{
+	wchar_t path[MAX_PATH];
+	GetModuleFileNameW(NULL, path, MAX_PATH);
+	wchar_t* filename = wcsrchr(path, L'\\');
+	if (!filename) return false;
+
+	static const wchar_t* validProcesses[] = { L"ds.exe", L"DeathStranding.exe" };
+	for (auto& proc : validProcesses)
+	{
+		if (_wcsicmp(filename + 1, proc) == 0) return true;
+	}
+	return false;
+}
+
 DWORD WINAPI HookThread(LPVOID lpParam)
 {
 	static ModManager modManager;
@@ -92,7 +107,7 @@ HRESULT WINAPI CreateDXGIFactory1Hook(REFIID riid, void** ppFactory)
 	if (SUCCEEDED(hr))
 	{
 		static bool initialized = false;
-		if (!initialized)
+		if (!initialized && IsValidProcess())
 		{
 			initialized = true;
 			CreateThread(nullptr, 0, HookThread, nullptr, 0, nullptr);
@@ -106,19 +121,25 @@ BOOL WINAPI DllMain(HMODULE module, DWORD reason, LPVOID)
 {
 	if (reason == DLL_PROCESS_ATTACH)
 	{
-		OpenDevTerminal();
-
-		if (IsStandalone(module))
+		const bool standalone = IsStandalone(module);
+		if (standalone)
 		{
 			UPD::MuteLogging();
 			UPD::CreateProxy(module);
 		}
-		else
+
+		if (!IsValidProcess())
+		{
+			return TRUE;
+		}
+
+		OpenDevTerminal();
+		MH_Initialize();
+
+		if (!standalone)
 		{
 			CreateThread(nullptr, 0, HookThread, nullptr, 0, nullptr);
 		}
-
-		MH_Initialize();
 	}
 	else if (reason == DLL_PROCESS_DETACH)
 	{

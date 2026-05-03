@@ -136,6 +136,30 @@ namespace MemoryUtils
 		return moduleName;
 	}
 
+	static bool IsFileNextToExecutable(const wchar_t* filename)
+	{
+		wchar_t executablePath[MAX_PATH];
+		DWORD length = GetModuleFileNameW(nullptr, executablePath, MAX_PATH);
+		if (length == 0 || length == MAX_PATH)
+		{
+			return false;
+		}
+
+		std::wstring path(executablePath, length);
+		size_t directoryEnd = path.find_last_of(L"\\/");
+		if (directoryEnd == std::wstring::npos)
+		{
+			return false;
+		}
+
+		path.resize(directoryEnd + 1);
+		path += filename;
+
+		DWORD attributes = GetFileAttributesW(path.c_str());
+		return attributes != INVALID_FILE_ATTRIBUTES
+			&& !(attributes & FILE_ATTRIBUTE_DIRECTORY);
+	}
+
 	static uintptr_t GetMainModuleBase()
 	{
 		return reinterpret_cast<uintptr_t>(GetModuleHandle(NULL));
