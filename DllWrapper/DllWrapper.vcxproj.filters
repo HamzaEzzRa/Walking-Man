@@ -51,6 +51,12 @@
     <ClInclude Include="..\MusicMod\include\MusicPlayer.h">
       <Filter>Header Files\Music Mod</Filter>
     </ClInclude>
+    <ClInclude Include="..\MusicMod\include\AreaMusicOverride.h">
+      <Filter>Header Files\Music Mod</Filter>
+    </ClInclude>
+    <ClInclude Include="..\MusicMod\include\AudioDecoder.h">
+      <Filter>Header Files\Music Mod</Filter>
+    </ClInclude>
     <ClInclude Include="..\MusicMod\include\PatternScanner.h">
       <Filter>Header Files\Music Mod</Filter>
     </ClInclude>
@@ -147,6 +153,12 @@
       <Filter>Source Files\Music Mod</Filter>
     </ClCompile>
     <ClCompile Include="..\MusicMod\src\MusicPlayer.cpp">
+      <Filter>Source Files\Music Mod</Filter>
+    </ClCompile>
+    <ClCompile Include="..\MusicMod\src\AreaMusicOverride.cpp">
+      <Filter>Source Files\Music Mod</Filter>
+    </ClCompile>
+    <ClCompile Include="..\MusicMod\src\AudioDecoder.cpp">
       <Filter>Source Files\Music Mod</Filter>
     </ClCompile>
     <ClCompile Include="..\MinHook\src\buffer.c">

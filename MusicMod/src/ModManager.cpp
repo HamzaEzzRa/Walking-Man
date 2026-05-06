@@ -122,6 +122,18 @@ void ModManager::Initialize()
 		configLoaded ? "Ini configuration loaded successfully"
 		: "Failed to load ini configuration, using default settings"
 	);
+	bool customSongsLoaded = ModConfiguration::LoadCustomSongsFromFolder();
+	if (!ModConfiguration::customSongsEnabled)
+	{
+		logger.Log("Custom songs disabled; skipped custom folder scan");
+	}
+	else
+	{
+		logger.Log(
+			customSongsLoaded ? "Custom songs loaded successfully"
+			: "Custom songs were not loaded"
+		);
+	}
 
 	ModConfiguration::gameProvider = DetectProvider();
 	logger.Log(
@@ -216,6 +228,11 @@ void ModManager::OnRender()
 							logger.Log("Song %s found at address: %p", name.c_str(), songData.address);
 							songData.active = true;
 						}
+					}
+					else if (ModConfiguration::Databases::customSongDatabase.find(name)
+						!= ModConfiguration::Databases::customSongDatabase.end())
+					{
+						continue;
 					}
 					else
 					{

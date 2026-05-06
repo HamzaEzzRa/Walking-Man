@@ -1,8 +1,12 @@
 #include "MusicPlayer.h"
 
+#include "AreaMusicOverride.h"
+
+#include <algorithm>
 #include <chrono>
-#include <fstream>
+#include <cstring>
 #include <string>
+#include <utility>
 #include <vector>
 #include <Windows.h>
 
@@ -22,6 +26,29 @@
 
 MusicPlayer::MusicPlayer()
 {
+	AreaMusicOverride::Initialize();
+}
+
+void MusicPlayer::CancelPendingAreaMusicTransition(const char* reason)
+{
+	if (!pendingMusicData)
+	{
+		return;
+	}
+
+	Logger logger("Music Player");
+	logger.Log(
+		"Canceling queued area music track \"%s\"%s%s",
+		pendingMusicData->name ? pendingMusicData->name : "",
+		reason && reason[0] ? ": " : "",
+		reason && reason[0] ? reason : ""
+	);
+	pendingMusicData = nullptr;
+	pendingMusicDisplayDescription = true;
+	pendingMusicOverridePrepared = false;
+	currentMusicPlayTime.store(0);
+	currentMusicMaxLength.store(0);
+	AreaMusicOverride::Unset();
 }
 
 void MusicPlayer::OnEvent(const ModEvent& event)
@@ -59,10 +86,19 @@ void MusicPlayer::OnEvent(const ModEvent& event)
 	case ModEventType::MuleTerritoryStateChanged:
 	{
 		auto* territoryFlagState = std::any_cast<FlagState<EnemyTerritoryFlag>*>(event.data);
-		if (territoryFlagState->current != EnemyTerritoryFlag::SAFE && currentMusicData)
+		if (
+			territoryFlagState->current != EnemyTerritoryFlag::SAFE
+			&& (currentMusicData || pendingMusicData)
+		)
 		{
+			CancelPendingAreaMusicTransition("enemy territory interruption");
+			if (AreaMusicOverride::UsesOverride(currentMusicData))
+			{
+				AreaMusicOverride::Unset();
+			}
 			currentMusicData = nullptr;
 			currentMusicIsPlaying.store(false);
+			currentMusicMaxLength.store(0);
 
 			ModManager* instance = ModManager::GetInstance();
 			if (instance)
@@ -79,7 +115,10 @@ void MusicPlayer::OnEvent(const ModEvent& event)
 		if (ModConfiguration::connectToChiralNetwork)
 		{
 			auto* chiralNetworkFlagState = std::any_cast<FlagState<ChiralNetworkFlag>*>(event.data);
-			if (chiralNetworkFlagState->current == ChiralNetworkFlag::OFF && currentMusicData)
+			if (
+				chiralNetworkFlagState->current == ChiralNetworkFlag::OFF
+				&& (currentMusicData || pendingMusicData)
+			)
 			{
 				StopMusic();
 
@@ -138,13 +177,32 @@ void MusicPlayer::OnScanDone()
 		hookResult ? "installed successfully" : "failed"
 	);
 
+	auto baseAreaTrackIt = ModConfiguration::Databases::songDatabase.find(AreaMusicOverride::TargetTrackName);
+	if (baseAreaTrackIt != ModConfiguration::Databases::songDatabase.end())
+	{
+		ModConfiguration::BindCustomSongsToAreaTrack(baseAreaTrackIt->second);
+	}
+
 	std::vector<const MusicData*> songMusicDataList;
 	for (const std::string& name : ModConfiguration::activePlaylist)
 	{
 		auto it = ModConfiguration::Databases::songDatabase.find(name);
 		if (it == ModConfiguration::Databases::songDatabase.end())
 		{
-			logger.Log("Song \"%s\" not found in database, skipping...", name.c_str());
+			auto customIt = ModConfiguration::Databases::customSongDatabase.find(name);
+			if (customIt == ModConfiguration::Databases::customSongDatabase.end())
+			{
+				logger.Log("Song \"%s\" not found in database, skipping...", name.c_str());
+				continue;
+			}
+
+			auto& customMusicData = customIt->second;
+			if (!customMusicData.address)
+			{
+				logger.Log("Custom song \"%s\" has no bound area address, skipping...", name.c_str());
+				continue;
+			}
+			songMusicDataList.push_back(&customMusicData);
 			continue;
 		}
 
@@ -229,14 +287,74 @@ void MusicPlayer::OnScanDone()
 
 void MusicPlayer::OnRender()
 {
+	if (
+		pendingMusicData
+		&& std::chrono::steady_clock::now() >= pendingMusicStartTime
+	)
+	{
+		const MusicData* data = pendingMusicData;
+		const bool displayDescription = pendingMusicDisplayDescription;
+
+		if (!pendingMusicOverridePrepared && AreaMusicOverride::UsesOverride(data))
+		{
+			if (!AreaMusicOverride::Register(data))
+			{
+				logger.Log(
+					"Area music override was not prepared for queued track \"%s\"; canceling playback",
+					data->name ? data->name : ""
+				);
+				pendingMusicData = nullptr;
+				pendingMusicDisplayDescription = true;
+				pendingMusicOverridePrepared = false;
+				AreaMusicOverride::Unset();
+				currentMusicData = nullptr;
+				currentMusicIsPlaying.store(false);
+				currentMusicPlayTime.store(0);
+				currentMusicMaxLength.store(0);
+				return;
+			}
+
+			pendingMusicOverridePrepared = true;
+			pendingMusicStartTime = std::chrono::steady_clock::now()
+				+ std::chrono::milliseconds(areaMusicPreparedStartDelayMs);
+			logger.Log(
+				"Prepared queued area music override for \"%s\"; waiting %u ms before playback",
+				data->name ? data->name : "",
+				areaMusicPreparedStartDelayMs
+			);
+			return;
+		}
+
+		pendingMusicData = nullptr;
+		pendingMusicDisplayDescription = true;
+		pendingMusicOverridePrepared = false;
+		logger.Log("Starting queued area music track: %s", data->name);
+		PlayMusic(data, displayDescription);
+	}
+
 	// Handle Playback
 	if (currentMusicData)
 	{
-		if (currentMusicData->maxLength > 0 && currentMusicData->maxLength < currentMusicPlayTime.load())
+		if (currentMusicIsPlaying.load())
+		{
+			const std::chrono::milliseconds songDuration =
+				std::chrono::duration_cast<std::chrono::milliseconds>(
+					std::chrono::steady_clock::now() - currentMusicStartTime
+				);
+			currentMusicPlayTime.store(songDuration.count());
+		}
+
+		const long long maxLength = currentMusicMaxLength.load();
+		bool maxLengthReached = false;
+		if (
+			maxLength > 0
+			&& maxLength < currentMusicPlayTime.load()
+		)
 		{
 			logger.Log("Current music playback time exceeded its max duration");
 			currentMusicPlayTime.store(0);
 			currentMusicIsPlaying.store(false);
+			maxLengthReached = true;
 		}
 
 		if (!currentMusicIsPlaying.load())
@@ -246,6 +364,10 @@ void MusicPlayer::OnRender()
 				gameCalledSong = false;
 				gameCalledInterruptor = false;
 
+				if (AreaMusicOverride::UsesOverride(currentMusicData))
+				{
+					AreaMusicOverride::Unset();
+				}
 				currentMusicData = nullptr;
 				ModManager* instance = ModManager::GetInstance();
 				if (instance)
@@ -276,6 +398,15 @@ void MusicPlayer::OnRender()
 					}
 					case LoopMode::NONE:
 					{
+						if (maxLengthReached)
+						{
+							StopMusic();
+						}
+						else
+						{
+							currentMusicData = nullptr;
+						}
+
 						if (musicAddressWatcher)
 						{
 							musicAddressWatcher->Uninstall();
@@ -332,8 +463,12 @@ void MusicPlayer::OnRender()
 
 void MusicPlayer::OnPreExit()
 {
+	CancelPendingAreaMusicTransition("pre-exit");
+	AreaMusicOverride::Unset();
+	AreaMusicOverride::RetireBuffer();
 	currentMusicData = nullptr;
 	currentMusicIsPlaying.store(false);
+	currentMusicMaxLength.store(0);
 	if (musicAddressWatcher)
 	{
 		musicAddressWatcher->Uninstall();
@@ -485,6 +620,42 @@ void MusicPlayer::PlayMusicHook(void* arg1, void* arg2, void* arg3, void* arg4)
 		return;
 	}
 
+	if ((gameCalledInterruptor || gameCalledSong) && (currentMusicData || pendingMusicData))
+	{
+		const char* interruptionReason = gameCalledInterruptor
+			? "game interruptor"
+			: (songToPlay && songToPlay->name ? songToPlay->name : "game music");
+		CancelPendingAreaMusicTransition(interruptionReason);
+		if (AreaMusicOverride::UsesOverride(currentMusicData))
+		{
+			AreaMusicOverride::Unset();
+		}
+		currentMusicData = nullptr;
+		currentMusicIsPlaying.store(false);
+		currentMusicPlayTime.store(0);
+		currentMusicMaxLength.store(0);
+
+		ModManager* instance = ModManager::GetInstance();
+		if (instance)
+		{
+			const char* interruptionMessage = "Music player interrupted.";
+			instance->DispatchEvent(ModEvent{
+				ModEventType::MusicPlayerInterrupted,
+				nullptr,
+				&interruptionMessage
+			});
+		}
+	}
+
+	if (
+		songToPlay
+		&& songToPlay->name
+		&& std::strcmp(songToPlay->name, AreaMusicOverride::TargetTrackName) == 0
+	)
+	{
+		AreaMusicOverride::Unset();
+	}
+
 	/*if (!gameCalledSong && !gameCalledInterruptor)
 	{
 		logger.Log("Game called PlayMusic function with arg3: %p", arg3);
@@ -497,7 +668,7 @@ void MusicPlayer::PlayUISoundHook(void* arg1, void* arg2, void* arg3, void* arg4
 {
 	Logger logger("Play UI Sound");
 
-	if (currentMusicData && arg1 && arg2)
+	if ((currentMusicData || pendingMusicData) && arg1 && arg2)
 	{
 		std::vector<uint8_t> targetBytes;
 		std::vector<bool> masks;
@@ -525,6 +696,11 @@ void MusicPlayer::PlayUISoundHook(void* arg1, void* arg2, void* arg3, void* arg4
 			if (match)
 			{
 				logger.Log("Interruptor %s matched, stopping autoplay", interruptor.name);
+				CancelPendingAreaMusicTransition(interruptor.name);
+				if (AreaMusicOverride::UsesOverride(currentMusicData))
+				{
+					AreaMusicOverride::Unset();
+				}
 				currentMusicData = nullptr;
 				currentMusicIsPlaying.store(false);
 
@@ -576,6 +752,66 @@ void MusicPlayer::ShowMusicDescriptionCoreHook(void* arg1, void* arg2, void* arg
 	reinterpret_cast<GenericFunction_t>(showMusicDescriptionCoreFuncData->originalFunction)(arg1, arg2, arg3, arg4);
 }
 
+bool MusicPlayer::PlaySilenceForAreaMusicTransition()
+{
+	auto silenceIt = ModConfiguration::Databases::interruptorDatabase.find("Silence");
+	if (silenceIt == ModConfiguration::Databases::interruptorDatabase.end() || !silenceIt->second.address)
+	{
+		logger.Log("Silence music data not found, cannot restart area music cleanly");
+		return false;
+	}
+
+	const FunctionData* playMusicFuncData = ModManager::GetFunctionData("PlayMusic");
+	if (!playMusicFuncData || !playMusicFuncData->originalFunction)
+	{
+		logger.Log("Original play music function was not hooked, cannot restart area music cleanly");
+		return false;
+	}
+
+	void* arg1 = reinterpret_cast<void*>(playMusicFuncRCXAddress);
+	void* arg2 = reinterpret_cast<void*>(playMusicFuncRDXAddress);
+	if (!arg1 || !arg2)
+	{
+		logger.Log("PlayMusic arguments are not initialized, cannot restart area music cleanly");
+		return false;
+	}
+
+	void* arg3 = reinterpret_cast<void*>(silenceIt->second.address);
+	reinterpret_cast<GenericFunction_t>(playMusicFuncData->originalFunction)(arg1, arg2, arg3, 0);
+	logger.Log("Played Silence before restarting area music template");
+	return true;
+}
+
+bool MusicPlayer::QueueAreaMusicTransition(const MusicData* data, bool displayDescription)
+{
+	if (!data || !AreaMusicOverride::IsTemplateTrack(data))
+	{
+		return false;
+	}
+
+	if (!PlaySilenceForAreaMusicTransition())
+	{
+		return false;
+	}
+
+	if (musicAddressWatcher)
+	{
+		musicAddressWatcher->Uninstall();
+		musicAddressWatcher.reset();
+	}
+
+	currentMusicData = nullptr;
+	currentMusicIsPlaying.store(false);
+	currentMusicPlayTime.store(0);
+	currentMusicMaxLength.store(0);
+	pendingMusicData = data;
+	pendingMusicDisplayDescription = displayDescription;
+	pendingMusicOverridePrepared = false;
+	pendingMusicStartTime = std::chrono::steady_clock::now()
+		+ std::chrono::milliseconds(areaMusicRestartDelayMs);
+	return true;
+}
+
 void MusicPlayer::PlayMusic(const MusicData* data, bool displayDescription=true)
 {
 	if (musicAddressWatcher)
@@ -600,6 +836,20 @@ void MusicPlayer::PlayMusic(const MusicData* data, bool displayDescription=true)
 	// Always reset flags to be safe
 	gameCalledSong = false;
 	gameCalledInterruptor = false;
+
+	if (
+		currentMusicData
+		&& AreaMusicOverride::IsTemplateTrack(currentMusicData)
+		&& AreaMusicOverride::IsTemplateTrack(data)
+	)
+	{
+		logger.Log("Queueing area music restart for \"%s\"", data->name);
+		if (QueueAreaMusicTransition(data, displayDescription))
+		{
+			return;
+		}
+		logger.Log("Area music restart transition failed; trying immediate playback");
+	}
 
 	if (
 		ModConfiguration::showSongDescription && displayDescription
@@ -653,10 +903,46 @@ void MusicPlayer::PlayMusic(const MusicData* data, bool displayDescription=true)
 	void* arg3 = reinterpret_cast<void*>(data->address);
 	logger.Log("Third argument read successfully: %p", arg3);
 
+	long long playbackMaxLength = data->maxLength;
+	if (AreaMusicOverride::UsesOverride(data))
+	{
+		if (!AreaMusicOverride::Register(data))
+		{
+			logger.Log(
+				"Area music override was not registered for \"%s\"; canceling playback",
+				data->name ? data->name : ""
+			);
+			AreaMusicOverride::Unset();
+			PlaySilenceForAreaMusicTransition();
+			currentMusicData = nullptr;
+			currentMusicIsPlaying.store(false);
+			currentMusicPlayTime.store(0);
+			currentMusicMaxLength.store(0);
+			return;
+		}
+		playbackMaxLength = AreaMusicOverride::GetRegisteredEffectiveDurationMs(data);
+		logger.Log(
+			AreaMusicOverride::DurationControlledByWwise()
+				? "Using patched Wwise media metadata for custom area track \"%s\"; runtime duration guard is %lld ms"
+				: "Wwise media metadata was not patched for custom area track \"%s\"; runtime duration guard is %lld ms",
+			data->name ? data->name : "",
+			playbackMaxLength
+		);
+	}
+	else
+	{
+		AreaMusicOverride::Unset();
+	}
+
 	currentMusicPlayTime.store(0);
+	currentMusicMaxLength.store(playbackMaxLength);
 	currentMusicStartTime = std::chrono::steady_clock::now();
 	reinterpret_cast<GenericFunction_t>(playMusicFuncData->originalFunction)(arg1, arg2, arg3, 0);
-	logger.Log("Playing BGM: \"%s\"", data->name);
+	logger.Log(
+		"Playing BGM: \"%s\" (runtime duration guard %lld ms)",
+		data->name,
+		playbackMaxLength
+	);
 
 	if (data->type == MusicType::SONG || data->type == MusicType::AMBIENT)
 	{
@@ -752,10 +1038,20 @@ void MusicPlayer::PlayByName(const std::string& name)
 		PlayMusic(songMusicData);
 		return;
 	}
+
+	auto customSongIt = ModConfiguration::Databases::customSongDatabase.find(name);
+	if (customSongIt != ModConfiguration::Databases::customSongDatabase.end())
+	{
+		const MusicData* customSongMusicData = &(customSongIt->second);
+		PlayMusic(customSongMusicData);
+		return;
+	}
 }
 
 void MusicPlayer::StopMusic()
 {
+	CancelPendingAreaMusicTransition("stop requested");
+
 	if (!currentMusicData)
 	{
 		return;
@@ -772,6 +1068,7 @@ void MusicPlayer::StopMusic()
 	PlayMusic(silenceData, false); // Play silence to stop current music
 	currentMusicData = nullptr;
 	currentMusicIsPlaying.store(false);
+	currentMusicMaxLength.store(0);
 }
 
 void MusicPlayer::PlayNextInPool()

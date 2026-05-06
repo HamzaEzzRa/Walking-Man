@@ -54,3 +54,7 @@
 /packages/directxtk_desktop_2019.2025.7.10.1
 /DirectXHook/src/DirectXHook.cpp
 /tools
+*.local*
+/.codex
+*.wem*
+*.md

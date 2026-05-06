@@ -2,9 +2,10 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <string>
-#include <vector>
 
 #include "BreakpointWatcher.h"
 
@@ -39,6 +40,9 @@ private:
 
 	void PlayByName(const std::string&);
 	void StopMusic();
+	static void CancelPendingAreaMusicTransition(const char*);
+	bool QueueAreaMusicTransition(const MusicData*, bool);
+	bool PlaySilenceForAreaMusicTransition();
 
 	void PlayNextInPool();
 	void PlayPreviousInPool();
@@ -66,22 +70,24 @@ private:
 
 	inline static uintptr_t playMusicFuncRCXAddress = 0;
 	inline static uintptr_t playMusicFuncRDXAddress = 0;
-	inline static uint8_t GetRDXLowByte() {
-		return ModConfiguration::gameProvider == GameProvider::STEAM
-			? 0x80
-			: 0x00;
-	}
 
 	inline static bool gameCalledSong = false;
 	inline static bool gameCalledInterruptor = false;
 	inline static std::atomic<long long> currentMusicPlayTime = 0; // in ms, used to track current playback time
+	inline static std::atomic<long long> currentMusicMaxLength = 0; // in ms, runtime guard for current playback
 
 	inline static const MusicData* currentMusicData = nullptr;
 	inline static std::chrono::time_point<std::chrono::steady_clock> currentMusicStartTime;
 	inline static std::atomic<bool> currentMusicIsPlaying = false;
+	inline static const MusicData* pendingMusicData = nullptr;
+	inline static bool pendingMusicDisplayDescription = true;
+	inline static bool pendingMusicOverridePrepared = false;
+	inline static std::chrono::time_point<std::chrono::steady_clock> pendingMusicStartTime;
 
 	inline static LoopMode loopMode = LoopMode::ALL;
 	uint16_t timeTillAutoplay = 1000; // in ms, time to wait before playing next song automatically
+	inline static constexpr uint16_t areaMusicRestartDelayMs = 750;
+	inline static constexpr uint16_t areaMusicPreparedStartDelayMs = 250;
 
 	inline static uintptr_t playingLoopAddress = 0;
 	

@@ -511,11 +511,11 @@ void UIManager::InGameUIDrawElementHook(void* arg1, void* arg2, void* arg3, void
 		arg1, arg2, arg3, arg4
 	);
 
-	size_t runtimeSlotIndex = reinterpret_cast<size_t>(arg2);
-	if (runtimeSlotIndex == 0) // New UI group so we reset the compass state
-	{
-		ResetModCompassState();
-	}
+	//size_t runtimeSlotIndex = reinterpret_cast<size_t>(arg2);
+	//if (runtimeSlotIndex == 0) // New UI group so we reset the compass state
+	//{
+	//	ResetModCompassState();
+	//}
 
 	if (currentRuntimeUIPoolStart) {
 		uintptr_t compassFlagOffset = GetRuntimeCompassFlagOffset();
@@ -533,10 +533,10 @@ void UIManager::InGameUIDrawElementHook(void* arg1, void* arg2, void* arg3, void
 			);
 			currentCompassState = OPEN;
 		}
-		else
+		/*else
 		{
 			currentCompassState = CLOSED;
-		}
+		}*/
 	}
 }
 

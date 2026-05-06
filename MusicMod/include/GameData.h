@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
+#include <unordered_map>
 
 enum class GameProvider
 {
@@ -59,6 +61,10 @@ struct MusicData
 	bool exclusiveDC = false; // If true, music is exclusive to DC version
 	uintptr_t address = 0;
 	bool active = false;
+	bool customAreaTrack = false;
+	const char* customWemPath = nullptr;
+	uint32_t customMediaId = 0;
+	const char* baseTrackName = nullptr;
 };
 
 struct FunctionData

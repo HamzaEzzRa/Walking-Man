@@ -187,9 +187,13 @@ COPY "$(SolutionDir)x64\Debug\dxgi.dll" "C:\Program Files (x86)\Steam\steamapps\
     </Link>
     <PostBuildEvent>
       <Command>COPY "$(SolutionDir)x64\Release\dxgi.dll" "C:\Program Files\Epic Games\DeathStranding\dxgi.dll"
+COPY "$(SolutionDir)walkingman.local.ini" "C:\Program Files\Epic Games\DeathStranding\walkingman.ini"
 COPY "$(SolutionDir)x64\Release\dxgi.dll" "C:\Program Files\Epic Games\DeathStrandingDC\dxgi.dll"
+COPY "$(SolutionDir)walkingman.local.ini" "C:\Program Files\Epic Games\DeathStrandingDC\walkingman.ini"
 COPY "$(SolutionDir)x64\Release\dxgi.dll" "C:\Program Files (x86)\Steam\steamapps\common\DEATH STRANDING DIRECTORS CUT\dxgi.dll"
-COPY "$(SolutionDir)x64\Release\dxgi.dll" "C:\XboxGames\DSDC\Content\dxgi.dll"</Command>
+COPY "$(SolutionDir)walkingman.local.ini" "C:\Program Files (x86)\Steam\steamapps\common\DEATH STRANDING DIRECTORS CUT\walkingman.ini"
+COPY "$(SolutionDir)x64\Release\dxgi.dll" "C:\XboxGames\DSDC\Content\dxgi.dll"
+COPY "$(SolutionDir)walkingman.local.ini" "C:\XboxGames\DSDC\Content\walkingman.ini"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -201,6 +205,8 @@ COPY "$(SolutionDir)x64\Release\dxgi.dll" "C:\XboxGames\DSDC\Content\dxgi.dll"</
     <ClInclude Include="..\MinHook\src\hde\table32.h" />
     <ClInclude Include="..\MinHook\src\hde\table64.h" />
     <ClInclude Include="..\MinHook\src\trampoline.h" />
+    <ClInclude Include="..\MusicMod\include\AreaMusicOverride.h" />
+    <ClInclude Include="..\MusicMod\include\AudioDecoder.h" />
     <ClInclude Include="..\MusicMod\include\FunctionHook.h" />
     <ClInclude Include="..\MusicMod\include\GameData.h" />
     <ClInclude Include="..\MusicMod\include\GameStateManager.h" />
@@ -233,6 +239,8 @@ COPY "$(SolutionDir)x64\Release\dxgi.dll" "C:\XboxGames\DSDC\Content\dxgi.dll"</
     <ClCompile Include="..\MinHook\src\hde\hde64.c" />
     <ClCompile Include="..\MinHook\src\hook.c" />
     <ClCompile Include="..\MinHook\src\trampoline.c" />
+    <ClCompile Include="..\MusicMod\src\AreaMusicOverride.cpp" />
+    <ClCompile Include="..\MusicMod\src\AudioDecoder.cpp" />
     <ClCompile Include="..\MusicMod\src\GameStateManager.cpp" />
     <ClCompile Include="..\MusicMod\src\InputTracker.cpp" />
     <ClCompile Include="..\MusicMod\src\BreakpointWatcher.cpp" />

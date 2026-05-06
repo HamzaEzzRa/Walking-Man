@@ -34,6 +34,9 @@ namespace ModConfiguration
 	extern bool showNotificationMessage;
 	extern bool connectToChiralNetwork;
 
+	extern bool customSongsEnabled;
+	extern std::string customSongsFolderPath;
+
 	extern bool allowScriptedSongs;
 	extern bool showMusicPlayerUI;
 
@@ -44,6 +47,8 @@ namespace ModConfiguration
 	std::string Trim(const std::string&);
 	bool IsCommentOrEmpty(const std::string&);
 	bool LoadConfigFromFile();
+	bool LoadCustomSongsFromFolder();
+	void BindCustomSongsToAreaTrack(const MusicData&);
 
 	namespace Databases
 	{
@@ -51,6 +56,7 @@ namespace ModConfiguration
 
 		extern std::unordered_map<std::string, MusicData> interruptorDatabase;
 		extern std::unordered_map<std::string, MusicData> songDatabase;
+		extern std::unordered_map<std::string, MusicData> customSongDatabase;
 
 		extern std::unordered_map<std::string, MusicData> interruptorUIDatabase;
 

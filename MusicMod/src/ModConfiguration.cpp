@@ -1,14 +1,21 @@
 ﻿#include "ModConfiguration.h"
 
 #include <algorithm>
+#include <cctype>
+#include <cstdint>
+#include <exception>
+#include <filesystem>
 #include <fstream>
 #include <functional>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "ordered_set.h"
 
+#include "AudioDecoder.h"
 #include "GameData.h"
 
 #include "MemoryUtils.h"
@@ -36,6 +43,9 @@ namespace ModConfiguration
 	bool showNotificationMessage = true;
 	bool connectToChiralNetwork = true;
 
+	bool customSongsEnabled = true;
+	std::string customSongsFolderPath = "";
+
 	bool allowScriptedSongs = true;
 	bool showMusicPlayerUI = true;
 
@@ -50,6 +60,114 @@ namespace ModConfiguration
 		"Waiting (10 Years)", "Nobody Else", "Asylums For The Feeling", "Almost Nothing", "BB's Theme"
 	};
 
+	namespace
+	{
+		namespace fs = std::filesystem;
+
+		constexpr uint32_t customAreaMusicOriginalMediaId = 14330364; // Area00 "Don't Be So Serious"
+		constexpr const char* customAreaMusicBaseTrackName = "Don't Be So Serious";
+
+		std::vector<std::unique_ptr<std::string>> customSongStringStorage;
+
+		struct CustomSongFileNameInfo
+		{
+			std::string title;
+			std::string artist = "Custom";
+		};
+
+		const char* StoreCustomSongString(const std::string& value)
+		{
+			customSongStringStorage.push_back(std::make_unique<std::string>(value));
+			return customSongStringStorage.back()->c_str();
+		}
+
+		std::string ToLowerAscii(std::string value)
+		{
+			std::transform(
+				value.begin(),
+				value.end(),
+				value.begin(),
+				[](unsigned char c) { return static_cast<char>(std::tolower(c)); }
+			);
+			return value;
+		}
+
+		bool TryPathToUtf8String(const fs::path& path, std::string& value)
+		{
+			try
+			{
+				value = path.u8string();
+				return true;
+			}
+			catch (...)
+			{
+			}
+
+			try
+			{
+				value = path.string();
+				return true;
+			}
+			catch (...)
+			{
+				value.clear();
+				return false;
+			}
+		}
+
+		std::string PathToLogString(const fs::path& path)
+		{
+			std::string value;
+			return TryPathToUtf8String(path, value) ? value : "<unprintable path>";
+		}
+
+		bool IsSupportedCustomAudioExtension(const fs::path& path)
+		{
+			std::string extension;
+			if (!TryPathToUtf8String(path.extension(), extension))
+			{
+				return false;
+			}
+
+			const std::vector<std::string>& supportedExtensions =
+				AudioDecoder::SupportedCustomAudioExtensions();
+			extension = ToLowerAscii(extension);
+			return std::find(
+				supportedExtensions.begin(),
+				supportedExtensions.end(),
+				extension
+			) != supportedExtensions.end();
+		}
+
+		CustomSongFileNameInfo ParseCustomSongFileName(const fs::path& audioPath)
+		{
+			CustomSongFileNameInfo songInfo{};
+			std::string stem;
+			if (!TryPathToUtf8String(audioPath.stem(), stem))
+			{
+				return songInfo;
+			}
+
+			stem = Trim(stem);
+			const std::string separator = " - ";
+			const size_t separatorPos = stem.find(separator);
+			if (separatorPos != std::string::npos)
+			{
+				const std::string artist = Trim(stem.substr(0, separatorPos));
+				const std::string title = Trim(stem.substr(separatorPos + separator.size()));
+				if (!artist.empty() && !title.empty())
+				{
+					songInfo.artist = artist;
+					songInfo.title = title;
+					return songInfo;
+				}
+			}
+
+			songInfo.title = stem;
+			return songInfo;
+		}
+	}
+
 	// Maps global setting names to lambda setter functions
 	const std::unordered_map<std::string, std::function<void(const std::string&)>> parameterSetters =
 	{
@@ -62,11 +180,17 @@ namespace ModConfiguration
 		{"connectToChiralNetwork",
 		[](const std::string& val) { connectToChiralNetwork = (val == "true" || val == "1"); }},
 
+		{"customSongsFolderPath",
+		[](const std::string& val) { customSongsFolderPath = val; }},
+
+		{"customSongsEnabled",
+		[](const std::string& val) { customSongsEnabled = (val == "true" || val == "1"); }},
+
 		{"allowScriptedSongs",
 		[](const std::string& val) { allowScriptedSongs = (val == "true" || val == "1"); }},
 
 		{"showMusicPlayerUI",
-		[](const std::string& val) { showMusicPlayerUI = (val == "true" || val == "1"); }}
+		[](const std::string& val) { showMusicPlayerUI = (val == "true" || val == "1"); }},
 	};
 
 	std::string Trim(const std::string& str)
@@ -130,7 +254,16 @@ namespace ModConfiguration
 
 					std::string key = Trim(line.substr(0, eqPos));
 					std::string val = Trim(line.substr(eqPos + 1));
-					if (val != "true" && val != "false" && val != "1" && val != "0")
+					auto it = parameterSetters.find(key);
+					if (it == parameterSetters.end())
+					{
+						break;
+					}
+
+					if (
+							key != "customSongsFolderPath"
+							&& val != "true" && val != "false" && val != "1" && val != "0"
+					)
 					{
 						std::string errorMessage = "Invalid value for setting "
 							+ key + " (" + val + ")"
@@ -139,11 +272,7 @@ namespace ModConfiguration
 						continue;
 					}
 
-					auto it = parameterSetters.find(key);
-					if (it != parameterSetters.end())
-					{
-						it->second(val);
-					}
+					it->second(val);
 					break;
 				}
 				case Section::ACTIVE_SONGS:
@@ -167,8 +296,185 @@ namespace ModConfiguration
 		return true;
 	}
 
+	bool LoadCustomSongsFromFolder()
+	{
+		Logger logger{ "Custom Songs" };
+
+		Databases::customSongDatabase.clear();
+		customSongStringStorage.clear();
+
+		if (!customSongsEnabled)
+		{
+			return true;
+		}
+
+		if (customSongsFolderPath.empty())
+		{
+			return true;
+		}
+
+		std::error_code ec;
+		const fs::path customSongsFolder = fs::u8path(customSongsFolderPath);
+		if (!fs::exists(customSongsFolder, ec) || !fs::is_directory(customSongsFolder, ec))
+		{
+			logger.Log(
+				"Custom songs folder does not exist or is not a directory: %s",
+				customSongsFolderPath.c_str()
+			);
+			return false;
+		}
+
+		std::vector<fs::directory_entry> audioFiles;
+		for (fs::directory_iterator it(customSongsFolder, ec), end; it != end && !ec; it.increment(ec))
+		{
+			const fs::directory_entry& entry = *it;
+			std::error_code entryEc;
+			if (!entry.is_regular_file(entryEc))
+			{
+				continue;
+			}
+
+			if (IsSupportedCustomAudioExtension(entry.path()))
+			{
+				audioFiles.push_back(entry);
+			}
+		}
+
+		if (ec)
+		{
+			logger.Log(
+				"Failed while scanning custom songs folder %s: %s",
+				customSongsFolderPath.c_str(),
+				ec.message().c_str()
+			);
+			return false;
+		}
+
+		std::sort(
+			audioFiles.begin(),
+			audioFiles.end(),
+			[](const fs::directory_entry& lhs, const fs::directory_entry& rhs)
+			{
+				return PathToLogString(lhs.path().filename())
+					< PathToLogString(rhs.path().filename());
+			}
+		);
+
+		for (const fs::directory_entry& audioFile : audioFiles)
+		{
+			try
+			{
+				const fs::path audioPath = audioFile.path();
+				CustomSongFileNameInfo songInfo = ParseCustomSongFileName(audioPath);
+				if (songInfo.title.empty())
+				{
+					logger.Log("Skipping custom audio with empty title: %s", PathToLogString(audioPath).c_str());
+					continue;
+				}
+
+				if (Databases::songDatabase.find(songInfo.title) != Databases::songDatabase.end())
+				{
+					logger.Log(
+						"Skipping custom song \"%s\" because it conflicts with a built-in song name",
+						songInfo.title.c_str()
+					);
+					continue;
+				}
+
+				if (Databases::customSongDatabase.find(songInfo.title) != Databases::customSongDatabase.end())
+				{
+					logger.Log("Skipping duplicate custom song title: %s", songInfo.title.c_str());
+					continue;
+				}
+
+				fs::path absoluteAudioPath = fs::absolute(audioPath, ec);
+				if (ec)
+				{
+					ec.clear();
+					absoluteAudioPath = audioPath;
+				}
+
+				std::string absoluteAudioPathString;
+				if (!TryPathToUtf8String(absoluteAudioPath, absoluteAudioPathString))
+				{
+					logger.Log("Skipping custom audio with unprintable path: %s", PathToLogString(audioPath).c_str());
+					continue;
+				}
+
+				MusicData data{};
+				data.descriptionID = 0;
+				data.type = MusicType::SONG;
+				data.maxLength = 0;
+				data.name = StoreCustomSongString(songInfo.title);
+				data.artist = StoreCustomSongString(songInfo.artist);
+				data.signature = "";
+				data.customAreaTrack = true;
+				data.customWemPath = StoreCustomSongString(absoluteAudioPathString);
+				data.customMediaId = customAreaMusicOriginalMediaId;
+				data.baseTrackName = customAreaMusicBaseTrackName;
+
+				Databases::customSongDatabase.emplace(songInfo.title, data);
+				activePlaylist.insert(songInfo.title);
+
+				logger.Log(
+					"Loaded custom audio \"%s\" from %s (Area00 source id %u)",
+					songInfo.title.c_str(),
+					absoluteAudioPathString.c_str(),
+					data.customMediaId
+				);
+			}
+			catch (const std::exception& e)
+			{
+				logger.Log(
+					"Skipping custom audio after scan exception for %s: %s",
+					PathToLogString(audioFile.path()).c_str(),
+					e.what()
+				);
+			}
+			catch (...)
+			{
+				logger.Log(
+					"Skipping custom audio after unknown scan exception for %s",
+					PathToLogString(audioFile.path()).c_str()
+				);
+			}
+		}
+
+		logger.Log("Loaded %zu custom songs", Databases::customSongDatabase.size());
+		return true;
+	}
+
+	void BindCustomSongsToAreaTrack(const MusicData& baseTrack)
+	{
+		Logger logger{ "Custom Songs" };
+		if (!baseTrack.address)
+		{
+			logger.Log(
+				"Cannot bind custom songs because base area track \"%s\" has no scanned address",
+				baseTrack.name ? baseTrack.name : customAreaMusicBaseTrackName
+			);
+			return;
+		}
+
+		for (auto& [name, data] : Databases::customSongDatabase)
+		{
+			data.address = baseTrack.address;
+			data.signature = baseTrack.signature;
+			data.exclusiveDC = baseTrack.exclusiveDC;
+			data.active = true;
+			logger.Log(
+				"Bound custom song \"%s\" to area track \"%s\" at %p",
+				name.c_str(),
+				baseTrack.name,
+				reinterpret_cast<void*>(data.address)
+			);
+		}
+	}
+
 	namespace Databases
 	{
+		std::unordered_map<std::string, MusicData> customSongDatabase = {};
+
 		std::unordered_map<std::string, FunctionData> functionDatabase =
 		{
 			// Management functions
@@ -415,7 +721,7 @@ namespace ModConfiguration
 			},
 			{
 				"Don't Be So Serious",
-				{21, MusicType::SONG, 0, "Don't Be So Serious", "Low Roar",
+				{21, MusicType::SONG, 20000, "Don't Be So Serious", "Low Roar",
 				"?? ?? ?? ?? ?? 7F 00 00 C4 BB 56 A4 5F B0 4A C5 A4 28 D8 65 FE 45 73 12"}
 			},
 			{
@@ -514,6 +820,11 @@ namespace ModConfiguration
 				"?? ?? ?? ?? ?? 7F 00 00 08 E1 2B 67 43 59 42 C7 93 DF 5A 7E 98 AF 0B DA"}
 			},
 			{
+				"I'll Keep Coming",
+				{12, MusicType::SONG, 0, "I'll Keep Coming", "Low Roar",
+				"?? ?? ?? ?? ?? 7F 00 00 14 D0 B6 9E C7 40 4C 0E A0 9C FB 04 D1 7C 3B B1"}
+			},
+			{
 				"Half Asleep",
 				{0, MusicType::SONG, 0, "Half Asleep", "Low Roar",
 				"?? ?? ?? ?? ?? 7F 00 00 36 74 BE F1 54 90 40 B9 B5 7C 3D D5 52 8C BF FB"}
@@ -542,6 +853,35 @@ namespace ModConfiguration
 				"BB's Theme",
 				{35, MusicType::SONG, 0, "BB's Theme", "Ludvig Forssell",
 				"?? ?? ?? ?? ?? 7F 00 00 F3 A0 F0 58 1A 9C 42 2F 8D 34 A7 E9 70 3A 45 23"}
+			},
+			{
+				"Yellow Box",
+				{40, MusicType::SONG, 0, "Yellow Box", "The Neighbourhood",
+				"?? ?? ?? ?? ?? 7F 00 00 FA 7F C9 EB 62 AB 43 86 BB F5 E8 A1 50 E3 18 E8"}
+			},
+			{
+				"Ghost",
+				{41, MusicType::SONG, 0, "Ghost", "Alan Walker & Au/Ra",
+				"?? ?? ?? ?? ?? 7F 00 00 2C 4A DD D9 B8 95 42 64 87 33 F5 C1 B9 0E CC F9"}
+			},
+			{"Trigger",
+				{42, MusicType::SONG, 0, "Trigger", "Khalid & Major Lazer",
+				"?? ?? ?? ?? ?? 7F 00 00 0F 7D 12 60 75 31 40 A0 8F A6 05 9A AA 2A 16 5C"}
+			},
+			{
+				"Meanwhile... In Genova",
+				{43, MusicType::SONG, 0, "Meanwhile... In Genova", "The S.L.P.",
+				"?? ?? ?? ?? ?? 7F 00 00 FC 1E B7 F3 84 6A 4D A3 89 84 B7 EB 07 DC 1D 48"}
+			},
+			{
+				"Ludens",
+				{44, MusicType::SONG, 0, "Ludens", "Bring Me The Horizon",
+				"?? ?? ?? ?? ?? 7F 00 00 CC 25 E3 36 66 05 42 88 84 92 14 CB FE B0 2C 8B"}
+			},
+			{
+				"Pop Virus",
+				{50, MusicType::SONG, 0, "Pop Virus", "Gen Hoshino",
+				"?? ?? ?? ?? ?? 7F 00 00 23 A9 DD 3C 14 F4 49 24 BA 14 B4 B0 51 ED C7 E7"}
 			},
 
 			// Director's cut exclusives
