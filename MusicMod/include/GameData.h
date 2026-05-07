@@ -86,7 +86,7 @@ struct LocalizedText
 		{
 			return it->second;
 		}
-		return 0;
+		return textMap.at(TextLanguage::ENGLISH_US); // fallback to English US if not found
 	}
 };
 
@@ -97,6 +97,7 @@ template<>
 struct ScanTarget<MusicData>
 {
 	static const char* GetSignature(const MusicData& data) { return data.signature; }
+	static const char* GetSignatureGP(const MusicData& data) { return data.signature; } // MusicData doesn't have a separate signature for GP
 	static void SetAddress(MusicData& data, uintptr_t address) { data.address = address; }
 };
 

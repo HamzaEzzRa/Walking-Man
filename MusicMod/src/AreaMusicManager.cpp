@@ -82,6 +82,21 @@ namespace
 		return static_cast<uint32_t>(ticks);
 	}
 
+	uint32_t MillisecondsToWwiseTicksAllowZero(long long milliseconds)
+	{
+		return milliseconds <= 0 ? 0 : MillisecondsToWwiseTicks(milliseconds);
+	}
+
+	long long ClampSourceStartOffsetMs(long long sourceStartMs, long long sourceDurationMs)
+	{
+		if (sourceStartMs <= 0 || sourceDurationMs <= 1)
+		{
+			return 0;
+		}
+
+		return (std::min)(sourceStartMs, sourceDurationMs - 1);
+	}
+
 	bool HasMemoryProtection(uintptr_t address, size_t size, DWORD allowedMask)
 	{
 		if (!address || size == 0)
@@ -309,6 +324,11 @@ bool AreaMusicManager::IsTemplateTrack(const MusicData* data)
 			&& data->name
 			&& std::strcmp(data->name, TargetTrackName) == 0
 		);
+}
+
+void AreaMusicManager::SetNextPlaybackStartOffsetMs(long long sourceStartMs)
+{
+	nextPlaybackStartOffsetMs.store((std::max)(0LL, sourceStartMs));
 }
 
 bool AreaMusicManager::DurationControlledByWwise()
@@ -661,9 +681,11 @@ bool AreaMusicManager::PatchAreaMusicHircMetadata(
 	const double sourceDurationMs = patch->durationMs > 0
 		? static_cast<double>(patch->durationMs)
 		: ReadUnaligned<double>(trackBody + musicTrackSourceDurationOffset);
-	// Wwise MusicClip defaults: PlayAt, BeginTrimOffset, and EndTrimOffset are all 0.
+	const double sourceStartMs = static_cast<double>(
+		ClampSourceStartOffsetMs(patch->sourceStartMs, static_cast<long long>(sourceDurationMs))
+	);
 	constexpr double clipPlayAtMs = 0.0;
-	constexpr double beginTrimMs = 0.0;
+	const double beginTrimMs = sourceStartMs;
 	constexpr double endTrimMs = 0.0;
 
 	if (patch->mediaSize > 0)
@@ -687,6 +709,7 @@ bool AreaMusicManager::PatchAreaMusicHircMetadata(
 	double effectiveDurationMs = patch->durationMs > 0
 		? static_cast<double>(patch->durationMs)
 		: originalSegmentDurationMs;
+	effectiveDurationMs -= sourceStartMs;
 	effectiveDurationMs = (std::max)(1.0, effectiveDurationMs);
 
 	WriteUnaligned<double>(segmentBody + musicSegmentDurationOffset, effectiveDurationMs);
@@ -727,7 +750,11 @@ bool AreaMusicManager::FindAreaMusicBankMetadata(const uint8_t* bankData, size_t
 	return false;
 }
 
-bool AreaMusicManager::PatchLiveAreaMusicMetadata(const MusicData* data, long long fallbackDurationMs)
+bool AreaMusicManager::PatchLiveAreaMusicMetadata(
+	const MusicData* data,
+	long long fallbackDurationMs,
+	long long requestedSourceStartMs
+)
 {
 	if (!data || !data->customAreaTrack)
 	{
@@ -747,13 +774,17 @@ bool AreaMusicManager::PatchLiveAreaMusicMetadata(const MusicData* data, long lo
 		return false;
 	}
 
+	const long long sourceStartMs = ClampSourceStartOffsetMs(
+		requestedSourceStartMs,
+		sourceDurationMs
+	);
 	const long long effectiveDurationMs = (std::max)(
 		1LL,
-		sourceDurationMs
+		sourceDurationMs - sourceStartMs
 	);
 	const uint32_t sourceDurationTicks = MillisecondsToWwiseTicks(sourceDurationMs);
 	const uint32_t effectiveDurationTicks = MillisecondsToWwiseTicks(effectiveDurationMs);
-	constexpr uint32_t sourceStartTicks = 0;
+	const uint32_t sourceStartTicks = MillisecondsToWwiseTicksAllowZero(sourceStartMs);
 	const uint32_t mediaId = areaMusicOverrideMediaId;
 	const uint32_t mediaSize = areaMusicOverrideBuffer
 		? static_cast<uint32_t>((std::min)(
@@ -1077,13 +1108,14 @@ bool AreaMusicManager::PatchLiveAreaMusicMetadata(const MusicData* data, long lo
 
 	constexpr const char* logPrefix = "Area Music Metadata";
 	Logging::Write(logPrefix,
-		"Patched live Area00 Wwise music metadata for \"%s\" (media id %u, source %lld ms/%u ticks, effective %lld ms/%u ticks, source start %u ticks, neutral trim fields, sources %u/%u, markers %u/%u, timing entries %u/%u)",
+		"Patched live Area00 Wwise music metadata for \"%s\" (media id %u, source %lld ms/%u ticks, effective %lld ms/%u ticks, source start %lld ms/%u ticks, neutral trim fields, sources %u/%u, markers %u/%u, timing entries %u/%u)",
 		data->name ? data->name : "",
 		mediaId,
 		sourceDurationMs,
 		sourceDurationTicks,
 		effectiveDurationMs,
 		effectiveDurationTicks,
+		sourceStartMs,
 		sourceStartTicks,
 		patchedSourceCount,
 		sourceCount,
@@ -1673,12 +1705,17 @@ bool AreaMusicManager::Register(const MusicData* data)
 		areaMusicOverrideBuffer && areaMusicOverrideBuffer->durationMs > 0
 		? areaMusicOverrideBuffer->durationMs
 		: 0;
+	const long long sourceStartMs = ClampSourceStartOffsetMs(
+		nextPlaybackStartOffsetMs.exchange(0),
+		sourceDurationMs
+	);
 	const bool canPatchMetadata = sourceDurationMs > 0;
 	if (canPatchMetadata)
 	{
 		AreaMusicMetadataPatch patch{};
 		patch.enabled = true;
 		patch.durationMs = sourceDurationMs;
+		patch.sourceStartMs = sourceStartMs;
 		patch.mediaId = areaMusicOverrideMediaId;
 		patch.mediaSize = static_cast<uint32_t>(areaMusicOverrideBuffer->bytes.size());
 		patch.sourcePluginId = areaMusicOverrideBuffer->sourcePluginId;
@@ -1689,7 +1726,8 @@ bool AreaMusicManager::Register(const MusicData* data)
 
 		areaMusicOverrideMetadataPatched = PatchLiveAreaMusicMetadata(
 			data,
-			sourceDurationMs
+			sourceDurationMs,
+			sourceStartMs
 		);
 	}
 	else
@@ -1699,14 +1737,15 @@ bool AreaMusicManager::Register(const MusicData* data)
 	}
 	constexpr const char* metadataLogPrefix = "Area Music Metadata";
 	Logging::Write(metadataLogPrefix,
-		"Area00 live metadata patch %s for \"%s\" (media %zu bytes, source plugin 0x%08x, duration %lld ms, neutral trim fields)",
+		"Area00 live metadata patch %s for \"%s\" (media %zu bytes, source plugin 0x%08x, duration %lld ms, source start %lld ms)",
 		canPatchMetadata
 			? (areaMusicOverrideMetadataPatched ? "applied" : "not applied")
 			: "skipped because source duration is unknown",
 		data->name ? data->name : "",
 		areaMusicOverrideBuffer->bytes.size(),
 		areaMusicOverrideBuffer->sourcePluginId,
-		sourceDurationMs
+		sourceDurationMs,
+		sourceStartMs
 	);
 
 	if (areaMusicOverrideRegistered)

@@ -266,9 +266,10 @@ void ModManager::OnRender()
 			&scanProgress,
 			PAGE_READWRITE,
 			std::chrono::milliseconds(0),
-			false,
+			false,  // reverse = false
 			musicPoolScanStartAddress,
-			musicPoolScanStartAddress + 0x1000000
+			musicPoolScanStartAddress + 0x1000000,
+			false  // mainModuleOnly = false
 		);
 	}
 

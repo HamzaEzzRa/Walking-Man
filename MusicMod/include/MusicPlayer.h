@@ -41,6 +41,12 @@ private:
 	void PlayByName(const std::string&);
 	void StopMusic();
 	static void CancelPendingAreaMusicTransition(const char*);
+	bool PauseCurrentMusicForBlocker(const char*);
+	bool ResumeCurrentMusicForBlocker(const char*);
+	bool RestartCurrentMusicFromSavedPosition(const char*);
+	static bool SetAreaMusicPauseState(bool);
+	static bool HasActiveMusicBlocker();
+	void InstallMusicAddressWatcher();
 	bool QueueAreaMusicTransition(const MusicData*, bool);
 	bool PlaySilenceForAreaMusicTransition();
 	bool ShowMusicDescription(const MusicData*);
@@ -80,10 +86,15 @@ private:
 	inline static const MusicData* currentMusicData = nullptr;
 	inline static std::chrono::time_point<std::chrono::steady_clock> currentMusicStartTime;
 	inline static std::atomic<bool> currentMusicIsPlaying = false;
+	inline static std::atomic<bool> currentMusicPausedByBlocker = false;
+	inline static std::atomic<bool> areaMusicPauseStateActive = false;
 	inline static const MusicData* pendingMusicData = nullptr;
 	inline static bool pendingMusicDisplayDescription = true;
 	inline static bool pendingMusicOverridePrepared = false;
 	inline static std::chrono::time_point<std::chrono::steady_clock> pendingMusicStartTime;
+	inline static std::atomic<bool> btTerritoryBlocksMusic = false;
+	inline static std::atomic<bool> muleTerritoryBlocksMusic = false;
+	inline static std::atomic<bool> chiralNetworkBlocksMusic = false;
 
 	inline static LoopMode loopMode = LoopMode::ALL;
 	uint16_t timeTillAutoplay = 1000; // in ms, time to wait before playing next song automatically

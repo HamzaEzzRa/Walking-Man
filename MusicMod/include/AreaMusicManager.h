@@ -27,6 +27,7 @@ public:
 	static bool Register(const MusicData*);
 	static void Unset();
 	static void RetireBuffer();
+	static void SetNextPlaybackStartOffsetMs(long long);
 	static bool DurationControlledByWwise();
 	static long long GetRegisteredEffectiveDurationMs(const MusicData*);
 
@@ -53,7 +54,7 @@ private:
 	static void* LookupWwiseObjectInTable(uint32_t, int);
 	static void* LookupWwiseObject(uint32_t);
 	static const LiveWwiseOffsets& GetLiveWwiseOffsets();
-	static bool PatchLiveAreaMusicMetadata(const MusicData*, long long);
+	static bool PatchLiveAreaMusicMetadata(const MusicData*, long long, long long);
 	static void RestoreLiveAreaMusicMetadata();
 
 	// Wwise hook
@@ -98,6 +99,7 @@ private:
 	{
 		bool enabled = false;
 		long long durationMs = 0;
+		long long sourceStartMs = 0;
 		uint32_t mediaId = areaMusicOverrideMediaId;
 		uint32_t mediaSize = 0;
 		uint32_t sourcePluginId = areaMusicOverrideSourcePluginId;
@@ -155,6 +157,7 @@ private:
 	inline static std::atomic<uintptr_t> wwiseObjectRegistryAddress{ 0 };
 	inline static std::mutex areaMusicMetadataMutex{};
 	inline static AreaMusicMetadataPatch areaMusicMetadataPatch{};
+	inline static std::atomic<long long> nextPlaybackStartOffsetMs{ 0 };
 	inline static std::vector<AreaMusicBankMemoryView> areaMusicBankMemoryViews{};
 	inline static std::unique_ptr<AreaMusicManagerBuffer> areaMusicOverrideBuffer{};
 	inline static std::vector<std::unique_ptr<AreaMusicManagerBuffer>> retiredAreaMusicManagerBuffers{};

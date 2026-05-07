@@ -212,17 +212,9 @@ namespace ModConfiguration
 			{
 				"WwiseObjectLookup",
 				{"WwiseObjectLookup",
-				"48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 20 8B FA 48 8B F1 "
-				"45 85 C0 75 52 FF 15 ?? ?? ?? ?? 8B 4E 30 85 C9 74 28 48 8B "
-				"5E 28 33 D2 8B C7 F7 F1 48 8B 1C D3 48 85 DB 74 15 0F 1F "
-				"80 00 00 00 00 39 7B 10 74 5D 48 8B 5B 08 48 85 DB 75 F2 "
-				"48 8B CE FF 15 ?? ?? ?? ?? 33 DB 8B C3",
+				"48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 20 8B FA 48 8B F1 45 85 C0",
 				// gp version (same)
-				"48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 20 8B FA 48 8B F1 "
-				"45 85 C0 75 52 FF 15 ?? ?? ?? ?? 8B 4E 30 85 C9 74 28 48 8B "
-				"5E 28 33 D2 8B C7 F7 F1 48 8B 1C D3 48 85 DB 74 15 0F 1F "
-				"80 00 00 00 00 39 7B 10 74 5D 48 8B 5B 08 48 85 DB 75 F2 "
-				"48 8B CE FF 15 ?? ?? ?? ?? 33 DB 8B C3"}
+				"48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 20 8B FA 48 8B F1 45 85 C0"}
 			},
 			{
 				"AccessLanguagePool",
@@ -388,17 +380,11 @@ namespace ModConfiguration
 			{
 				"ShowMusicDescriptionFromText",
 				{"ShowMusicDescriptionFromText",
-				"48 89 5C 24 20 55 56 57 41 54 41 55 41 56 41 57 48 "
-				"8D 6C 24 ?? 48 81 EC 90 00 00 00 48 8B 05 ?? ?? ?? ?? "
-				"48 33 C4 48 89 45 ?? 4C 8B 6D ?? 8B D9 48 8D 4D ?? "
-				"44 89 4D ?? ?? 8B ?? 4D 8B F0 48 8B FA E8 ?? ?? ?? ??",
+				"48 89 5C 24 20 55 56 57 41 54 41 55 41 56 41 57 48 8D 6C 24 ?? 48 "
+				"81 EC 90 00 00 00 48 8B 05 ?? ?? ?? ?? 48 33 C4 48 89 45 ?? 4C",
 				// gp version
 				"4C 8B DC 55 49 8D 6B ?? 48 81 EC ?? ?? ?? ?? 48 8B 05 "
-				"?? ?? ?? ?? 48 33 C4 48 89 45 ?? 49 89 5B ?? 8B D9 "
-				"49 89 7B ?? 48 8D 4D ?? 4D 89 63 ?? 48 8B FA 4C 8B "
-				"65 ?? 4D 89 6B ?? 45 8B E9 4D 89 73 ?? 4D 89 7B ?? "
-				"4D 8B F8 4C 89 65 ?? E8 ?? ?? ?? ?? 48 8B D7 89 5D "
-				"?? 48 8D 4D ?? E8"}
+				"?? ?? ?? ?? 48 33 C4 48 89 45 ?? 49 89 5B ?? 8B D9 "}
 			},
 			{
 				"ShowMusicDescriptionCore",
@@ -593,7 +579,8 @@ namespace ModConfiguration
 				{41, MusicType::SONG, 0, "Ghost", "Alan Walker & Au/Ra",
 				"?? ?? ?? ?? ?? 7F 00 00 2C 4A DD D9 B8 95 42 64 87 33 F5 C1 B9 0E CC F9"}
 			},
-			{"Trigger",
+			{
+				"Trigger",
 				{42, MusicType::SONG, 0, "Trigger", "Khalid & Major Lazer",
 				"?? ?? ?? ?? ?? 7F 00 00 0F 7D 12 60 75 31 40 A0 8F A6 05 9A AA 2A 16 5C"}
 			},
