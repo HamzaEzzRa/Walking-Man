@@ -25,7 +25,7 @@
 // Contains various memory manipulation functions related to hooking or modding
 namespace MemoryUtils
 {
-	static Logger logger{ "MemoryUtils" };
+	static constexpr const char* logPrefix = "MemoryUtils";
 	static constexpr int maskBytes = 0xFFFF;
 	
 	struct HookInformation
@@ -177,7 +177,7 @@ namespace MemoryUtils
 
 	static void ShowErrorPopup(std::string error, std::string title="")
 	{
-		logger.Log("Raised error: %s", error.c_str());
+		Logging::Write(logPrefix, "Raised error: %s", error.c_str());
 		if (title.empty())
 		{
 			title = GetCurrentModuleName();
@@ -203,7 +203,7 @@ namespace MemoryUtils
 			}
 			patternString.append(byte + " ");
 		}
-		logger.Log("Pattern: %s", patternString.c_str());
+		Logging::Write(logPrefix, "Pattern: %s", patternString.c_str());
 	}
 
 	static void ParseHexString(const std::string& pattern, std::vector<uint8_t>& bytes, std::vector<bool>& mask)
@@ -246,7 +246,7 @@ namespace MemoryUtils
 					pattern.push_back(byteValue);
 				}
 				catch (...) {
-					logger.Log("Error parsing pattern at: %s", byte.c_str());
+					Logging::Write(logPrefix, "Error parsing pattern at: %s", byte.c_str());
 				}
 			}
 		}
@@ -267,7 +267,7 @@ namespace MemoryUtils
 			if (isReadable) {
 				uint8_t* region = reinterpret_cast<uint8_t*>(memoryInfo.BaseAddress);
 				size_t regionSize = memoryInfo.RegionSize;
-				logger.Log("Scanning: %p - %p", memoryInfo.BaseAddress,
+				Logging::Write(logPrefix, "Scanning: %p - %p", memoryInfo.BaseAddress,
 					(void*)((uintptr_t)memoryInfo.BaseAddress + memoryInfo.RegionSize));
 
 				uint8_t* regionStartPtr = reinterpret_cast<uint8_t*>(memoryInfo.BaseAddress);
@@ -284,7 +284,7 @@ namespace MemoryUtils
 
 				if (it != (regionEndPtr - pattern.size())) {
 					uintptr_t foundAddr = reinterpret_cast<uintptr_t>(it);
-					logger.Log("Found signature at: %p", (void*)foundAddr);
+					Logging::Write(logPrefix, "Found signature at: %p", (void*)foundAddr);
 					return foundAddr;
 				}
 			}
@@ -292,7 +292,7 @@ namespace MemoryUtils
 			numRegionsChecked++;
 		}
 
-		logger.Log("Signature not found after scanning %d regions.", numRegionsChecked);
+		Logging::Write(logPrefix, "Signature not found after scanning %d regions.", numRegionsChecked);
 		ShowErrorPopup("Could not find signature!");
 		return 0;
 	}
@@ -311,7 +311,7 @@ namespace MemoryUtils
 					pattern.push_back(byteValue);
 				}
 				catch (...) {
-					logger.Log("Error parsing pattern at: %s", byte.c_str());
+					Logging::Write(logPrefix, "Error parsing pattern at: %s", byte.c_str());
 				}
 			}
 		}
@@ -333,7 +333,7 @@ namespace MemoryUtils
 			if (isReadable) {
 				uint8_t* region = reinterpret_cast<uint8_t*>(memoryInfo.BaseAddress);
 				size_t regionSize = memoryInfo.RegionSize;
-				/*logger.Log("Scanning: %p - %p", memoryInfo.BaseAddress,
+				/*Logging::Write(logPrefix, "Scanning: %p - %p", memoryInfo.BaseAddress,
 					(void*)((uintptr_t)memoryInfo.BaseAddress + memoryInfo.RegionSize));*/
 
 				for (size_t offset = 0; offset < regionSize - pattern.size(); ++offset) {
@@ -349,7 +349,7 @@ namespace MemoryUtils
 
 					if (matched) {
 						uintptr_t addr = reinterpret_cast<uintptr_t>(region + offset);
-						logger.Log("Found signature at: %p", addr);
+						Logging::Write(logPrefix, "Found signature at: %p", addr);
 						matches.push_back(addr);
 					}
 				}
@@ -359,7 +359,7 @@ namespace MemoryUtils
 		}
 
 		if (matches.empty()) {
-			logger.Log("Signature not found after scanning %d regions.", numRegionsChecked);
+			Logging::Write(logPrefix, "Signature not found after scanning %d regions.", numRegionsChecked);
 			ShowErrorPopup("Could not find signature!");
 		}
 
@@ -373,11 +373,11 @@ namespace MemoryUtils
 
 		if (memoryAddress == NULL)
 		{
-			logger.Log("Failed to allocate %i bytes of memory", numBytes);
+			Logging::Write(logPrefix, "Failed to allocate %i bytes of memory", numBytes);
 		}
 		else
 		{
-			logger.Log("Allocated %i bytes of memory at %p", numBytes, memoryAddress);
+			Logging::Write(logPrefix, "Allocated %i bytes of memory at %p", numBytes, memoryAddress);
 			MemSet(memoryAddress, 0x90, numBytes);
 		}
 
@@ -420,7 +420,7 @@ namespace MemoryUtils
 
 		if (memoryAddress == NULL)
 		{
-			logger.Log(
+			Logging::Write(logPrefix, 
 				"Failed to allocate %i bytes of memory. Origin: %p, lower: %p, higher: %p, attempts: %i", 
 				numBytes,
 				origin,
@@ -430,7 +430,7 @@ namespace MemoryUtils
 		}
 		else
 		{
-			logger.Log("Allocated %i bytes of memory at %p", numBytes, memoryAddress);
+			Logging::Write(logPrefix, "Allocated %i bytes of memory at %p", numBytes, memoryAddress);
 			MemSet(memoryAddress, 0x90, numBytes);
 		}
 
@@ -506,7 +506,7 @@ namespace MemoryUtils
 
 			if (instructionSize <= 0)
 			{
-				logger.Log("Instruction invalid, could not check length!");
+				Logging::Write(logPrefix, "Instruction invalid, could not check length!");
 				return minimumClearance;
 			}
 
@@ -560,7 +560,7 @@ namespace MemoryUtils
 		unsigned char absoluteJumpBytes[6] = { 0xff, 0x25, 0x00, 0x00, 0x00, 0x00};
 		MemCopy(address, (uintptr_t)&absoluteJumpBytes[0], 6);
 		MemCopy(address + 6, (uintptr_t)&destinationAddress, 8);
-		logger.Log("Created absolute jump from %p to %p with a clearance of %i", address, destinationAddress, clearance);
+		Logging::Write(logPrefix, "Created absolute jump from %p to %p with a clearance of %i", address, destinationAddress, clearance);
 	}
 
 	// Places a 5-byte relatively addressed jump from A to B. 
@@ -572,7 +572,7 @@ namespace MemoryUtils
 		MemCopy(address, (uintptr_t)&relativeJumpBytes[0], 5);
 		int32_t relativeAddress = CalculateRelativeDisplacementForRelativeJump(address, destinationAddress);
 		MemCopy((address + 1), (uintptr_t)&relativeAddress, 4);
-		logger.Log("Created relative jump from %p to %p with a clearance of %i", address, destinationAddress, clearance);
+		Logging::Write(logPrefix, "Created relative jump from %p to %p with a clearance of %i", address, destinationAddress, clearance);
 	}
 
 	static std::string ConvertVectorOfBytesToStringOfHex(std::vector<uint8_t> bytes)
@@ -594,14 +594,14 @@ namespace MemoryUtils
 		std::vector<uint8_t> bytesBuffer(numBytes, 0x90);
 		MemCopy((uintptr_t)&bytesBuffer[0], address, bytesBuffer.size());
 		std::string hexString = ConvertVectorOfBytesToStringOfHex(bytesBuffer);
-		logger.Log("Bytes: %s", hexString.c_str());
+		Logging::Write(logPrefix, "Bytes: %s", hexString.c_str());
 	}
 
 	// Place a trampoline hook from A to B while taking third-party hooks into consideration.
 	// Add extra clearance when the jump doesn't fit cleanly.
 	static void PlaceHook(uintptr_t addressToHook, uintptr_t destinationAddress, uintptr_t* returnAddress)
 	{
-		logger.Log("Hooking...");
+		Logging::Write(logPrefix, "Hooking...");
 
 		// Most overlays don't care if we overwrite the 0xE9 jump and place it somewhere else, but MSI Afterburner does.
 		// So instead of overwriting jumps we follow them and place our jump at the final destination.
@@ -683,7 +683,7 @@ namespace MemoryUtils
 				hookedAddress, 
 				(uintptr_t)&InfoBufferForHookedAddresses[hookedAddress].originalBytes[0], 
 				InfoBufferForHookedAddresses[hookedAddress].originalBytes.size());
-			logger.Log("Removed hook from %p", hookedAddress);
+			Logging::Write(logPrefix, "Removed hook from %p", hookedAddress);
 		}
 	}
 
@@ -744,7 +744,7 @@ namespace MemoryUtils
 	{
 		std::vector<uint8_t> buffer(size);
 		if (!IsReadablePointer((void*)address, size)) {
-			logger.Log("Memory at %p is not readable", address);
+			Logging::Write(logPrefix, "Memory at %p is not readable", address);
 			return buffer;
 		}
 
@@ -753,14 +753,14 @@ namespace MemoryUtils
 	}
 
 	static void DumpMemoryRecursive(void* basePtr, size_t size = 0x40, int depth = 0, int maxDepth = 2) {
-		Logger logger("Memory Dump");
+		constexpr const char* logPrefix = "Memory Dump";
 
 		if (!basePtr || depth > maxDepth) return;
 
 		MEMORY_BASIC_INFORMATION mbi{};
 		if (!VirtualQuery(basePtr, &mbi, sizeof(mbi)) || mbi.State != MEM_COMMIT || !(mbi.Protect & (PAGE_READWRITE | PAGE_READONLY)))
 		{
-			logger.Log("%*sMemory at %p not readable or not committed", depth * 2, "", basePtr);
+			Logging::Write(logPrefix, "%*sMemory at %p not readable or not committed", depth * 2, "", basePtr);
 			return;
 		}
 
@@ -768,7 +768,7 @@ namespace MemoryUtils
 
 		for (size_t offset = 0; offset < size; offset += 4) {
 			if (!IsReadablePointer(data + offset, 4)) {
-				logger.Log("%*s[0x%02X] Not readable", depth * 2, "", (int)offset);
+				Logging::Write(logPrefix, "%*s[0x%02X] Not readable", depth * 2, "", (int)offset);
 				continue;
 			}
 
@@ -776,11 +776,11 @@ namespace MemoryUtils
 			float asFloat = *reinterpret_cast<float*>(&raw);
 			void* asPtr = reinterpret_cast<void*>(raw);
 
-			logger.Log("%*s[0x%02X] Int: %10u | Float: %10.4f | Ptr: %p", depth * 2, "", (int)offset, raw, asFloat, asPtr);
+			Logging::Write(logPrefix, "%*s[0x%02X] Int: %10u | Float: %10.4f | Ptr: %p", depth * 2, "", (int)offset, raw, asFloat, asPtr);
 
 			// Check for possible string
 			if (raw > 0x10000 && raw < 0x7FFFFFFFFFFF && IsReadablePointer(asPtr, 8) && isprint(((char*)asPtr)[0])) {
-				logger.Log("%*s↳ Possible string: \"%.8s\"", depth * 2, "", (char*)asPtr);
+				Logging::Write(logPrefix, "%*s↳ Possible string: \"%.8s\"", depth * 2, "", (char*)asPtr);
 			}
 
 			// Recursively dump
@@ -789,7 +789,7 @@ namespace MemoryUtils
 				if (VirtualQuery(asPtr, &innerMbi, sizeof(innerMbi)) &&
 					innerMbi.State == MEM_COMMIT &&
 					(innerMbi.Protect & (PAGE_READWRITE | PAGE_READONLY))) {
-					logger.Log("%*s↳ Recursing into pointer at offset 0x%02X", depth * 2, "", (int)offset);
+					Logging::Write(logPrefix, "%*s↳ Recursing into pointer at offset 0x%02X", depth * 2, "", (int)offset);
 					DumpMemoryRecursive(asPtr, size, depth + 1, maxDepth);
 				}
 			}
@@ -804,13 +804,13 @@ namespace MemoryUtils
 		int depth = 0,
 		int maxDepth = 2
 	) {
-		Logger logger("Memory Dump");
+		constexpr const char* logPrefix = "Memory Dump";
 
 		if (!basePtr || depth > maxDepth) return;
 
 		MEMORY_BASIC_INFORMATION mbi{};
 		if (!VirtualQuery(basePtr, &mbi, sizeof(mbi)) || mbi.State != MEM_COMMIT || !(mbi.Protect & (PAGE_READWRITE | PAGE_READONLY))) {
-			logger.Log("%*sMemory at %p not readable or not committed", depth * 2, "", basePtr);
+			Logging::Write(logPrefix, "%*sMemory at %p not readable or not committed", depth * 2, "", basePtr);
 			return;
 		}
 
@@ -818,7 +818,7 @@ namespace MemoryUtils
 
 		for (size_t offset = 0; offset < size; offset += 4) {
 			if (!IsReadablePointer(data + offset, 4)) {
-				logger.Log("%*s[0x%02X] Not readable", depth * 2, "", (int)offset);
+				Logging::Write(logPrefix, "%*s[0x%02X] Not readable", depth * 2, "", (int)offset);
 				continue;
 			}
 
@@ -826,7 +826,7 @@ namespace MemoryUtils
 			float asFloat = *reinterpret_cast<float*>(&raw);
 			void* asPtr = reinterpret_cast<void*>(raw);
 
-			logger.Log("%*s[0x%02X] Int: %10u | Float: %10.4f | Ptr: %p", depth * 2, "", (int)offset, raw, asFloat, asPtr);
+			Logging::Write(logPrefix, "%*s[0x%02X] Int: %10u | Float: %10.4f | Ptr: %p", depth * 2, "", (int)offset, raw, asFloat, asPtr);
 
 			// Store values in output only at top level (or modify logic if you want deep recursion saved too)
 			if (depth == 0) {
@@ -835,7 +835,7 @@ namespace MemoryUtils
 			}
 
 			if (raw > 0x10000 && raw < 0x7FFFFFFFFFFF && IsReadablePointer(asPtr, 8) && isprint(((char*)asPtr)[0])) {
-				logger.Log("%*s↳ Possible string: \"%.8s\"", depth * 2, "", (char*)asPtr);
+				Logging::Write(logPrefix, "%*s↳ Possible string: \"%.8s\"", depth * 2, "", (char*)asPtr);
 			}
 
 			// Recursion
@@ -844,7 +844,7 @@ namespace MemoryUtils
 				if (VirtualQuery(asPtr, &innerMbi, sizeof(innerMbi)) &&
 					innerMbi.State == MEM_COMMIT &&
 					(innerMbi.Protect & (PAGE_READWRITE | PAGE_READONLY))) {
-					logger.Log("%*s↳ Recursing into pointer at offset 0x%02X", depth * 2, "", (int)offset);
+					Logging::Write(logPrefix, "%*s↳ Recursing into pointer at offset 0x%02X", depth * 2, "", (int)offset);
 					DumpMemoryRecursive(asPtr, outOffsets, outValues, size, depth + 1, maxDepth);
 				}
 			}
@@ -853,7 +853,7 @@ namespace MemoryUtils
 
 	static std::string FindCommonPattern(const std::vector<void*>& addresses, size_t length) {
 		if (addresses.empty()) return "";
-		Logger logger{ "Pattern Finder" };
+		constexpr const char* logPrefix = "Pattern Finder";
 
 		std::ostringstream oss;
 		const uint8_t* base = reinterpret_cast<const uint8_t*>(addresses[0]);
@@ -877,7 +877,7 @@ namespace MemoryUtils
 		}
 
 		std::string pattern = oss.str();
-		logger.Log("Common pattern: %s", pattern.c_str());
+		Logging::Write(logPrefix, "Common pattern: %s", pattern.c_str());
 		return pattern;
 	}
 }

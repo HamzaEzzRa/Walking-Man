@@ -30,12 +30,12 @@ void InputTracker::OnScanDone()
 		"ProcessControllerInput",
 		reinterpret_cast<void*>(&InputTracker::ProcessControllerInputHook)
 	);
-	logger.Log(
+	Logging::Write(logPrefix, 
 		"ProcessControllerInput function hook %s",
 		hookResult ? "installed successfully" : "failed"
 	);
 
-	logger.Log("Setup complete");
+	Logging::Write(logPrefix, "Setup complete");
 }
 
 void InputTracker::OnRender()
@@ -46,11 +46,11 @@ void InputTracker::OnRender()
 
 void InputTracker::ProcessControllerInputHook(void* arg1, void* arg2, void* arg3, void* arg4)
 {
-	Logger logger("Process Controller Input Hook");
+	constexpr const char* logPrefix = "Process Controller Input Hook";
 	const FunctionData* funcData = ModManager::GetFunctionData("ProcessControllerInput");
 	if (!funcData || !funcData->originalFunction)
 	{
-		logger.Log("Original ProcessControllerInput function was not hooked, cannot call it");
+		Logging::Write(logPrefix, "Original ProcessControllerInput function was not hooked, cannot call it");
 		return;
 	}
 	reinterpret_cast<GenericFunction_t>(funcData->originalFunction)(arg1, arg2, arg3, arg4);
@@ -61,7 +61,7 @@ void InputTracker::ProcessControllerInputHook(void* arg1, void* arg2, void* arg3
 		if (!controllerInputMaskAddress)
 		{
 			controllerInputMaskAddress = newAddress;
-			logger.Log(
+			Logging::Write(logPrefix, 
 				"Controller input mask address: %p",
 				(void*)newAddress
 			);

@@ -46,8 +46,8 @@ void BreakpointWatcher::Install(
                             ctx.Dr7 |= (0b11 << 16);     // Read/Write
                             ctx.Dr7 |= (0b10 << 18);     // 8-byte watch
                             if (SetThreadContext(hThread, &ctx)) {
-                                /*Logger logger("Breakpoint Watcher");
-                                logger.Log("Dr0 set on thread %lu", te.th32ThreadID);*/
+                                /*constexpr const char* logPrefix = "Breakpoint Watcher";
+                                Logging::Write(logPrefix, "Dr0 set on thread %lu", te.th32ThreadID);*/
                             }
                             threadHandles_.push_back(hThread); // Store it for cleanup
                         }
@@ -61,8 +61,8 @@ void BreakpointWatcher::Install(
         CloseHandle(snapshot);
     }
 
-    Logger logger("Breakpoint Watcher");
-    logger.Log(
+    constexpr const char* logPrefix = "Breakpoint Watcher";
+    Logging::Write(logPrefix, 
         "Installed breakpoint watcher at %p, matching access from %p",
         (void*)watchAddr_, (void*)accessInstructionAddr_
     );
@@ -74,8 +74,8 @@ void BreakpointWatcher::Install(
 
             auto now = std::chrono::steady_clock::now();
             if (now - lastAccessTime_.load() > std::chrono::milliseconds(timeoutMs_)) {
-                Logger logger("Breakpoint Watcher");
-                logger.Log("Access timeout triggered for %p", (void*)watchAddr_);
+                constexpr const char* logPrefix = "Breakpoint Watcher";
+                Logging::Write(logPrefix, "Access timeout triggered for %p", (void*)watchAddr_);
                 active_ = false;
                 if (onStop_) onStop_();
                 break;
@@ -121,14 +121,14 @@ LONG CALLBACK BreakpointWatcher::ExceptionHandler(PEXCEPTION_POINTERS info) {
     for (auto* watcher : watchers_) {
         if (!watcher->active_)
         {
-			/*Logger logger("Breakpoint Watcher");
-			logger.Log("Watcher at %p is inactive, skipping", (void*)watcher->watchAddr_);*/
+			/*constexpr const char* logPrefix = "Breakpoint Watcher";
+			Logging::Write(logPrefix, "Watcher at %p is inactive, skipping", (void*)watcher->watchAddr_);*/
             continue;
         }
 
         if (ip - watcher->accessInstructionLength_ == watcher->accessInstructionAddr_) {
-            /*Logger logger("Breakpoint Watcher");
-            logger.Log("Detected access from address %p", (void*)ip);*/
+            /*constexpr const char* logPrefix = "Breakpoint Watcher";
+            Logging::Write(logPrefix, "Detected access from address %p", (void*)ip);*/
             watcher->lastAccessTime_ = std::chrono::steady_clock::now();
             watcher->accessSeen_ = true;
             if (watcher->onAccess_) watcher->onAccess_();

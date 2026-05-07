@@ -4,6 +4,12 @@
 * text=auto
 
 ###############################################################################
+# Keep C++ source/header files CRLF in the working tree.
+###############################################################################
+*.cpp text eol=crlf
+*.h text eol=crlf
+
+###############################################################################
 # Set default behavior for command prompt diff.
 #
 # This is need for earlier builds of msysgit that does not have it on by

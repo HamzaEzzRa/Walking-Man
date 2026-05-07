@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -78,7 +78,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
     <TargetName>dxgi</TargetName>
-    <IncludePath>$(SolutionDir)tsl\include;$(SolutionDir)MinHook\include;$(SolutionDir)MusicMod\include;$(VC_IncludePath);$(WindowsSDK_IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir)tsl\include;$(SolutionDir)MinHook\include;$(SolutionDir)MusicMod\include;$(SolutionDir)DllWrapper\include;$(VC_IncludePath);$(WindowsSDK_IncludePath)</IncludePath>
     <SourcePath>$(VC_SourcePath);</SourcePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -205,7 +205,7 @@ COPY "$(SolutionDir)walkingman.local.ini" "C:\XboxGames\DSDC\Content\walkingman.
     <ClInclude Include="..\MinHook\src\hde\table32.h" />
     <ClInclude Include="..\MinHook\src\hde\table64.h" />
     <ClInclude Include="..\MinHook\src\trampoline.h" />
-    <ClInclude Include="..\MusicMod\include\AreaMusicOverride.h" />
+    <ClInclude Include="..\MusicMod\include\AreaMusicManager.h" />
     <ClInclude Include="..\MusicMod\include\AudioDecoder.h" />
     <ClInclude Include="..\MusicMod\include\FunctionHook.h" />
     <ClInclude Include="..\MusicMod\include\GameData.h" />
@@ -215,6 +215,7 @@ COPY "$(SolutionDir)walkingman.local.ini" "C:\XboxGames\DSDC\Content\walkingman.
     <ClInclude Include="..\MusicMod\include\InputTracker.h" />
     <ClInclude Include="..\MusicMod\include\BreakpointWatcher.h" />
     <ClInclude Include="..\MusicMod\include\LanguageManager.h" />
+    <ClInclude Include="..\MusicMod\include\CustomMediaLoader.h" />
     <ClInclude Include="..\MusicMod\include\MemoryWatcher.h" />
     <ClInclude Include="..\MusicMod\include\ModConfiguration.h" />
     <ClInclude Include="..\MusicMod\include\ModEvents.h" />
@@ -239,12 +240,13 @@ COPY "$(SolutionDir)walkingman.local.ini" "C:\XboxGames\DSDC\Content\walkingman.
     <ClCompile Include="..\MinHook\src\hde\hde64.c" />
     <ClCompile Include="..\MinHook\src\hook.c" />
     <ClCompile Include="..\MinHook\src\trampoline.c" />
-    <ClCompile Include="..\MusicMod\src\AreaMusicOverride.cpp" />
+    <ClCompile Include="..\MusicMod\src\AreaMusicManager.cpp" />
     <ClCompile Include="..\MusicMod\src\AudioDecoder.cpp" />
     <ClCompile Include="..\MusicMod\src\GameStateManager.cpp" />
     <ClCompile Include="..\MusicMod\src\InputTracker.cpp" />
     <ClCompile Include="..\MusicMod\src\BreakpointWatcher.cpp" />
     <ClCompile Include="..\MusicMod\src\LanguageManager.cpp" />
+    <ClCompile Include="..\MusicMod\src\CustomMediaLoader.cpp" />
     <ClCompile Include="..\MusicMod\src\MemoryWatcher.cpp" />
     <ClCompile Include="..\MusicMod\src\ModConfiguration.cpp" />
     <ClCompile Include="..\MusicMod\src\ModManager.cpp" />

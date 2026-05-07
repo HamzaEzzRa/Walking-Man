@@ -27,7 +27,7 @@ private:
 	static void AccessLanguagePoolHook(void*, void*, void*, void*);
 
 private:
-	Logger logger{ "Language Manager" };
+		inline static constexpr const char* logPrefix = "Language Manager";
 
 	inline static uintptr_t textLanguageIdStandardOffset = 0x80;
 	inline static uintptr_t textLanguageIdDCOffset = 0xB0;

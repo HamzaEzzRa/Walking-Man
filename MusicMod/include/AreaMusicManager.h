@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -7,12 +8,18 @@
 #include <string>
 #include <vector>
 
+#include "IEventListener.h"
+
 struct MusicData;
 
-class AreaMusicOverride
+class AreaMusicManager : public IEventListener
 {
 public:
 	inline static constexpr const char* TargetTrackName = "Don't Be So Serious";
+
+	AreaMusicManager();
+
+	void OnEvent(const ModEvent&) override;
 
 	static void Initialize();
 	static bool UsesOverride(const MusicData*);
@@ -25,30 +32,35 @@ public:
 
 private:
 	struct AreaMusicMetadataPatch;
+	struct LiveWwiseOffsets;
 
-	static uint32_t GetAreaMusicOverrideMediaId(const MusicData*);
-	static const char* GetAreaMusicOverridePath(const MusicData*);
-	static long long GetRegisteredSourceDurationMs(const MusicData*);
-	static long long CalculateEffectiveDurationMs(long long, const MusicData*);
+	// Registration and media lifecycle
 	static bool ResolveWwiseMediaFunctions();
-	static bool LoadAreaMusicOverride(const char*);
+	static bool LoadAreaMusicManager(const char*);
 	static void ClearAreaMusicMetadataPatch();
-	static void PrepareAreaMusicMetadataPatch(const MusicData*, uint32_t, uint32_t, long long);
+
+	// Wwise bank metadata
 	static bool FindAreaMusicBankMetadata(const uint8_t*, size_t);
 	static bool PatchAreaMusicHircMetadata(uint8_t*, size_t, const AreaMusicMetadataPatch*);
-	static bool PatchAreaMusicBankMetadata(uint8_t*, size_t);
-	static bool PatchLiveAreaMusicMetadata(const MusicData*, long long);
-	static void RestoreLiveAreaMusicMetadata();
-	static bool PatchKnownAreaMusicBankMetadata();
-	static bool PatchProcessAreaMusicBankMetadata();
 	static bool ReloadAreaMusicBankMetadata(bool);
 	static void RememberAreaMusicBankMemory(const void*, size_t, uint32_t, const char*);
-	static void BackupAreaMusicBankMetadataBytes(uint8_t*, size_t, const std::vector<uint8_t>&);
-	static void BackupAreaMusicBankMetadata(uint8_t*, size_t);
 	static void RestoreAreaMusicBankMetadata();
+
+	// Live Wwise object metadata
+	static bool InstallWwiseObjectLookupHook();
+	static void CaptureWwiseObjectRegistry(void*);
+	static void* __cdecl WwiseObjectLookupHook(void*, uint32_t, int);
+	static void* LookupWwiseObjectInTable(uint32_t, int);
+	static void* LookupWwiseObject(uint32_t);
+	static const LiveWwiseOffsets& GetLiveWwiseOffsets();
+	static bool PatchLiveAreaMusicMetadata(const MusicData*, long long);
+	static void RestoreLiveAreaMusicMetadata();
+
+	// Wwise hook
 	static uint32_t __cdecl LoadBankMemoryCopyHook(const void*, unsigned long, unsigned long*);
 	static uint32_t __cdecl LoadBankMemoryViewHook(const void*, unsigned long, unsigned long*);
 
+private:
 	struct AkSourceSettings
 	{
 		uint32_t sourceId = 0;
@@ -62,6 +74,7 @@ private:
 	using AkUnsetMediaFn = uint32_t(__cdecl*)(AkSourceSettings*, unsigned long);
 	using AkLoadBankMemoryFn = uint32_t(__cdecl*)(const void*, unsigned long, unsigned long*);
 	using AkUnloadBankMemoryFn = uint32_t(__cdecl*)(uint32_t, const void*);
+	using WwiseObjectLookupFn = void* (__cdecl*)(void*, uint32_t, int);
 
 	inline static constexpr uint32_t akSuccess = 1;
 	inline static constexpr uint32_t areaMusicOverrideMediaId = 14330364;
@@ -90,7 +103,7 @@ private:
 		uint32_t sourcePluginId = areaMusicOverrideSourcePluginId;
 	};
 
-	struct AreaMusicOverrideBuffer
+	struct AreaMusicManagerBuffer
 	{
 		std::string path{};
 		std::vector<uint8_t> bytes{};
@@ -107,13 +120,6 @@ private:
 		bool loadedPatched = false;
 		std::vector<uint8_t> originalBytes{};
 		std::shared_ptr<std::vector<uint8_t>> ownedBytes{};
-	};
-
-	struct AreaMusicBankMetadataBackup
-	{
-		uint8_t* data = nullptr;
-		size_t size = 0;
-		std::vector<uint8_t> bytes{};
 	};
 
 	struct LiveAreaMusicMemoryBackup
@@ -144,13 +150,14 @@ private:
 	inline static AkUnloadBankMemoryFn unloadBankMemoryFunc = nullptr;
 	inline static AkLoadBankMemoryFn originalLoadBankMemoryCopyFunc = nullptr;
 	inline static AkLoadBankMemoryFn originalLoadBankMemoryViewFunc = nullptr;
+	inline static bool wwiseObjectLookupHookInitialized = false;
+	inline static WwiseObjectLookupFn originalWwiseObjectLookupFunc = nullptr;
+	inline static std::atomic<uintptr_t> wwiseObjectRegistryAddress{ 0 };
 	inline static std::mutex areaMusicMetadataMutex{};
 	inline static AreaMusicMetadataPatch areaMusicMetadataPatch{};
-	inline static std::vector<std::unique_ptr<std::vector<uint8_t>>> patchedBankViews{};
 	inline static std::vector<AreaMusicBankMemoryView> areaMusicBankMemoryViews{};
-	inline static std::vector<AreaMusicBankMetadataBackup> areaMusicBankMetadataBackups{};
-	inline static std::unique_ptr<AreaMusicOverrideBuffer> areaMusicOverrideBuffer{};
-	inline static std::vector<std::unique_ptr<AreaMusicOverrideBuffer>> retiredAreaMusicOverrideBuffers{};
+	inline static std::unique_ptr<AreaMusicManagerBuffer> areaMusicOverrideBuffer{};
+	inline static std::vector<std::unique_ptr<AreaMusicManagerBuffer>> retiredAreaMusicManagerBuffers{};
 	inline static LiveAreaMusicMetadataBackup liveAreaMusicMetadataBackup{};
 	inline static uint32_t areaMusicOverrideRegisteredMediaId = 0;
 	inline static bool areaMusicOverrideRegistered = false;

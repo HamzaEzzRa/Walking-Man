@@ -60,7 +60,7 @@ private:
 		COUNT // Just for size, not a valid mode
 	};
 
-	Logger logger = Logger("Music Player");
+	inline static constexpr const char* logPrefix = "Music Player";
 
 	inline static PlaybackQueue<const MusicData*> songQueue{};
 
@@ -86,11 +86,9 @@ private:
 
 	inline static LoopMode loopMode = LoopMode::ALL;
 	uint16_t timeTillAutoplay = 1000; // in ms, time to wait before playing next song automatically
-	inline static constexpr uint16_t areaMusicRestartDelayMs = 750;
-	inline static constexpr uint16_t areaMusicPreparedStartDelayMs = 250;
 
 	inline static uintptr_t playingLoopAddress = 0;
-	
+
 	// Tracks playing loop instruction that accesses currentMusicAddress (+0x08 to be exact), helps detect song end
 	std::unique_ptr<BreakpointWatcher> musicAddressWatcher;
 	inline static uint8_t musicAddressAccessOffset = 0x08;

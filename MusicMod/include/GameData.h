@@ -63,8 +63,6 @@ struct MusicData
 	bool active = false;
 	bool customAreaTrack = false;
 	const char* customWemPath = nullptr;
-	uint32_t customMediaId = 0;
-	const char* baseTrackName = nullptr;
 };
 
 struct FunctionData

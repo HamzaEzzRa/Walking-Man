@@ -1,4 +1,4 @@
-#include "AreaMusicOverride.h"
+#include "AreaMusicManager.h"
 
 #include <algorithm>
 #include <cstring>
@@ -11,6 +11,8 @@
 #include "GameData.h"
 #include "Logger.h"
 #include "MinHook.h"
+#include "ModConfiguration.h"
+#include "ModManager.h"
 
 namespace
 {
@@ -39,22 +41,13 @@ namespace
 	constexpr size_t musicSegmentEndMarkerOffset = 0x66;
 	constexpr size_t musicSegmentPostMarkerDurationOffset = 0x7f;
 
-	constexpr uintptr_t wwiseObjectRegistryRva = 0x7e9b5d8;
-	constexpr uintptr_t wwiseLookupObjectRva = 0x3a37b60;
+	constexpr const char* wwiseObjectLookupFunctionName = "WwiseObjectLookup";
 	constexpr size_t wwiseObjectReleaseVtableOffset = 0x10;
-	constexpr size_t liveSegmentMarkerArrayOffset = 0x110;
-	constexpr size_t liveSegmentMarkerCountOffset = 0x118;
-	constexpr size_t liveSegmentDurationOffset = 0x120;
 	constexpr size_t liveSegmentMarkerStride = 0x10;
 	constexpr size_t liveSegmentMarkerPositionOffset = 0x04;
-	constexpr size_t liveTrackSourceArrayOffset = 0xd8;
-	constexpr size_t liveTrackSourceCountOffset = 0xe0;
 	constexpr size_t liveTrackSourceStride = 0x10;
 	constexpr size_t liveTrackSourceObjectOffset = 0x08;
 	constexpr size_t liveTrackSourceObjectSize = 0x28;
-	constexpr size_t liveTrackTimingArrayOffset = 0x100;
-	constexpr size_t liveTrackTimingCountOffset = 0x108;
-	constexpr size_t liveTrackSourceDurationOffset = 0x110;
 	constexpr size_t liveTrackTimingStride = 0x1c;
 	constexpr uint32_t wwiseTicksPerMillisecond = 48;
 
@@ -87,17 +80,6 @@ namespace
 		}
 
 		return static_cast<uint32_t>(ticks);
-	}
-
-	uintptr_t MainModuleAddress(uintptr_t rva)
-	{
-		HMODULE module = GetModuleHandleA(nullptr);
-		if (!module)
-		{
-			return 0;
-		}
-
-		return reinterpret_cast<uintptr_t>(module) + rva;
 	}
 
 	bool HasMemoryProtection(uintptr_t address, size_t size, DWORD allowedMask)
@@ -236,8 +218,8 @@ namespace
 			uint32_t exceptionCode = 0;
 			if (!CallWwiseReleaseNoUnwind(object, reinterpret_cast<uintptr_t>(release), &exceptionCode))
 			{
-				Logger logger("Area Music Metadata");
-				logger.Log(
+				constexpr const char* logPrefix = "Area Music Metadata";
+				Logging::Write(logPrefix,
 					"Wwise object release raised exception 0x%08x for object %p",
 					exceptionCode,
 					object
@@ -246,74 +228,80 @@ namespace
 		}
 	}
 
-	void* LookupWwiseObjectInTable(uint32_t objectId, int tableIndex)
+}
+
+struct AreaMusicManager::LiveWwiseOffsets
+{
+	size_t segmentMarkerArray;
+	size_t segmentMarkerCount;
+	size_t segmentDuration;
+	size_t trackSourceArray;
+	size_t trackSourceCount;
+	size_t trackTimingArray;
+	size_t trackTimingCount;
+	size_t trackSourceDuration;
+};
+
+const AreaMusicManager::LiveWwiseOffsets& AreaMusicManager::GetLiveWwiseOffsets()
+{
+	static constexpr LiveWwiseOffsets dc{
+		0x110,
+		0x118,
+		0x120,
+		0xd8,
+		0xe0,
+		0x100,
+		0x108,
+		0x110
+	};
+
+	static constexpr LiveWwiseOffsets standard{
+		0x110,
+		0x118,
+		0x120,
+		0xc8,
+		0xd0,
+		0xf0,
+		0xf8,
+		0x100
+	};
+
+	return ModConfiguration::gameVersion == GameVersion::STANDARD
+		? standard
+		: dc;
+}
+
+AreaMusicManager::AreaMusicManager()
+{
+	Initialize();
+}
+
+void AreaMusicManager::OnEvent(const ModEvent& event)
+{
+	switch (event.type)
 	{
-		using LookupFn = void* (__cdecl*)(void*, uint32_t, int);
-
-		const uintptr_t registryGlobalAddress = MainModuleAddress(wwiseObjectRegistryRva);
-		const uintptr_t lookupAddress = MainModuleAddress(wwiseLookupObjectRva);
-		if (
-			!HasReadableMemory(
-				registryGlobalAddress,
-				sizeof(uintptr_t)
-			)
-			|| !HasExecutableMemory(
-				lookupAddress,
-				16
-			)
-		)
-		{
-			return nullptr;
-		}
-
-		const uintptr_t registryAddress = *reinterpret_cast<const uintptr_t*>(registryGlobalAddress);
-		if (!HasWritableMemory(registryAddress, 0x80))
-		{
-			return nullptr;
-		}
-
-		auto lookup = reinterpret_cast<LookupFn>(lookupAddress);
-		void* object = nullptr;
-		uint32_t exceptionCode = 0;
-		if (!LookupWwiseObjectNoUnwind(
-			reinterpret_cast<uintptr_t>(lookup),
-			reinterpret_cast<void*>(registryAddress),
-			objectId,
-			tableIndex,
-			&object,
-			&exceptionCode
-		))
-		{
-			Logger logger("Area Music Metadata");
-			logger.Log(
-				"Wwise object lookup raised exception 0x%08x for object %u in table %d (registry %p)",
-				exceptionCode,
-				objectId,
-				tableIndex,
-				reinterpret_cast<void*>(registryAddress)
-			);
-			return nullptr;
-		}
-		return object;
+	case ModEventType::FrameRendered:
+	{
+		InstallWwiseObjectLookupHook();
+		break;
 	}
-
-	void* LookupWwiseObject(uint32_t objectId)
+	case ModEventType::PreExitTriggered:
 	{
-		void* object = LookupWwiseObjectInTable(objectId, 0);
-		if (object)
-		{
-			return object;
-		}
-		return LookupWwiseObjectInTable(objectId, 1);
+		Unset();
+		RetireBuffer();
+		break;
+	}
+	default:
+		break;
 	}
 }
 
-bool AreaMusicOverride::UsesOverride(const MusicData* data)
+bool AreaMusicManager::UsesOverride(const MusicData* data)
 {
 	return data && data->customAreaTrack && data->customWemPath;
 }
 
-bool AreaMusicOverride::IsTemplateTrack(const MusicData* data)
+bool AreaMusicManager::IsTemplateTrack(const MusicData* data)
 {
 	return UsesOverride(data)
 		|| (
@@ -323,28 +311,13 @@ bool AreaMusicOverride::IsTemplateTrack(const MusicData* data)
 		);
 }
 
-bool AreaMusicOverride::DurationControlledByWwise()
+bool AreaMusicManager::DurationControlledByWwise()
 {
 	std::lock_guard<std::mutex> lock(areaMusicMetadataMutex);
 	return areaMusicOverrideMetadataPatched;
 }
 
-uint32_t AreaMusicOverride::GetAreaMusicOverrideMediaId(const MusicData* data)
-{
-	(void)data;
-	return areaMusicOverrideMediaId;
-}
-
-const char* AreaMusicOverride::GetAreaMusicOverridePath(const MusicData* data)
-{
-	if (data && data->customAreaTrack && data->customWemPath)
-	{
-		return data->customWemPath;
-	}
-	return nullptr;
-}
-
-void AreaMusicOverride::Initialize()
+void AreaMusicManager::Initialize()
 {
 	if (areaMusicMetadataHooksInitialized)
 	{
@@ -356,8 +329,8 @@ void AreaMusicOverride::Initialize()
 	HMODULE mainModule = GetModuleHandleA(nullptr);
 	if (!mainModule)
 	{
-		Logger logger("Area Music Metadata");
-		logger.Log("Failed to get main module handle for Wwise bank hooks");
+		constexpr const char* logPrefix = "Area Music Metadata";
+		Logging::Write(logPrefix, "Failed to get main module handle for Wwise bank hooks");
 		return;
 	}
 
@@ -373,66 +346,206 @@ void AreaMusicOverride::Initialize()
 
 	auto installHook = [](AkLoadBankMemoryFn target, void* hook, void** original, const char* name)
 	{
-		Logger logger("Area Music Metadata");
+		constexpr const char* logPrefix = "Area Music Metadata";
 		if (!target)
 		{
-			logger.Log("Wwise %s export was not resolved", name);
+			Logging::Write(logPrefix, "Wwise %s export was not resolved", name);
 			return;
 		}
 
 		MH_STATUS created = MH_CreateHook(reinterpret_cast<LPVOID>(target), hook, original);
 		if (created != MH_OK && created != MH_ERROR_ALREADY_CREATED)
 		{
-			logger.Log("Failed to create Wwise %s hook: %d", name, created);
+			Logging::Write(logPrefix, "Failed to create Wwise %s hook: %d", name, created);
 			return;
 		}
 
 		MH_STATUS enabled = MH_EnableHook(reinterpret_cast<LPVOID>(target));
 		if (enabled != MH_OK && enabled != MH_ERROR_ENABLED)
 		{
-			logger.Log("Failed to enable Wwise %s hook: %d", name, enabled);
+			Logging::Write(logPrefix, "Failed to enable Wwise %s hook: %d", name, enabled);
 			return;
 		}
 
-		logger.Log("Installed Wwise %s hook at %p", name, reinterpret_cast<void*>(target));
+		Logging::Write(logPrefix, "Installed Wwise %s hook at %p", name, reinterpret_cast<void*>(target));
 	};
 
 	installHook(
 		loadBankMemoryCopyFunc,
-		reinterpret_cast<void*>(&AreaMusicOverride::LoadBankMemoryCopyHook),
+		reinterpret_cast<void*>(&AreaMusicManager::LoadBankMemoryCopyHook),
 		reinterpret_cast<void**>(&originalLoadBankMemoryCopyFunc),
 		"LoadBankMemoryCopy"
 	);
 	installHook(
 		loadBankMemoryViewFunc,
-		reinterpret_cast<void*>(&AreaMusicOverride::LoadBankMemoryViewHook),
+		reinterpret_cast<void*>(&AreaMusicManager::LoadBankMemoryViewHook),
 		reinterpret_cast<void**>(&originalLoadBankMemoryViewFunc),
 		"LoadBankMemoryView"
 	);
 }
 
-void AreaMusicOverride::ClearAreaMusicMetadataPatch()
+bool AreaMusicManager::InstallWwiseObjectLookupHook()
+{
+	if (wwiseObjectLookupHookInitialized)
+	{
+		return originalWwiseObjectLookupFunc != nullptr;
+	}
+
+	const FunctionData* lookupFuncData = ModManager::GetFunctionData(wwiseObjectLookupFunctionName);
+	if (!lookupFuncData || !lookupFuncData->address)
+	{
+		return false;
+	}
+
+	if (!ModManager::TryHookFunction(
+		wwiseObjectLookupFunctionName,
+		reinterpret_cast<void*>(&AreaMusicManager::WwiseObjectLookupHook)
+	))
+	{
+		wwiseObjectLookupHookInitialized = true;
+		constexpr const char* logPrefix = "Area Music Metadata";
+		Logging::Write(logPrefix, "Failed to install Wwise object lookup hook");
+		return false;
+	}
+
+	wwiseObjectLookupHookInitialized = true;
+	originalWwiseObjectLookupFunc =
+		reinterpret_cast<WwiseObjectLookupFn>(lookupFuncData->originalFunction);
+	if (!originalWwiseObjectLookupFunc)
+	{
+		constexpr const char* logPrefix = "Area Music Metadata";
+		Logging::Write(logPrefix, "Wwise object lookup hook installed without an original function");
+		return false;
+	}
+
+	constexpr const char* logPrefix = "Area Music Metadata";
+	Logging::Write(logPrefix,
+		"Installed Wwise object lookup hook at %p",
+		reinterpret_cast<void*>(lookupFuncData->address)
+	);
+	return true;
+}
+
+void AreaMusicManager::CaptureWwiseObjectRegistry(void* registry)
+{
+	if (!registry)
+	{
+		return;
+	}
+
+	const uintptr_t registryAddress = reinterpret_cast<uintptr_t>(registry);
+	if (!HasWritableMemory(registryAddress, 0x80))
+	{
+		return;
+	}
+
+	const uintptr_t previous = wwiseObjectRegistryAddress.exchange(
+		registryAddress,
+		std::memory_order_acq_rel
+	);
+	if (previous != registryAddress)
+	{
+		constexpr const char* logPrefix = "Area Music Metadata";
+		Logging::Write(logPrefix, "Captured Wwise object registry at %p", registry);
+	}
+}
+
+void* __cdecl AreaMusicManager::WwiseObjectLookupHook(void* registry, uint32_t objectId, int tableIndex)
+{
+	WwiseObjectLookupFn original = originalWwiseObjectLookupFunc;
+	if (!original)
+	{
+		const FunctionData* lookupFuncData = ModManager::GetFunctionData(wwiseObjectLookupFunctionName);
+		original =
+			lookupFuncData
+			? reinterpret_cast<WwiseObjectLookupFn>(lookupFuncData->originalFunction)
+			: nullptr;
+		originalWwiseObjectLookupFunc = original;
+	}
+
+	if (!original)
+	{
+		return nullptr;
+	}
+
+	void* object = original(registry, objectId, tableIndex);
+	const uintptr_t capturedRegistryAddress = wwiseObjectRegistryAddress.load(std::memory_order_acquire);
+	if (
+		registry
+		&& reinterpret_cast<uintptr_t>(registry) != capturedRegistryAddress
+		&& (object || !capturedRegistryAddress)
+	)
+	{
+		CaptureWwiseObjectRegistry(registry);
+	}
+	return object;
+}
+
+void* AreaMusicManager::LookupWwiseObjectInTable(uint32_t objectId, int tableIndex)
+{
+	WwiseObjectLookupFn lookup = originalWwiseObjectLookupFunc;
+	const uintptr_t registryAddress = wwiseObjectRegistryAddress.load(std::memory_order_acquire);
+	if (!lookup || !registryAddress)
+	{
+		return nullptr;
+	}
+
+	if (!HasWritableMemory(registryAddress, 0x80))
+	{
+		return nullptr;
+	}
+
+	void* object = nullptr;
+	uint32_t exceptionCode = 0;
+	if (!LookupWwiseObjectNoUnwind(
+		reinterpret_cast<uintptr_t>(lookup),
+		reinterpret_cast<void*>(registryAddress),
+		objectId,
+		tableIndex,
+		&object,
+		&exceptionCode
+	))
+	{
+		constexpr const char* logPrefix = "Area Music Metadata";
+		Logging::Write(logPrefix,
+			"Wwise object lookup raised exception 0x%08x for object %u in table %d (registry %p)",
+			exceptionCode,
+			objectId,
+			tableIndex,
+			reinterpret_cast<void*>(registryAddress)
+		);
+		return nullptr;
+	}
+	return object;
+}
+
+void* AreaMusicManager::LookupWwiseObject(uint32_t objectId)
+{
+	void* object = LookupWwiseObjectInTable(objectId, 0);
+	if (object)
+	{
+		return object;
+	}
+	return LookupWwiseObjectInTable(objectId, 1);
+}
+
+void AreaMusicManager::ClearAreaMusicMetadataPatch()
 {
 	std::lock_guard<std::mutex> lock(areaMusicMetadataMutex);
 	areaMusicMetadataPatch = {};
 }
 
-long long AreaMusicOverride::GetRegisteredSourceDurationMs(const MusicData* data)
+long long AreaMusicManager::GetRegisteredEffectiveDurationMs(const MusicData* data)
 {
-	(void)data;
-	if (areaMusicOverrideBuffer && areaMusicOverrideBuffer->durationMs > 0)
+	if (!UsesOverride(data))
 	{
-		return areaMusicOverrideBuffer->durationMs;
+		return data ? data->maxLength : 0;
 	}
 
-	return 0;
-}
-
-long long AreaMusicOverride::CalculateEffectiveDurationMs(
-	long long sourceDurationMs,
-	const MusicData* data
-)
-{
+	const long long sourceDurationMs =
+		areaMusicOverrideBuffer && areaMusicOverrideBuffer->durationMs > 0
+		? areaMusicOverrideBuffer->durationMs
+		: 0;
 	if (sourceDurationMs <= 0)
 	{
 		return data && data->maxLength > 0 ? data->maxLength : 0;
@@ -441,42 +554,7 @@ long long AreaMusicOverride::CalculateEffectiveDurationMs(
 	return (std::max)(1LL, sourceDurationMs);
 }
 
-long long AreaMusicOverride::GetRegisteredEffectiveDurationMs(const MusicData* data)
-{
-	if (!UsesOverride(data))
-	{
-		return data ? data->maxLength : 0;
-	}
-
-	return CalculateEffectiveDurationMs(GetRegisteredSourceDurationMs(data), data);
-}
-
-void AreaMusicOverride::PrepareAreaMusicMetadataPatch(
-	const MusicData* data,
-	uint32_t mediaSize,
-	uint32_t sourcePluginId,
-	long long fallbackDurationMs
-)
-{
-	AreaMusicMetadataPatch patch{};
-	if (
-		data
-		&& data->customAreaTrack
-		&& mediaSize > 0
-	)
-	{
-		patch.enabled = true;
-		patch.durationMs = fallbackDurationMs;
-		patch.mediaId = GetAreaMusicOverrideMediaId(data);
-		patch.mediaSize = mediaSize;
-		patch.sourcePluginId = sourcePluginId;
-	}
-
-	std::lock_guard<std::mutex> lock(areaMusicMetadataMutex);
-	areaMusicMetadataPatch = patch;
-}
-
-bool AreaMusicOverride::PatchAreaMusicHircMetadata(
+bool AreaMusicManager::PatchAreaMusicHircMetadata(
 	uint8_t* hirc,
 	size_t hircSize,
 	const AreaMusicMetadataPatch* patch
@@ -618,7 +696,7 @@ bool AreaMusicOverride::PatchAreaMusicHircMetadata(
 	return true;
 }
 
-bool AreaMusicOverride::FindAreaMusicBankMetadata(const uint8_t* bankData, size_t bankSize)
+bool AreaMusicManager::FindAreaMusicBankMetadata(const uint8_t* bankData, size_t bankSize)
 {
 	if (!bankData || bankSize < wwiseChunkHeaderSize)
 	{
@@ -649,42 +727,7 @@ bool AreaMusicOverride::FindAreaMusicBankMetadata(const uint8_t* bankData, size_
 	return false;
 }
 
-bool AreaMusicOverride::PatchAreaMusicBankMetadata(uint8_t* bankData, size_t bankSize)
-{
-	AreaMusicMetadataPatch patch{};
-	{
-		std::lock_guard<std::mutex> lock(areaMusicMetadataMutex);
-		patch = areaMusicMetadataPatch;
-	}
-
-	if (!patch.enabled || !bankData || bankSize < wwiseChunkHeaderSize)
-	{
-		return false;
-	}
-
-	bool patched = false;
-	size_t offset = 0;
-	while (offset + wwiseChunkHeaderSize <= bankSize)
-	{
-		const uint32_t chunkSize = ReadUnaligned<uint32_t>(bankData + offset + 4);
-		if (chunkSize > bankSize - offset - wwiseChunkHeaderSize)
-		{
-			break;
-		}
-
-		if (std::memcmp(bankData + offset, "HIRC", 4) == 0 && chunkSize >= sizeof(uint32_t))
-		{
-			uint8_t* hirc = bankData + offset + wwiseChunkHeaderSize;
-			patched = PatchAreaMusicHircMetadata(hirc, chunkSize, &patch) || patched;
-		}
-
-		offset += wwiseChunkHeaderSize + chunkSize;
-	}
-
-	return patched;
-}
-
-bool AreaMusicOverride::PatchLiveAreaMusicMetadata(const MusicData* data, long long fallbackDurationMs)
+bool AreaMusicManager::PatchLiveAreaMusicMetadata(const MusicData* data, long long fallbackDurationMs)
 {
 	if (!data || !data->customAreaTrack)
 	{
@@ -699,8 +742,8 @@ bool AreaMusicOverride::PatchLiveAreaMusicMetadata(const MusicData* data, long l
 	const long long sourceDurationMs = fallbackDurationMs;
 	if (sourceDurationMs <= 0)
 	{
-		Logger logger("Area Music Metadata");
-		logger.Log("Cannot patch live Wwise metadata for \"%s\": no duration is known", data->name ? data->name : "");
+		constexpr const char* logPrefix = "Area Music Metadata";
+		Logging::Write(logPrefix, "Cannot patch live Wwise metadata for \"%s\": no duration is known", data->name ? data->name : "");
 		return false;
 	}
 
@@ -711,7 +754,7 @@ bool AreaMusicOverride::PatchLiveAreaMusicMetadata(const MusicData* data, long l
 	const uint32_t sourceDurationTicks = MillisecondsToWwiseTicks(sourceDurationMs);
 	const uint32_t effectiveDurationTicks = MillisecondsToWwiseTicks(effectiveDurationMs);
 	constexpr uint32_t sourceStartTicks = 0;
-	const uint32_t mediaId = GetAreaMusicOverrideMediaId(data);
+	const uint32_t mediaId = areaMusicOverrideMediaId;
 	const uint32_t mediaSize = areaMusicOverrideBuffer
 		? static_cast<uint32_t>((std::min)(
 			areaMusicOverrideBuffer->bytes.size(),
@@ -726,8 +769,8 @@ bool AreaMusicOverride::PatchLiveAreaMusicMetadata(const MusicData* data, long l
 	void* track = LookupWwiseObject(areaMusicOverrideTrackId);
 	if (!segment || !track)
 	{
-		Logger logger("Area Music Metadata");
-		logger.Log(
+		constexpr const char* logPrefix = "Area Music Metadata";
+		Logging::Write(logPrefix,
 			"Could not find live Wwise music objects for Area00 metadata patch (segment=%p, track=%p)",
 			segment,
 			track
@@ -741,23 +784,24 @@ bool AreaMusicOverride::PatchLiveAreaMusicMetadata(const MusicData* data, long l
 	LiveAreaMusicMetadataBackup backup{};
 	uint8_t* segmentBytes = static_cast<uint8_t*>(segment);
 	uint8_t* trackBytes = static_cast<uint8_t*>(track);
+	const LiveWwiseOffsets& offsets = GetLiveWwiseOffsets();
 	if (
-		!HasWritableMemory(reinterpret_cast<uintptr_t>(segmentBytes), liveSegmentDurationOffset + sizeof(uint32_t))
-		|| !HasWritableMemory(reinterpret_cast<uintptr_t>(trackBytes), liveTrackSourceDurationOffset + sizeof(uint32_t))
+		!HasWritableMemory(reinterpret_cast<uintptr_t>(segmentBytes), offsets.segmentDuration + sizeof(uint32_t))
+		|| !HasWritableMemory(reinterpret_cast<uintptr_t>(trackBytes), offsets.trackSourceDuration + sizeof(uint32_t))
 	)
 	{
-		Logger logger("Area Music Metadata");
-		logger.Log("Refusing live Wwise metadata patch: segment or track object memory is not writable");
+		constexpr const char* logPrefix = "Area Music Metadata";
+		Logging::Write(logPrefix, "Refusing live Wwise metadata patch: segment or track object memory is not writable");
 		ReleaseWwiseObject(segment);
 		ReleaseWwiseObject(track);
 		return false;
 	}
 
 	uint8_t* markerArray = *reinterpret_cast<uint8_t**>(
-		segmentBytes + liveSegmentMarkerArrayOffset
+		segmentBytes + offsets.segmentMarkerArray
 	);
 	const uint32_t markerCount = ReadUnaligned<uint32_t>(
-		segmentBytes + liveSegmentMarkerCountOffset
+		segmentBytes + offsets.segmentMarkerCount
 	);
 	if (
 		markerCount > 256
@@ -771,18 +815,18 @@ bool AreaMusicOverride::PatchLiveAreaMusicMetadata(const MusicData* data, long l
 		)
 	)
 	{
-		Logger logger("Area Music Metadata");
-		logger.Log("Refusing live Wwise segment patch: marker count %u is unreasonable", markerCount);
+		constexpr const char* logPrefix = "Area Music Metadata";
+		Logging::Write(logPrefix, "Refusing live Wwise segment patch: marker count %u is unreasonable", markerCount);
 		ReleaseWwiseObject(segment);
 		ReleaseWwiseObject(track);
 		return false;
 	}
 
 	uint8_t* sourceArray = *reinterpret_cast<uint8_t**>(
-		trackBytes + liveTrackSourceArrayOffset
+		trackBytes + offsets.trackSourceArray
 	);
 	const uint32_t sourceCount = ReadUnaligned<uint32_t>(
-		trackBytes + liveTrackSourceCountOffset
+		trackBytes + offsets.trackSourceCount
 	);
 	if (
 		sourceCount > 256
@@ -796,18 +840,18 @@ bool AreaMusicOverride::PatchLiveAreaMusicMetadata(const MusicData* data, long l
 		)
 	)
 	{
-		Logger logger("Area Music Metadata");
-		logger.Log("Refusing live Wwise track patch: source entry count %u is unreasonable", sourceCount);
+		constexpr const char* logPrefix = "Area Music Metadata";
+		Logging::Write(logPrefix, "Refusing live Wwise track patch: source entry count %u is unreasonable", sourceCount);
 		ReleaseWwiseObject(segment);
 		ReleaseWwiseObject(track);
 		return false;
 	}
 
 	uint8_t* timingArray = *reinterpret_cast<uint8_t**>(
-		trackBytes + liveTrackTimingArrayOffset
+		trackBytes + offsets.trackTimingArray
 	);
 	const uint32_t timingCount = ReadUnaligned<uint32_t>(
-		trackBytes + liveTrackTimingCountOffset
+		trackBytes + offsets.trackTimingCount
 	);
 	if (
 		timingCount > 256
@@ -821,8 +865,8 @@ bool AreaMusicOverride::PatchLiveAreaMusicMetadata(const MusicData* data, long l
 		)
 	)
 	{
-		Logger logger("Area Music Metadata");
-		logger.Log("Refusing live Wwise track patch: timing entry count %u is unreasonable", timingCount);
+		constexpr const char* logPrefix = "Area Music Metadata";
+		Logging::Write(logPrefix, "Refusing live Wwise track patch: timing entry count %u is unreasonable", timingCount);
 		ReleaseWwiseObject(segment);
 		ReleaseWwiseObject(track);
 		return false;
@@ -830,7 +874,7 @@ bool AreaMusicOverride::PatchLiveAreaMusicMetadata(const MusicData* data, long l
 
 	backup.valid = true;
 	backup.segmentDurationTicks = ReadUnaligned<uint32_t>(
-		segmentBytes + liveSegmentDurationOffset
+		segmentBytes + offsets.segmentDuration
 	);
 	if (markerArray)
 	{
@@ -852,7 +896,7 @@ bool AreaMusicOverride::PatchLiveAreaMusicMetadata(const MusicData* data, long l
 	}
 
 	backup.trackSourceDurationTicks = ReadUnaligned<uint32_t>(
-		trackBytes + liveTrackSourceDurationOffset
+		trackBytes + offsets.trackSourceDuration
 	);
 	backup.trackTimingCount = timingCount;
 	if (timingArray && timingCount > 0)
@@ -905,7 +949,7 @@ bool AreaMusicOverride::PatchLiveAreaMusicMetadata(const MusicData* data, long l
 	}
 
 	WriteUnaligned<uint32_t>(
-		segmentBytes + liveSegmentDurationOffset,
+		segmentBytes + offsets.segmentDuration,
 		effectiveDurationTicks
 	);
 
@@ -931,7 +975,7 @@ bool AreaMusicOverride::PatchLiveAreaMusicMetadata(const MusicData* data, long l
 	}
 
 	WriteUnaligned<uint32_t>(
-		trackBytes + liveTrackSourceDurationOffset,
+		trackBytes + offsets.trackSourceDuration,
 		sourceDurationTicks
 	);
 
@@ -989,7 +1033,7 @@ bool AreaMusicOverride::PatchLiveAreaMusicMetadata(const MusicData* data, long l
 			}
 		}
 		WriteUnaligned<uint32_t>(
-			segmentBytes + liveSegmentDurationOffset,
+			segmentBytes + offsets.segmentDuration,
 			backup.segmentDurationTicks
 		);
 		if (markerArray && markerCount == backup.markerPositionTicks.size())
@@ -1004,7 +1048,7 @@ bool AreaMusicOverride::PatchLiveAreaMusicMetadata(const MusicData* data, long l
 			}
 		}
 		WriteUnaligned<uint32_t>(
-			trackBytes + liveTrackSourceDurationOffset,
+			trackBytes + offsets.trackSourceDuration,
 			backup.trackSourceDurationTicks
 		);
 		if (timingArray && !backup.trackTimingBytes.empty())
@@ -1012,8 +1056,8 @@ bool AreaMusicOverride::PatchLiveAreaMusicMetadata(const MusicData* data, long l
 			std::memcpy(timingArray, backup.trackTimingBytes.data(), backup.trackTimingBytes.size());
 		}
 
-		Logger logger("Area Music Metadata");
-		logger.Log(
+		constexpr const char* logPrefix = "Area Music Metadata";
+		Logging::Write(logPrefix,
 			"Could not find target source %u in live Wwise track metadata for \"%s\" (source entries %u/%u, timing entries %u/%u)",
 			areaMusicOverrideMediaId,
 			data->name ? data->name : "",
@@ -1031,8 +1075,8 @@ bool AreaMusicOverride::PatchLiveAreaMusicMetadata(const MusicData* data, long l
 	liveAreaMusicMetadataBackup = std::move(backup);
 	areaMusicOverrideMetadataPatched = true;
 
-	Logger logger("Area Music Metadata");
-	logger.Log(
+	constexpr const char* logPrefix = "Area Music Metadata";
+	Logging::Write(logPrefix,
 		"Patched live Area00 Wwise music metadata for \"%s\" (media id %u, source %lld ms/%u ticks, effective %lld ms/%u ticks, source start %u ticks, neutral trim fields, sources %u/%u, markers %u/%u, timing entries %u/%u)",
 		data->name ? data->name : "",
 		mediaId,
@@ -1054,7 +1098,7 @@ bool AreaMusicOverride::PatchLiveAreaMusicMetadata(const MusicData* data, long l
 	return areaMusicOverrideMetadataPatched;
 }
 
-void AreaMusicOverride::RestoreLiveAreaMusicMetadata()
+void AreaMusicManager::RestoreLiveAreaMusicMetadata()
 {
 	{
 		std::lock_guard<std::mutex> lock(areaMusicMetadataMutex);
@@ -1075,8 +1119,8 @@ void AreaMusicOverride::RestoreLiveAreaMusicMetadata()
 	void* track = LookupWwiseObject(areaMusicOverrideTrackId);
 	if (!segment || !track)
 	{
-		Logger logger("Area Music Metadata");
-		logger.Log(
+		constexpr const char* logPrefix = "Area Music Metadata";
+		Logging::Write(logPrefix,
 			"Could not find live Wwise music objects while restoring Area00 metadata (segment=%p, track=%p)",
 			segment,
 			track
@@ -1093,13 +1137,14 @@ void AreaMusicOverride::RestoreLiveAreaMusicMetadata()
 
 	uint8_t* segmentBytes = static_cast<uint8_t*>(segment);
 	uint8_t* trackBytes = static_cast<uint8_t*>(track);
+	const LiveWwiseOffsets& offsets = GetLiveWwiseOffsets();
 	if (
-		!HasWritableMemory(reinterpret_cast<uintptr_t>(segmentBytes), liveSegmentDurationOffset + sizeof(uint32_t))
-		|| !HasWritableMemory(reinterpret_cast<uintptr_t>(trackBytes), liveTrackSourceDurationOffset + sizeof(uint32_t))
+		!HasWritableMemory(reinterpret_cast<uintptr_t>(segmentBytes), offsets.segmentDuration + sizeof(uint32_t))
+		|| !HasWritableMemory(reinterpret_cast<uintptr_t>(trackBytes), offsets.trackSourceDuration + sizeof(uint32_t))
 	)
 	{
-		Logger logger("Area Music Metadata");
-		logger.Log("Refusing live Wwise metadata restore: segment or track object memory is not writable");
+		constexpr const char* logPrefix = "Area Music Metadata";
+		Logging::Write(logPrefix, "Refusing live Wwise metadata restore: segment or track object memory is not writable");
 		ReleaseWwiseObject(segment);
 		ReleaseWwiseObject(track);
 		{
@@ -1111,15 +1156,15 @@ void AreaMusicOverride::RestoreLiveAreaMusicMetadata()
 	}
 
 	WriteUnaligned<uint32_t>(
-		segmentBytes + liveSegmentDurationOffset,
+		segmentBytes + offsets.segmentDuration,
 		backup.segmentDurationTicks
 	);
 
 	uint8_t* markerArray = *reinterpret_cast<uint8_t**>(
-		segmentBytes + liveSegmentMarkerArrayOffset
+		segmentBytes + offsets.segmentMarkerArray
 	);
 	const uint32_t markerCount = ReadUnaligned<uint32_t>(
-		segmentBytes + liveSegmentMarkerCountOffset
+		segmentBytes + offsets.segmentMarkerCount
 	);
 	if (
 		markerArray
@@ -1141,10 +1186,10 @@ void AreaMusicOverride::RestoreLiveAreaMusicMetadata()
 	}
 
 	uint8_t* sourceArray = *reinterpret_cast<uint8_t**>(
-		trackBytes + liveTrackSourceArrayOffset
+		trackBytes + offsets.trackSourceArray
 	);
 	const uint32_t sourceCount = ReadUnaligned<uint32_t>(
-		trackBytes + liveTrackSourceCountOffset
+		trackBytes + offsets.trackSourceCount
 	);
 	if (
 		sourceArray
@@ -1179,15 +1224,15 @@ void AreaMusicOverride::RestoreLiveAreaMusicMetadata()
 	}
 
 	WriteUnaligned<uint32_t>(
-		trackBytes + liveTrackSourceDurationOffset,
+		trackBytes + offsets.trackSourceDuration,
 		backup.trackSourceDurationTicks
 	);
 
 	uint8_t* timingArray = *reinterpret_cast<uint8_t**>(
-		trackBytes + liveTrackTimingArrayOffset
+		trackBytes + offsets.trackTimingArray
 	);
 	const uint32_t timingCount = ReadUnaligned<uint32_t>(
-		trackBytes + liveTrackTimingCountOffset
+		trackBytes + offsets.trackTimingCount
 	);
 	if (
 		timingArray
@@ -1206,8 +1251,8 @@ void AreaMusicOverride::RestoreLiveAreaMusicMetadata()
 		);
 	}
 
-	Logger logger("Area Music Metadata");
-	logger.Log("Restored live Area00 Wwise music metadata");
+	constexpr const char* logPrefix = "Area Music Metadata";
+	Logging::Write(logPrefix, "Restored live Area00 Wwise music metadata");
 	ReleaseWwiseObject(segment);
 	ReleaseWwiseObject(track);
 	{
@@ -1217,7 +1262,7 @@ void AreaMusicOverride::RestoreLiveAreaMusicMetadata()
 	}
 }
 
-void AreaMusicOverride::RememberAreaMusicBankMemory(
+void AreaMusicManager::RememberAreaMusicBankMemory(
 	const void* bankData,
 	size_t bankSize,
 	uint32_t bankId,
@@ -1250,8 +1295,8 @@ void AreaMusicOverride::RememberAreaMusicBankMemory(
 	view.bankId = bankId;
 	view.originalBytes.assign(writableBankData, writableBankData + bankSize);
 	areaMusicBankMemoryViews.push_back(std::move(view));
-	Logger logger("Area Music Metadata");
-	logger.Log(
+	constexpr const char* logPrefix = "Area Music Metadata";
+	Logging::Write(logPrefix,
 		"Remembered Area00 Wwise bank memory from %s at %p (%zu bytes, bank id %u)",
 		source ? source : "unknown",
 		writableBankData,
@@ -1260,105 +1305,12 @@ void AreaMusicOverride::RememberAreaMusicBankMemory(
 	);
 }
 
-void AreaMusicOverride::BackupAreaMusicBankMetadataBytes(
-	uint8_t* bankData,
-	size_t bankSize,
-	const std::vector<uint8_t>& bytes
-)
-{
-	if (
-		!bankData
-		|| bankSize < wwiseChunkHeaderSize
-		|| bytes.size() != bankSize
-	)
-	{
-		return;
-	}
-
-	std::lock_guard<std::mutex> lock(areaMusicMetadataMutex);
-	for (const AreaMusicBankMetadataBackup& backup : areaMusicBankMetadataBackups)
-	{
-		if (backup.data == bankData && backup.size == bankSize)
-		{
-			return;
-		}
-	}
-
-	AreaMusicBankMetadataBackup backup{};
-	backup.data = bankData;
-	backup.size = bankSize;
-	backup.bytes = bytes;
-	areaMusicBankMetadataBackups.push_back(std::move(backup));
-}
-
-void AreaMusicOverride::BackupAreaMusicBankMetadata(uint8_t* bankData, size_t bankSize)
-{
-	if (!bankData || bankSize < wwiseChunkHeaderSize)
-	{
-		return;
-	}
-
-	BackupAreaMusicBankMetadataBytes(
-		bankData,
-		bankSize,
-		std::vector<uint8_t>(bankData, bankData + bankSize)
-	);
-}
-
-void AreaMusicOverride::RestoreAreaMusicBankMetadata()
+void AreaMusicManager::RestoreAreaMusicBankMetadata()
 {
 	RestoreLiveAreaMusicMetadata();
-
-	std::lock_guard<std::mutex> lock(areaMusicMetadataMutex);
-	if (areaMusicBankMetadataBackups.empty())
-	{
-		return;
-	}
-
-	std::vector<AreaMusicBankMetadataBackup> remainingBackups{};
-	size_t restored = 0;
-	for (const AreaMusicBankMetadataBackup& backup : areaMusicBankMetadataBackups)
-	{
-		if (!backup.data || backup.bytes.empty())
-		{
-			continue;
-		}
-
-		DWORD oldProtect = 0;
-		const bool protectionChanged = VirtualProtect(
-			backup.data,
-			backup.size,
-			PAGE_READWRITE,
-			&oldProtect
-		) != FALSE;
-		if (!protectionChanged)
-		{
-			remainingBackups.push_back(backup);
-			continue;
-		}
-
-		std::memcpy(backup.data, backup.bytes.data(), backup.bytes.size());
-		++restored;
-
-		DWORD ignored = 0;
-		VirtualProtect(backup.data, backup.size, oldProtect, &ignored);
-	}
-
-	areaMusicBankMetadataBackups = std::move(remainingBackups);
-
-	if (restored > 0)
-	{
-		Logger logger("Area Music Metadata");
-		logger.Log("Restored original Area00 Wwise metadata in %zu region(s)", restored);
-	}
 }
 
-bool AreaMusicOverride::PatchKnownAreaMusicBankMetadata()
-{
-	return ReloadAreaMusicBankMetadata(true);
-}
-
-bool AreaMusicOverride::ReloadAreaMusicBankMetadata(bool patched)
+bool AreaMusicManager::ReloadAreaMusicBankMetadata(bool patched)
 {
 	AreaMusicMetadataPatch patch{};
 	{
@@ -1376,8 +1328,8 @@ bool AreaMusicOverride::ReloadAreaMusicBankMetadata(bool patched)
 		: loadBankMemoryViewFunc;
 	if (!loadBank || !unloadBankMemoryFunc)
 	{
-		Logger logger("Area Music Metadata");
-		logger.Log(
+		constexpr const char* logPrefix = "Area Music Metadata";
+		Logging::Write(logPrefix,
 			"Cannot reload Area00 Wwise bank metadata: LoadBankMemoryView=%p UnloadBank=%p",
 			reinterpret_cast<void*>(loadBank),
 			reinterpret_cast<void*>(unloadBankMemoryFunc)
@@ -1444,8 +1396,8 @@ bool AreaMusicOverride::ReloadAreaMusicBankMetadata(bool patched)
 			const uint32_t unloadResult = unloadBankMemoryFunc(view.bankId, view.data);
 			if (unloadResult != akSuccess)
 			{
-				Logger logger("Area Music Metadata");
-				logger.Log(
+				constexpr const char* logPrefix = "Area Music Metadata";
+				Logging::Write(logPrefix,
 					"AK::SoundEngine::UnloadBank failed for Area00 bank %u at %p with result %u",
 					view.bankId,
 					view.data,
@@ -1464,8 +1416,8 @@ bool AreaMusicOverride::ReloadAreaMusicBankMetadata(bool patched)
 		);
 		if (loadResult != akSuccess)
 		{
-			Logger logger("Area Music Metadata");
-			logger.Log(
+			constexpr const char* logPrefix = "Area Music Metadata";
+			Logging::Write(logPrefix,
 				"AK::SoundEngine::LoadBankMemoryView failed while reloading %s Area00 metadata with result %u",
 				patched ? "patched" : "original",
 				loadResult
@@ -1487,7 +1439,7 @@ bool AreaMusicOverride::ReloadAreaMusicBankMetadata(bool patched)
 					view.loadedPatched = false;
 					view.ownedBytes = std::move(restoreBank);
 					areaMusicOverrideMetadataPatched = false;
-					logger.Log(
+					Logging::Write(logPrefix,
 						"Restored original Area00 Wwise bank after patched reload failure (bank id %u)",
 						view.bankId
 					);
@@ -1503,8 +1455,8 @@ bool AreaMusicOverride::ReloadAreaMusicBankMetadata(bool patched)
 		view.ownedBytes = std::move(ownedBank);
 		areaMusicOverrideMetadataPatched = patched;
 
-		Logger logger("Area Music Metadata");
-		logger.Log(
+		constexpr const char* logPrefix = "Area Music Metadata";
+		Logging::Write(logPrefix,
 			"Reloaded Area00 Wwise bank with %s metadata at %p (%zu bytes, bank id %u)",
 			patched ? "patched" : "original",
 			view.data,
@@ -1514,22 +1466,15 @@ bool AreaMusicOverride::ReloadAreaMusicBankMetadata(bool patched)
 		return true;
 	}
 
-	Logger logger("Area Music Metadata");
-	logger.Log(
+	constexpr const char* logPrefix = "Area Music Metadata";
+	Logging::Write(logPrefix,
 		"Could not find remembered Area00 Wwise bank memory to reload %s metadata",
 		patched ? "patched" : "original"
 	);
 	return false;
 }
 
-bool AreaMusicOverride::PatchProcessAreaMusicBankMetadata()
-{
-	Logger logger("Area Music Metadata");
-	logger.Log("Live process metadata patch is disabled; use bank reload instead");
-	return false;
-}
-
-uint32_t __cdecl AreaMusicOverride::LoadBankMemoryCopyHook(
+uint32_t __cdecl AreaMusicManager::LoadBankMemoryCopyHook(
 	const void* bankData,
 	unsigned long bankSize,
 	unsigned long* outBankId
@@ -1549,14 +1494,14 @@ uint32_t __cdecl AreaMusicOverride::LoadBankMemoryCopyHook(
 		);
 	if (containsAreaMusic)
 	{
-		Logger logger("Area Music Metadata");
-		logger.Log("Observed Area00 Wwise bank during LoadBankMemoryCopy");
+		constexpr const char* logPrefix = "Area Music Metadata";
+		Logging::Write(logPrefix, "Observed Area00 Wwise bank during LoadBankMemoryCopy");
 	}
 
 	return originalLoadBankMemoryCopyFunc(bankData, bankSize, outBankId);
 }
 
-uint32_t __cdecl AreaMusicOverride::LoadBankMemoryViewHook(
+uint32_t __cdecl AreaMusicManager::LoadBankMemoryViewHook(
 	const void* bankData,
 	unsigned long bankSize,
 	unsigned long* outBankId
@@ -1588,7 +1533,7 @@ uint32_t __cdecl AreaMusicOverride::LoadBankMemoryViewHook(
 	return result;
 }
 
-bool AreaMusicOverride::ResolveWwiseMediaFunctions()
+bool AreaMusicManager::ResolveWwiseMediaFunctions()
 {
 	if (wwiseMediaFunctionsResolved)
 	{
@@ -1599,8 +1544,8 @@ bool AreaMusicOverride::ResolveWwiseMediaFunctions()
 	HMODULE mainModule = GetModuleHandleA(nullptr);
 	if (!mainModule)
 	{
-		Logger logger("Area Music Override");
-		logger.Log("Failed to get main module handle for Wwise media exports");
+		constexpr const char* logPrefix = "Area Music Override";
+		Logging::Write(logPrefix, "Failed to get main module handle for Wwise media exports");
 		return false;
 	}
 
@@ -1613,18 +1558,18 @@ bool AreaMusicOverride::ResolveWwiseMediaFunctions()
 
 	if (!setMediaFunc)
 	{
-		Logger logger("Area Music Override");
-		logger.Log("Failed to resolve AK::SoundEngine::SetMedia export");
+		constexpr const char* logPrefix = "Area Music Override";
+		Logging::Write(logPrefix, "Failed to resolve AK::SoundEngine::SetMedia export");
 		return false;
 	}
 	if (!unsetMediaFunc)
 	{
-		Logger logger("Area Music Override");
-		logger.Log("AK::SoundEngine::UnsetMedia export was not resolved; cleanup will be skipped");
+		constexpr const char* logPrefix = "Area Music Override";
+		Logging::Write(logPrefix, "AK::SoundEngine::UnsetMedia export was not resolved; cleanup will be skipped");
 	}
 
-	Logger logger("Area Music Override");
-	logger.Log(
+	constexpr const char* logPrefix = "Area Music Override";
+	Logging::Write(logPrefix,
 		"Resolved Wwise SetMedia at %p and UnsetMedia at %p",
 		reinterpret_cast<void*>(setMediaFunc),
 		reinterpret_cast<void*>(unsetMediaFunc)
@@ -1632,7 +1577,7 @@ bool AreaMusicOverride::ResolveWwiseMediaFunctions()
 	return true;
 }
 
-bool AreaMusicOverride::LoadAreaMusicOverride(const char* overridePath)
+bool AreaMusicManager::LoadAreaMusicManager(const char* overridePath)
 {
 	if (!overridePath || !overridePath[0])
 	{
@@ -1656,22 +1601,22 @@ bool AreaMusicOverride::LoadAreaMusicOverride(const char* overridePath)
 	RetireBuffer();
 
 	auto retiredIt = std::find_if(
-		retiredAreaMusicOverrideBuffers.begin(),
-		retiredAreaMusicOverrideBuffers.end(),
-		[&path](const std::unique_ptr<AreaMusicOverrideBuffer>& buffer)
+		retiredAreaMusicManagerBuffers.begin(),
+		retiredAreaMusicManagerBuffers.end(),
+		[&path](const std::unique_ptr<AreaMusicManagerBuffer>& buffer)
 		{
 			return buffer
 				&& !buffer->bytes.empty()
 				&& buffer->path == path;
 		}
 	);
-	if (retiredIt != retiredAreaMusicOverrideBuffers.end())
+	if (retiredIt != retiredAreaMusicManagerBuffers.end())
 	{
 		areaMusicOverrideBuffer = std::move(*retiredIt);
-		retiredAreaMusicOverrideBuffers.erase(retiredIt);
+		retiredAreaMusicManagerBuffers.erase(retiredIt);
 
-		Logger logger("Area Music Override");
-		logger.Log(
+		constexpr const char* logPrefix = "Area Music Override";
+		Logging::Write(logPrefix,
 			"Reusing retired area music audio buffer for %s (%zu bytes, source plugin 0x%08x, duration %lld ms)",
 			path.c_str(),
 			areaMusicOverrideBuffer->bytes.size(),
@@ -1684,18 +1629,18 @@ bool AreaMusicOverride::LoadAreaMusicOverride(const char* overridePath)
 	AudioDecoder::WwiseMediaBuffer media{};
 	if (!AudioDecoder::LoadWwiseMedia(path, media))
 	{
-		Logger logger("Area Music Override");
-		logger.Log("Failed to load custom audio override as Wwise media: %s", path.c_str());
+		constexpr const char* logPrefix = "Area Music Override";
+		Logging::Write(logPrefix, "Failed to load custom audio override as Wwise media: %s", path.c_str());
 		return false;
 	}
 
-	areaMusicOverrideBuffer = std::make_unique<AreaMusicOverrideBuffer>();
+	areaMusicOverrideBuffer = std::make_unique<AreaMusicManagerBuffer>();
 	areaMusicOverrideBuffer->path = path;
 	areaMusicOverrideBuffer->bytes = std::move(media.bytes);
 	areaMusicOverrideBuffer->sourcePluginId = media.sourcePluginId;
 	areaMusicOverrideBuffer->durationMs = media.durationMs;
-	Logger logger("Area Music Override");
-	logger.Log(
+	constexpr const char* logPrefix = "Area Music Override";
+	Logging::Write(logPrefix,
 		"Loaded area music audio override from %s (%zu bytes, source plugin 0x%08x, duration %lld ms)",
 		path.c_str(),
 		areaMusicOverrideBuffer->bytes.size(),
@@ -1705,16 +1650,16 @@ bool AreaMusicOverride::LoadAreaMusicOverride(const char* overridePath)
 	return true;
 }
 
-bool AreaMusicOverride::Register(const MusicData* data)
+bool AreaMusicManager::Register(const MusicData* data)
 {
 	if (!UsesOverride(data))
 	{
 		return true;
 	}
 
-	const char* overridePath = GetAreaMusicOverridePath(data);
-	const uint32_t mediaId = GetAreaMusicOverrideMediaId(data);
-	if (!ResolveWwiseMediaFunctions() || !LoadAreaMusicOverride(overridePath))
+	const char* overridePath = data->customWemPath;
+	const uint32_t mediaId = areaMusicOverrideMediaId;
+	if (!ResolveWwiseMediaFunctions() || !LoadAreaMusicManager(overridePath))
 	{
 		return false;
 	}
@@ -1724,16 +1669,24 @@ bool AreaMusicOverride::Register(const MusicData* data)
 		return false;
 	}
 
-	const long long sourceDurationMs = GetRegisteredSourceDurationMs(data);
+	const long long sourceDurationMs =
+		areaMusicOverrideBuffer && areaMusicOverrideBuffer->durationMs > 0
+		? areaMusicOverrideBuffer->durationMs
+		: 0;
 	const bool canPatchMetadata = sourceDurationMs > 0;
 	if (canPatchMetadata)
 	{
-		PrepareAreaMusicMetadataPatch(
-			data,
-			static_cast<uint32_t>(areaMusicOverrideBuffer->bytes.size()),
-			areaMusicOverrideBuffer->sourcePluginId,
-			sourceDurationMs
-		);
+		AreaMusicMetadataPatch patch{};
+		patch.enabled = true;
+		patch.durationMs = sourceDurationMs;
+		patch.mediaId = areaMusicOverrideMediaId;
+		patch.mediaSize = static_cast<uint32_t>(areaMusicOverrideBuffer->bytes.size());
+		patch.sourcePluginId = areaMusicOverrideBuffer->sourcePluginId;
+		{
+			std::lock_guard<std::mutex> lock(areaMusicMetadataMutex);
+			areaMusicMetadataPatch = patch;
+		}
+
 		areaMusicOverrideMetadataPatched = PatchLiveAreaMusicMetadata(
 			data,
 			sourceDurationMs
@@ -1744,8 +1697,8 @@ bool AreaMusicOverride::Register(const MusicData* data)
 		ClearAreaMusicMetadataPatch();
 		areaMusicOverrideMetadataPatched = false;
 	}
-	Logger metadataLogger("Area Music Metadata");
-	metadataLogger.Log(
+	constexpr const char* metadataLogPrefix = "Area Music Metadata";
+	Logging::Write(metadataLogPrefix,
 		"Area00 live metadata patch %s for \"%s\" (media %zu bytes, source plugin 0x%08x, duration %lld ms, neutral trim fields)",
 		canPatchMetadata
 			? (areaMusicOverrideMetadataPatched ? "applied" : "not applied")
@@ -1769,8 +1722,8 @@ bool AreaMusicOverride::Register(const MusicData* data)
 	uint32_t result = setMediaFunc(&media, 1);
 	if (result != akSuccess)
 	{
-		Logger logger("Area Music Override");
-		logger.Log(
+		constexpr const char* logPrefix = "Area Music Override";
+		Logging::Write(logPrefix,
 			"AK::SoundEngine::SetMedia failed for source %u with result %u",
 			mediaId,
 			result
@@ -1786,8 +1739,8 @@ bool AreaMusicOverride::Register(const MusicData* data)
 
 	areaMusicOverrideRegistered = true;
 	areaMusicOverrideRegisteredMediaId = mediaId;
-	Logger logger("Area Music Override");
-	logger.Log(
+	constexpr const char* logPrefix = "Area Music Override";
+	Logging::Write(logPrefix,
 		"Registered area music audio override for Wwise source %u from %s (source plugin 0x%08x)",
 		mediaId,
 		overridePath,
@@ -1796,7 +1749,7 @@ bool AreaMusicOverride::Register(const MusicData* data)
 	return true;
 }
 
-void AreaMusicOverride::Unset()
+void AreaMusicManager::Unset()
 {
 	if (!areaMusicOverrideRegistered)
 	{
@@ -1835,8 +1788,8 @@ void AreaMusicOverride::Unset()
 	uint32_t result = unsetMediaFunc(&media, 1);
 	if (result != akSuccess)
 	{
-		Logger logger("Area Music Override");
-		logger.Log(
+		constexpr const char* logPrefix = "Area Music Override";
+		Logging::Write(logPrefix,
 			"AK::SoundEngine::UnsetMedia failed for source %u with result %u",
 			media.sourceId,
 			result
@@ -1844,8 +1797,8 @@ void AreaMusicOverride::Unset()
 	}
 	else
 	{
-		Logger logger("Area Music Override");
-		logger.Log("Unregistered area music audio override for Wwise source %u", media.sourceId);
+		constexpr const char* logPrefix = "Area Music Override";
+		Logging::Write(logPrefix, "Unregistered area music audio override for Wwise source %u", media.sourceId);
 	}
 	areaMusicOverrideRegistered = false;
 	areaMusicOverrideRegisteredMediaId = 0;
@@ -1857,18 +1810,18 @@ void AreaMusicOverride::Unset()
 	ClearAreaMusicMetadataPatch();
 }
 
-void AreaMusicOverride::RetireBuffer()
+void AreaMusicManager::RetireBuffer()
 {
 	if (!areaMusicOverrideBuffer || areaMusicOverrideBuffer->bytes.empty())
 	{
 		return;
 	}
 
-	Logger logger("Area Music Override");
-	logger.Log(
+	constexpr const char* logPrefix = "Area Music Override";
+	Logging::Write(logPrefix,
 		"Keeping retired area music audio buffer alive for %s (%zu bytes)",
 		areaMusicOverrideBuffer->path.c_str(),
 		areaMusicOverrideBuffer->bytes.size()
 	);
-	retiredAreaMusicOverrideBuffers.push_back(std::move(areaMusicOverrideBuffer));
+	retiredAreaMusicManagerBuffers.push_back(std::move(areaMusicOverrideBuffer));
 }

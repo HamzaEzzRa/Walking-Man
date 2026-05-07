@@ -40,7 +40,7 @@ void GameStateManager::OnScanDone()
 {
 	if (!ModConfiguration::showMusicPlayerUI)
 	{
-		logger.Log("Music player UI is disabled, skipping game state hooks");
+		Logging::Write(logPrefix, "Music player UI is disabled, skipping game state hooks");
 		return;
 	}
 
@@ -48,7 +48,7 @@ void GameStateManager::OnScanDone()
 		"InGameFlagUpdate",
 		reinterpret_cast<void*>(&GameStateManager::InGameFlagUpdateHook)
 	);
-	logger.Log(
+	Logging::Write(logPrefix, 
 		"InGameFlagUpdate function hook %s",
 		result ? "installed successfully" : "failed"
 	);
@@ -82,7 +82,7 @@ void GameStateManager::OnPreExit()
 
 void GameStateManager::InGameFlagUpdateHook(void* arg1, void* arg2, void* arg3, void* arg4)
 {
-	Logger logger("Game State Manager");
+	constexpr const char* logPrefix = "Game State Manager";
 
 	// This function param signature is VERY complex, we avoid calling it
 	// It's alright since we only skip it one time to get the flag pool address and install memory watchers
@@ -91,7 +91,7 @@ void GameStateManager::InGameFlagUpdateHook(void* arg1, void* arg2, void* arg3, 
 	uintptr_t flagPoolAddress = reinterpret_cast<uintptr_t>(arg4);
 	if (flagPoolAddress)
 	{
-		logger.Log("Flag pool address: %p", (void*)flagPoolAddress);
+		Logging::Write(logPrefix, "Flag pool address: %p", (void*)flagPoolAddress);
 		inGameFlagPoolAddress = flagPoolAddress;
 
 		// **Dispatch events on render, safer that way, especially on game exit**
@@ -146,11 +146,11 @@ void GameStateManager::InGameFlagUpdateHook(void* arg1, void* arg2, void* arg3, 
 		const FunctionData* functionData = ModManager::GetFunctionData("InGameFlagUpdate");
 		if (!functionData || !functionData->originalFunction)
 		{
-			logger.Log("InGameFlagUpdate function not hooked, cannot unhook it");
+			Logging::Write(logPrefix, "InGameFlagUpdate function not hooked, cannot unhook it");
 			return;
 		}
 		bool result = ModManager::TryUnhookFunction(*functionData);
-		logger.Log(
+		Logging::Write(logPrefix, 
 			"InGameFlagUpdate function unhook %s",
 			result ? "successful" : "failed"
 		);

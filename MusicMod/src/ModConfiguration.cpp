@@ -19,11 +19,12 @@
 #include "GameData.h"
 
 #include "MemoryUtils.h"
+#include "Utils.h"
 
 namespace ModConfiguration
 {
 	const std::string modPublicName = "Walking Man";
-	const std::string modInternalVersion = "1.0.6";
+	const std::string modInternalVersion = "1.1.0";
 	const std::string modLogFilename = "walkingman.log";
 	const std::string enableDevFilename = "walkingman.dev";
 	bool devMode = false;
@@ -60,114 +61,6 @@ namespace ModConfiguration
 		"Waiting (10 Years)", "Nobody Else", "Asylums For The Feeling", "Almost Nothing", "BB's Theme"
 	};
 
-	namespace
-	{
-		namespace fs = std::filesystem;
-
-		constexpr uint32_t customAreaMusicOriginalMediaId = 14330364; // Area00 "Don't Be So Serious"
-		constexpr const char* customAreaMusicBaseTrackName = "Don't Be So Serious";
-
-		std::vector<std::unique_ptr<std::string>> customSongStringStorage;
-
-		struct CustomSongFileNameInfo
-		{
-			std::string title;
-			std::string artist = "Custom";
-		};
-
-		const char* StoreCustomSongString(const std::string& value)
-		{
-			customSongStringStorage.push_back(std::make_unique<std::string>(value));
-			return customSongStringStorage.back()->c_str();
-		}
-
-		std::string ToLowerAscii(std::string value)
-		{
-			std::transform(
-				value.begin(),
-				value.end(),
-				value.begin(),
-				[](unsigned char c) { return static_cast<char>(std::tolower(c)); }
-			);
-			return value;
-		}
-
-		bool TryPathToUtf8String(const fs::path& path, std::string& value)
-		{
-			try
-			{
-				value = path.u8string();
-				return true;
-			}
-			catch (...)
-			{
-			}
-
-			try
-			{
-				value = path.string();
-				return true;
-			}
-			catch (...)
-			{
-				value.clear();
-				return false;
-			}
-		}
-
-		std::string PathToLogString(const fs::path& path)
-		{
-			std::string value;
-			return TryPathToUtf8String(path, value) ? value : "<unprintable path>";
-		}
-
-		bool IsSupportedCustomAudioExtension(const fs::path& path)
-		{
-			std::string extension;
-			if (!TryPathToUtf8String(path.extension(), extension))
-			{
-				return false;
-			}
-
-			const std::vector<std::string>& supportedExtensions =
-				AudioDecoder::SupportedCustomAudioExtensions();
-			extension = ToLowerAscii(extension);
-			return std::find(
-				supportedExtensions.begin(),
-				supportedExtensions.end(),
-				extension
-			) != supportedExtensions.end();
-		}
-
-		CustomSongFileNameInfo ParseCustomSongFileName(const fs::path& audioPath)
-		{
-			CustomSongFileNameInfo songInfo{};
-			std::string stem;
-			if (!TryPathToUtf8String(audioPath.stem(), stem))
-			{
-				return songInfo;
-			}
-
-			stem = Trim(stem);
-			const std::string separator = " - ";
-			const size_t separatorPos = stem.find(separator);
-			if (separatorPos != std::string::npos)
-			{
-				const std::string artist = Trim(stem.substr(0, separatorPos));
-				const std::string title = Trim(stem.substr(separatorPos + separator.size()));
-				if (!artist.empty() && !title.empty())
-				{
-					songInfo.artist = artist;
-					songInfo.title = title;
-					return songInfo;
-				}
-			}
-
-			songInfo.title = stem;
-			return songInfo;
-		}
-	}
-
 	// Maps global setting names to lambda setter functions
 	const std::unordered_map<std::string, std::function<void(const std::string&)>> parameterSetters =
 	{
@@ -193,23 +86,9 @@ namespace ModConfiguration
 		[](const std::string& val) { showMusicPlayerUI = (val == "true" || val == "1"); }},
 	};
 
-	std::string Trim(const std::string& str)
-	{
-		const char* whitespace = " \t\r\n";
-		size_t start = str.find_first_not_of(whitespace);
-		size_t end = str.find_last_not_of(whitespace);
-		return (start == std::string::npos) ? "" : str.substr(start, end - start + 1);
-	}
-
-	bool IsCommentOrEmpty(const std::string& line)
-	{
-		std::string trimmed = Trim(line);
-		return trimmed.empty() || trimmed.rfind("//", 0) == 0;
-	}
-
 	bool LoadConfigFromFile()
 	{
-		Logger logger{ "Mod Configuration" };
+		constexpr const char* logPrefix = "Mod Configuration";
 
 		std::ifstream file(configFilePath);
 		if (!file.is_open())
@@ -217,13 +96,12 @@ namespace ModConfiguration
 			return false;
 		}
 
-		Section previousSection = Section::NONE;
 		Section currentSection = Section::NONE;
 		std::string line;
 
 		while (std::getline(file, line))
 		{
-			if (IsCommentOrEmpty(line))
+			if (Utils::IsCommentOrEmpty(line))
 			{
 				continue;
 			}
@@ -231,17 +109,21 @@ namespace ModConfiguration
 			size_t commentPos = line.find("//");
 			if (commentPos != std::string::npos)
 			{
-				line = Trim(line.substr(0, commentPos));
+				line = Utils::Trim(line.substr(0, commentPos));
 			}
 			if (line.empty())
 			{
 				continue;
 			}
 
-			if (headerSectionMap.find(line) != headerSectionMap.end())
+			auto sectionIt = headerSectionMap.find(line);
+			if (sectionIt != headerSectionMap.end())
 			{
-				previousSection = currentSection;
-				currentSection = headerSectionMap.at(line);
+				currentSection = sectionIt->second;
+				if (currentSection == Section::ACTIVE_SONGS)
+				{
+					activePlaylist.clear();
+				}
 				continue;
 			}
 
@@ -252,8 +134,8 @@ namespace ModConfiguration
 					size_t eqPos = line.find('=');
 					if (eqPos == std::string::npos) break;
 
-					std::string key = Trim(line.substr(0, eqPos));
-					std::string val = Trim(line.substr(eqPos + 1));
+					std::string key = Utils::Trim(line.substr(0, eqPos));
+					std::string val = Utils::Trim(line.substr(eqPos + 1));
 					auto it = parameterSetters.find(key);
 					if (it == parameterSetters.end())
 					{
@@ -277,10 +159,6 @@ namespace ModConfiguration
 				}
 				case Section::ACTIVE_SONGS:
 				{
-					if (previousSection != Section::ACTIVE_SONGS)
-					{
-						activePlaylist.clear();
-					}
 					activePlaylist.insert(line);
 					break;
 				}
@@ -289,192 +167,13 @@ namespace ModConfiguration
 				default:
 					break;
 			}
-
-			previousSection = currentSection;
 		}
 
 		return true;
-	}
-
-	bool LoadCustomSongsFromFolder()
-	{
-		Logger logger{ "Custom Songs" };
-
-		Databases::customSongDatabase.clear();
-		customSongStringStorage.clear();
-
-		if (!customSongsEnabled)
-		{
-			return true;
-		}
-
-		if (customSongsFolderPath.empty())
-		{
-			return true;
-		}
-
-		std::error_code ec;
-		const fs::path customSongsFolder = fs::u8path(customSongsFolderPath);
-		if (!fs::exists(customSongsFolder, ec) || !fs::is_directory(customSongsFolder, ec))
-		{
-			logger.Log(
-				"Custom songs folder does not exist or is not a directory: %s",
-				customSongsFolderPath.c_str()
-			);
-			return false;
-		}
-
-		std::vector<fs::directory_entry> audioFiles;
-		for (fs::directory_iterator it(customSongsFolder, ec), end; it != end && !ec; it.increment(ec))
-		{
-			const fs::directory_entry& entry = *it;
-			std::error_code entryEc;
-			if (!entry.is_regular_file(entryEc))
-			{
-				continue;
-			}
-
-			if (IsSupportedCustomAudioExtension(entry.path()))
-			{
-				audioFiles.push_back(entry);
-			}
-		}
-
-		if (ec)
-		{
-			logger.Log(
-				"Failed while scanning custom songs folder %s: %s",
-				customSongsFolderPath.c_str(),
-				ec.message().c_str()
-			);
-			return false;
-		}
-
-		std::sort(
-			audioFiles.begin(),
-			audioFiles.end(),
-			[](const fs::directory_entry& lhs, const fs::directory_entry& rhs)
-			{
-				return PathToLogString(lhs.path().filename())
-					< PathToLogString(rhs.path().filename());
-			}
-		);
-
-		for (const fs::directory_entry& audioFile : audioFiles)
-		{
-			try
-			{
-				const fs::path audioPath = audioFile.path();
-				CustomSongFileNameInfo songInfo = ParseCustomSongFileName(audioPath);
-				if (songInfo.title.empty())
-				{
-					logger.Log("Skipping custom audio with empty title: %s", PathToLogString(audioPath).c_str());
-					continue;
-				}
-
-				if (Databases::songDatabase.find(songInfo.title) != Databases::songDatabase.end())
-				{
-					logger.Log(
-						"Skipping custom song \"%s\" because it conflicts with a built-in song name",
-						songInfo.title.c_str()
-					);
-					continue;
-				}
-
-				if (Databases::customSongDatabase.find(songInfo.title) != Databases::customSongDatabase.end())
-				{
-					logger.Log("Skipping duplicate custom song title: %s", songInfo.title.c_str());
-					continue;
-				}
-
-				fs::path absoluteAudioPath = fs::absolute(audioPath, ec);
-				if (ec)
-				{
-					ec.clear();
-					absoluteAudioPath = audioPath;
-				}
-
-				std::string absoluteAudioPathString;
-				if (!TryPathToUtf8String(absoluteAudioPath, absoluteAudioPathString))
-				{
-					logger.Log("Skipping custom audio with unprintable path: %s", PathToLogString(audioPath).c_str());
-					continue;
-				}
-
-				MusicData data{};
-				data.descriptionID = 0;
-				data.type = MusicType::SONG;
-				data.maxLength = 0;
-				data.name = StoreCustomSongString(songInfo.title);
-				data.artist = StoreCustomSongString(songInfo.artist);
-				data.signature = "";
-				data.customAreaTrack = true;
-				data.customWemPath = StoreCustomSongString(absoluteAudioPathString);
-				data.customMediaId = customAreaMusicOriginalMediaId;
-				data.baseTrackName = customAreaMusicBaseTrackName;
-
-				Databases::customSongDatabase.emplace(songInfo.title, data);
-				activePlaylist.insert(songInfo.title);
-
-				logger.Log(
-					"Loaded custom audio \"%s\" from %s (Area00 source id %u)",
-					songInfo.title.c_str(),
-					absoluteAudioPathString.c_str(),
-					data.customMediaId
-				);
-			}
-			catch (const std::exception& e)
-			{
-				logger.Log(
-					"Skipping custom audio after scan exception for %s: %s",
-					PathToLogString(audioFile.path()).c_str(),
-					e.what()
-				);
-			}
-			catch (...)
-			{
-				logger.Log(
-					"Skipping custom audio after unknown scan exception for %s",
-					PathToLogString(audioFile.path()).c_str()
-				);
-			}
-		}
-
-		logger.Log("Loaded %zu custom songs", Databases::customSongDatabase.size());
-		return true;
-	}
-
-	void BindCustomSongsToAreaTrack(const MusicData& baseTrack)
-	{
-		Logger logger{ "Custom Songs" };
-		if (!baseTrack.address)
-		{
-			logger.Log(
-				"Cannot bind custom songs because base area track \"%s\" has no scanned address",
-				baseTrack.name ? baseTrack.name : customAreaMusicBaseTrackName
-			);
-			return;
-		}
-
-		for (auto& [name, data] : Databases::customSongDatabase)
-		{
-			data.address = baseTrack.address;
-			data.signature = baseTrack.signature;
-			data.exclusiveDC = baseTrack.exclusiveDC;
-			data.active = true;
-			logger.Log(
-				"Bound custom song \"%s\" to area track \"%s\" at %p",
-				name.c_str(),
-				baseTrack.name,
-				reinterpret_cast<void*>(data.address)
-			);
-		}
 	}
 
 	namespace Databases
 	{
-		std::unordered_map<std::string, MusicData> customSongDatabase = {};
-
 		std::unordered_map<std::string, FunctionData> functionDatabase =
 		{
 			// Management functions
@@ -509,6 +208,21 @@ namespace ModConfiguration
 				"0F 84 ?? ?? ?? ?? 48 8B 01 FF 10 4C 8B 15 ?? ?? ?? ?? 48 8B F8",
 				// gp version
 				"48 83 EC 48 48 8B 05 15 FC D5 02"}
+			},
+			{
+				"WwiseObjectLookup",
+				{"WwiseObjectLookup",
+				"48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 20 8B FA 48 8B F1 "
+				"45 85 C0 75 52 FF 15 ?? ?? ?? ?? 8B 4E 30 85 C9 74 28 48 8B "
+				"5E 28 33 D2 8B C7 F7 F1 48 8B 1C D3 48 85 DB 74 15 0F 1F "
+				"80 00 00 00 00 39 7B 10 74 5D 48 8B 5B 08 48 85 DB 75 F2 "
+				"48 8B CE FF 15 ?? ?? ?? ?? 33 DB 8B C3",
+				// gp version (same)
+				"48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 20 8B FA 48 8B F1 "
+				"45 85 C0 75 52 FF 15 ?? ?? ?? ?? 8B 4E 30 85 C9 74 28 48 8B "
+				"5E 28 33 D2 8B C7 F7 F1 48 8B 1C D3 48 85 DB 74 15 0F 1F "
+				"80 00 00 00 00 39 7B 10 74 5D 48 8B 5B 08 48 85 DB 75 F2 "
+				"48 8B CE FF 15 ?? ?? ?? ?? 33 DB 8B C3"}
 			},
 			{
 				"AccessLanguagePool",
@@ -1005,6 +719,8 @@ namespace ModConfiguration
 				"?? ?? ?? ?? ?? 7F 00 00 F9 11 18 09 E1 ED 40 BF 89 71 17 49 FC 70 D8 15"}
 			},
 		};
+
+		std::unordered_map<std::string, MusicData> customSongDatabase = {};
 
 		// Basically similar to interruptorDatabase, but these are UI sounds that indicate a music interruption
 		// We don't scan for these, instead signature is matched again PlayUISound function arg2 bytes

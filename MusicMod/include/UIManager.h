@@ -126,7 +126,7 @@ private:
 	static std::string RuntimeUITextToUtf8(const RuntimeUIText*);
 
 private:
-	Logger logger{ "UI Manager" };
+		inline static constexpr const char* logPrefix = "UI Manager";
 
 	// Standard and DC both resolve the static UI pool from the owner object, but the pool offset differs.
 	inline static uintptr_t staticUIPoolOwnerOffset = 0x60;

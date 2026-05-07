@@ -8,13 +8,13 @@
 
 #include "Utils.h"
 
+#include "CustomMediaLoader.h"
 #include "ModConfiguration.h"
 
 #include "GameData.h"
 
 ModManager::ModManager()
 {
-	logger.Log("Initializing...");
 }
 
 void ModManager::SetInstance(ModManager* instance)
@@ -57,7 +57,7 @@ bool ModManager::TryHookFunction(const std::string& name, void* hookFunction)
 		);
 		if (created != MH_OK)
 		{
-			logger.Log(
+			Logging::Write(logPrefix, 
 				"Failed to create hook for function \"%s\" at address %p",
 				name.c_str(), funcData.address
 			);
@@ -67,7 +67,7 @@ bool ModManager::TryHookFunction(const std::string& name, void* hookFunction)
 		auto enabled = MH_EnableHook(reinterpret_cast<LPVOID>(funcData.address));
 		if (enabled != MH_OK)
 		{
-			logger.Log(
+			Logging::Write(logPrefix, 
 				"Failed to enable hook for function \"%s\" at address %p",
 				name.c_str(), funcData.address
 			);
@@ -94,7 +94,7 @@ bool ModManager::TryUnhookFunction(const FunctionData& func)
 		auto disabled = MH_DisableHook(reinterpret_cast<LPVOID>(func.address));
 		if (disabled != MH_OK)
 		{
-			logger.Log(
+			Logging::Write(logPrefix, 
 				"Failed to disable hook for function \"%s\" at address %p",
 				func.name, func.address
 			);
@@ -117,65 +117,72 @@ const FunctionData* ModManager::GetFunctionData(const std::string& name)
 
 void ModManager::Initialize()
 {
+	Logging::Initialize(ModConfiguration::modLogFilename.c_str());
+	Logging::Write(logPrefix, "Initializing...");
+
 	bool configLoaded = ModConfiguration::LoadConfigFromFile();
-	logger.Log(
+	Logging::Write(logPrefix, 
 		configLoaded ? "Ini configuration loaded successfully"
 		: "Failed to load ini configuration, using default settings"
 	);
-	bool customSongsLoaded = ModConfiguration::LoadCustomSongsFromFolder();
+	bool customSongsLoaded = CustomMediaLoader::LoadCustomSongsFromFolder();
 	if (!ModConfiguration::customSongsEnabled)
 	{
-		logger.Log("Custom songs disabled; skipped custom folder scan");
+		Logging::Write(logPrefix, "Custom songs disabled; skipped custom folder scan");
 	}
 	else
 	{
-		logger.Log(
+		Logging::Write(logPrefix, 
 			customSongsLoaded ? "Custom songs loaded successfully"
 			: "Custom songs were not loaded"
 		);
 	}
+	if (ModConfiguration::activePlaylist.empty())
+	{
+		Logging::Write(logPrefix, "Playlist is empty; music player queue disabled");
+	}
 
 	ModConfiguration::gameProvider = DetectProvider();
-	logger.Log(
+	Logging::Write(logPrefix, 
 		"Detected game provider: %s",
 		ModConfiguration::gameProvider == GameProvider::XBOX_GAMEPASS ? "Xbox Gamepass" : "Steam/Epic"
 	);
 
 	ModConfiguration::gameVersion = DetectVersion();
-	logger.Log(
+	Logging::Write(logPrefix, 
 		"Detected game version: %s",
 		ModConfiguration::gameVersion == GameVersion::DC ? "DC" : "Standard"
 	);
 
-	logger.Log("Scanning for function signatures...");
+	Logging::Write(logPrefix, "Scanning for function signatures...");
 	scanProgress.message = "Searching for game functions";
 	scanInProgress.store(true);
 	PatternScanner::ScanAsync<FunctionData>(
 		ModConfiguration::Databases::functionDatabase,
 		[]() {
-			logger.Log("Function signature scanning complete.");
+			Logging::Write(logPrefix, "Function signature scanning complete.");
 			scanInProgress.store(false);
 
 			bool hookResult = TryHookFunction("GamePreExit", &GamePreExitHook);
-			logger.Log(
+			Logging::Write(logPrefix, 
 				"GamePreExit function hook %s",
 				hookResult ? "installed successfully" : "failed"
 			);
 
 			hookResult = TryHookFunction("RenderTask", &RenderTaskHook);
-			logger.Log(
+			Logging::Write(logPrefix, 
 				"RenderTask function hook %s",
 				hookResult ? "installed successfully" : "failed"
 			);
 
 			hookResult = TryHookFunction("GamePreLoad", &GamePreLoadHook);
-			logger.Log(
+			Logging::Write(logPrefix, 
 				"GamePreLoad function hook %s",
 				hookResult ? "installed successfully" : "failed"
 			);
 
 			hookResult = TryHookFunction("AccessMusicPool", &AccessMusicPoolHook);
-			logger.Log(
+			Logging::Write(logPrefix, 
 				"AccessMusicPool function hook %s",
 				hookResult ? "installed successfully" : "failed"
 			);
@@ -199,7 +206,7 @@ void ModManager::OnRender()
 			allMusicTargets[name] = &data;
 		}
 
-		logger.Log("Scanning for music signatures...");
+		Logging::Write(logPrefix, "Scanning for music signatures...");
 		scanProgress.message = "Searching for game music";
 		scanInProgress.store(true);
 		PatternScanner::ScanAsyncPtr<MusicData>(
@@ -211,7 +218,7 @@ void ModManager::OnRender()
 				{
 					if (data.address)
 					{
-						logger.Log("Interruptor %s found at address: %p", name.c_str(), data.address);
+						Logging::Write(logPrefix, "Interruptor %s found at address: %p", name.c_str(), data.address);
 						data.active = true;
 					}
 				}
@@ -225,7 +232,7 @@ void ModManager::OnRender()
 						auto& songData = it->second;
 						if (songData.address)
 						{
-							logger.Log("Song %s found at address: %p", name.c_str(), songData.address);
+							Logging::Write(logPrefix, "Song %s found at address: %p", name.c_str(), songData.address);
 							songData.active = true;
 						}
 					}
@@ -254,7 +261,7 @@ void ModManager::OnRender()
 				{
 					instance->DispatchEvent(ModEvent{ ModEventType::ScanCompleted, nullptr, nullptr });
 				}
-				logger.Log("Setup complete");
+				Logging::Write(logPrefix, "Setup complete");
 			},
 			&scanProgress,
 			PAGE_READWRITE,
@@ -276,7 +283,7 @@ void ModManager::OnRender()
 void ModManager::RegisterListener(IEventListener* listener)
 {
 	if (listener == nullptr) {
-		logger.Log("Attempted to register a null listener");
+		Logging::Write(logPrefix, "Attempted to register a null listener");
 		return;
 	}
 	listeners.push_back(listener);
@@ -285,7 +292,7 @@ void ModManager::RegisterListener(IEventListener* listener)
 void ModManager::UnregisterListener(IEventListener* listener)
 {
 	if (listener == nullptr) {
-		logger.Log("Attempted to unregister a null listener");
+		Logging::Write(logPrefix, "Attempted to unregister a null listener");
 		return;
 	}
 
@@ -344,7 +351,7 @@ void ModManager::RenderTaskHook(void* arg1, void* arg2, void* arg3, void* arg4, 
 	const FunctionData* renderTaskFuncData = ModManager::GetFunctionData("RenderTask");
 	if (!renderTaskFuncData || !renderTaskFuncData->originalFunction)
 	{
-		logger.Log("Original RenderTask function was not hooked, cannot call it");
+		Logging::Write(logPrefix, "Original RenderTask function was not hooked, cannot call it");
 		return;
 	}
 	using Function_t = void* (*)(void*, void*, void*, void*, void*);
@@ -367,7 +374,7 @@ void ModManager::GamePreExitHook(void* arg1, void* arg2, void* arg3, void* arg4)
 	const FunctionData* gamePreExitFuncData = ModManager::GetFunctionData("GamePreExit");
 	if (!gamePreExitFuncData || !gamePreExitFuncData->originalFunction)
 	{
-		logger.Log("Original GamePreExit function was not hooked, cannot call it");
+		Logging::Write(logPrefix, "Original GamePreExit function was not hooked, cannot call it");
 		return;
 	}
 	reinterpret_cast<GenericFunction_t>(gamePreExitFuncData->originalFunction)(
@@ -380,7 +387,7 @@ void ModManager::AccessMusicPoolHook(void* arg1, void* arg2, void* arg3, void* a
 	const FunctionData* accessMusicPoolFuncData = ModManager::GetFunctionData("AccessMusicPool");
 	if (!accessMusicPoolFuncData || !accessMusicPoolFuncData->originalFunction)
 	{
-		logger.Log("Original AccessMusicPool function was not hooked, cannot call it");
+		Logging::Write(logPrefix, "Original AccessMusicPool function was not hooked, cannot call it");
 		return;
 	}
 	reinterpret_cast<GenericFunction_t>(accessMusicPoolFuncData->originalFunction)(
@@ -388,7 +395,7 @@ void ModManager::AccessMusicPoolHook(void* arg1, void* arg2, void* arg3, void* a
 	);
 
 	uintptr_t entryAddress = reinterpret_cast<uintptr_t>(arg1);
-	logger.Log(
+	Logging::Write(logPrefix, 
 		"AccessMusicPool function called with entry pointer: %p",
 		(void*)entryAddress
 	);
@@ -396,14 +403,14 @@ void ModManager::AccessMusicPoolHook(void* arg1, void* arg2, void* arg3, void* a
 	if (!musicPoolScanStartAddress && entryAddress)
 	{
 		musicPoolScanStartAddress = Utils::KeepTopHex(entryAddress, 4);
-		logger.Log(
+		Logging::Write(logPrefix, 
 			"Music pool start address set to: %p (from %p)",
 			(void*)musicPoolScanStartAddress,
 			(void*)entryAddress
 		);
 
 		bool unhookResult = TryUnhookFunction(*accessMusicPoolFuncData);
-		logger.Log("AccessMusicPool function unhooking %s",
+		Logging::Write(logPrefix, "AccessMusicPool function unhooking %s",
 			unhookResult ? "successful" : "failed"
 		);
 	}
@@ -414,7 +421,7 @@ void ModManager::GamePreLoadHook(void* arg1, void* arg2, void* arg3, void* arg4)
 	const FunctionData* gamePreLoadFuncData = ModManager::GetFunctionData("GamePreLoad");
 	if (!gamePreLoadFuncData || !gamePreLoadFuncData->originalFunction)
 	{
-		logger.Log("Original GamePreLoad function was not hooked, cannot call it");
+		Logging::Write(logPrefix, "Original GamePreLoad function was not hooked, cannot call it");
 		return;
 	}
 
@@ -422,10 +429,10 @@ void ModManager::GamePreLoadHook(void* arg1, void* arg2, void* arg3, void* arg4)
 		arg1, arg2, arg3, arg4
 	);
 	gamePreLoadCalled = true;
-	logger.Log("GamePreLoad function called, gamePreLoadCalled set to true");
+	Logging::Write(logPrefix, "GamePreLoad function called, gamePreLoadCalled set to true");
 
 	bool unhookResult = TryUnhookFunction(*gamePreLoadFuncData);
-	logger.Log(
+	Logging::Write(logPrefix, 
 		"GamePreLoad function unhooking %s",
 		unhookResult ? "successful" : "failed"
 	);

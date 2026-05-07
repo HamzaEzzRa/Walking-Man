@@ -34,7 +34,7 @@ void LanguageManager::OnScanDone()
 		"AccessLanguagePool",
 		reinterpret_cast<void*>(&LanguageManager::AccessLanguagePoolHook)
 	);
-	logger.Log(
+	Logging::Write(logPrefix, 
 		"AccessLanguagePool function hook %s",
 		hookResult ? "installed successfully" : "failed"
 	);
@@ -44,7 +44,7 @@ void LanguageManager::OnRender()
 {
 	if (currentTextLanguageId != previousTextLanguageId)
 	{
-		logger.Log("Current language ID changed to: %u", currentTextLanguageId);
+		Logging::Write(logPrefix, "Current language ID changed to: %u", currentTextLanguageId);
 		ReloadCache();
 
 		ModManager* instance = ModManager::GetInstance();
@@ -99,11 +99,11 @@ void LanguageManager::ReloadCache()
 
 void LanguageManager::AccessLanguagePoolHook(void* arg1, void* arg2, void* arg3, void* arg4)
 {
-	Logger logger("Access Language Pool Hook");
+	constexpr const char* logPrefix = "Access Language Pool Hook";
 	const FunctionData* funcData = ModManager::GetFunctionData("AccessLanguagePool");
 	if (!funcData || !funcData->originalFunction)
 	{
-		logger.Log("Original AccessLanguagePool function was not hooked, cannot call it");
+		Logging::Write(logPrefix, "Original AccessLanguagePool function was not hooked, cannot call it");
 		return;
 	}
 	reinterpret_cast<GenericFunction_t>(funcData->originalFunction)(arg1, arg2, arg3, arg4);
@@ -126,7 +126,7 @@ void LanguageManager::AccessLanguagePoolHook(void* arg1, void* arg2, void* arg3,
 	);
 
 	bool unhookResult = ModManager::TryUnhookFunction(*funcData);
-	logger.Log(
+	Logging::Write(logPrefix, 
 		"AccessLanguagePool function unhook %s",
 		unhookResult ? "successful" : "failed"
 	);

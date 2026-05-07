@@ -42,7 +42,7 @@ private:
 	inline static ModManager* instance = nullptr;
 
 	inline static std::vector<IEventListener*> listeners{};
-	inline static Logger logger = Logger("Mod Manager");
+	inline static constexpr const char* logPrefix = "Mod Manager";
 
 	inline static uintptr_t musicPoolScanStartAddress = 0;
 	inline static bool gamePreLoadCalled = false;

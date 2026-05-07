@@ -1,19 +1,17 @@
 #pragma once
 
 #include <cstdint>
+#include <filesystem>
 #include <string>
 #include <vector>
 
 namespace AudioDecoder
 {
-	inline constexpr uint32_t WwisePcmSourcePluginId = 0x00010001;
-	inline constexpr uint32_t WwiseVorbisSourcePluginId = 0x00040001;
-
 	struct WwiseMediaBuffer
 	{
 		std::string path{};
 		std::vector<uint8_t> bytes{};
-		uint32_t sourcePluginId = WwiseVorbisSourcePluginId;
+		uint32_t sourcePluginId = 0x00040001;
 		long long durationMs = 0;
 		uint32_t sampleRate = 0;
 		uint32_t channels = 0;
@@ -21,11 +19,8 @@ namespace AudioDecoder
 		bool decodedToPcm = false;
 	};
 
-	const std::vector<std::string>& SupportedCustomAudioExtensions();
 	bool IsSupportedCustomAudioPath(const std::string& path);
-	bool IsWemPath(const std::string& path);
-	bool ShouldDecodeToPcmWem(const std::string& path);
-	uint32_t DetectWemSourcePluginId(const std::vector<uint8_t>& bytes);
-	bool DecodeFileToPcmWem(const std::string& path, WwiseMediaBuffer& output);
+	bool IsSupportedCustomAudioPath(const std::filesystem::path& path);
+
 	bool LoadWwiseMedia(const std::string& path, WwiseMediaBuffer& output);
 }

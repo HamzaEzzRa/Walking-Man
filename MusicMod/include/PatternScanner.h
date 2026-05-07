@@ -36,7 +36,7 @@ public:
         }
     };
 
-    inline static Logger logger{ "PatternScanner" };
+    inline static constexpr const char* logPrefix = "PatternScanner";
     inline static std::atomic<bool> exiting = false;
     static constexpr uint16_t WILDCARD = 0xFFFF;
 
@@ -124,7 +124,7 @@ public:
             std::reverse(regions.begin(), regions.end());
         }
 
-        logger.Log("ScanAll: %zu regions", regions.size());
+        Logging::Write(logPrefix, "ScanAll: %zu regions", regions.size());
 
         std::atomic<size_t> index = 0;
         std::mutex resultsLock;
@@ -134,7 +134,7 @@ public:
             while (!exiting.load()) {
                 if (timeout.count() > 0 &&
                     std::chrono::high_resolution_clock::now() - startTime >= timeout) {
-                    logger.Log("ScanAll timed out");
+                    Logging::Write(logPrefix, "ScanAll timed out");
                     exiting.store(true);
                     return;
                 }
@@ -178,7 +178,7 @@ public:
         for (auto& t : threads)
             t.join();
 
-        logger.Log("ScanAll: found %zu results", results.size());
+        Logging::Write(logPrefix, "ScanAll: found %zu results", results.size());
         exiting.store(false);
         return results;
     }
@@ -219,7 +219,7 @@ public:
             std::reverse(regions.begin(), regions.end());
         }
 
-        logger.Log("ScanFirst: %zu regions", regions.size());
+        Logging::Write(logPrefix, "ScanFirst: %zu regions", regions.size());
 
         std::atomic<bool> found = false;
         std::atomic<uintptr_t> result = 0;
@@ -229,7 +229,7 @@ public:
             while (!found.load(std::memory_order_acquire) && !exiting.load()) {
                 if (timeout.count() > 0 &&
                     std::chrono::high_resolution_clock::now() - startTime >= timeout) {
-                    logger.Log("ScanFirst timed out");
+                    Logging::Write(logPrefix, "ScanFirst timed out");
                     exiting.store(true);
                     return;
                 }
@@ -268,7 +268,7 @@ public:
         for (auto& t : threads)
             t.join();
 
-        logger.Log("ScanFirst: result = %p", (void*)result.load());
+        Logging::Write(logPrefix, "ScanFirst: result = %p", (void*)result.load());
         exiting.store(false);
         return result.load();
     }
@@ -288,7 +288,7 @@ public:
     {
         std::thread([=, &scanTargets]() mutable {
             if (scanTargets.empty()) {
-                logger.Log("ScanAsync: No targets to scan.");
+                Logging::Write(logPrefix, "ScanAsync: No targets to scan.");
                 if (onComplete) onComplete();
                 return;
             }
@@ -335,7 +335,7 @@ public:
             if (reverse)
                 std::reverse(regions.begin(), regions.end());
 
-            logger.Log("ScanAsync: %zu regions, %zu patterns", regions.size(), parsedPatterns.size());
+            Logging::Write(logPrefix, "ScanAsync: %zu regions, %zu patterns", regions.size(), parsedPatterns.size());
 
             std::atomic<size_t> regionIndex = 0;
             std::unordered_map<std::string, uintptr_t> foundAddresses;
@@ -348,7 +348,7 @@ public:
                 while (!done.load()) {
                     if (timeout.count() > 0 &&
                         std::chrono::high_resolution_clock::now() - startTime >= timeout) {
-                        logger.Log("ScanAsync: Timed out");
+                        Logging::Write(logPrefix, "ScanAsync: Timed out");
                         done.store(true);
                         return;
                     }
@@ -444,7 +444,7 @@ public:
             for (const auto& [name, target] : scanTargets) {
                 auto it = foundAddresses.find(name);
                 if (it == foundAddresses.end()) {
-                    logger.Log("ScanAsync: pattern for target \"%s\" not found", name.c_str());
+                    Logging::Write(logPrefix, "ScanAsync: pattern for target \"%s\" not found", name.c_str());
                 }
 			}
 
@@ -455,7 +455,7 @@ public:
                 }
             }
 
-            logger.Log("ScanAsync: found %zu/%zu patterns", foundAddresses.size(), totalPatterns);
+            Logging::Write(logPrefix, "ScanAsync: found %zu/%zu patterns", foundAddresses.size(), totalPatterns);
             if (onComplete) onComplete();
         }).detach();
     }
@@ -476,7 +476,7 @@ public:
     {
         std::thread([=]() mutable {
             if (scanTargets.empty()) {
-                logger.Log("ScanAsyncPtr: No targets to scan.");
+                Logging::Write(logPrefix, "ScanAsyncPtr: No targets to scan.");
                 if (onComplete) onComplete();
                 return;
             }
@@ -518,7 +518,7 @@ public:
             if (reverse)
                 std::reverse(regions.begin(), regions.end());
 
-            logger.Log("ScanAsyncPtr: %zu regions, %zu patterns", regions.size(), parsedPatterns.size());
+            Logging::Write(logPrefix, "ScanAsyncPtr: %zu regions, %zu patterns", regions.size(), parsedPatterns.size());
 
             std::atomic<size_t> regionIndex = 0;
             std::unordered_map<std::string, uintptr_t> foundAddresses;
@@ -531,7 +531,7 @@ public:
                 while (!done.load()) {
                     if (timeout.count() > 0 &&
                         std::chrono::high_resolution_clock::now() - startTime >= timeout) {
-                        logger.Log("ScanAsyncPtr: Timed out");
+                        Logging::Write(logPrefix, "ScanAsyncPtr: Timed out");
                         done.store(true);
                         return;
                     }
@@ -595,7 +595,7 @@ public:
                 }
             }
 
-            logger.Log("ScanAsyncPtr: found %zu/%zu patterns", foundAddresses.size(), totalPatterns);
+            Logging::Write(logPrefix, "ScanAsyncPtr: found %zu/%zu patterns", foundAddresses.size(), totalPatterns);
             if (onComplete) onComplete();
         }).detach();
     }

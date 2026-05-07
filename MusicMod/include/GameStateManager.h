@@ -59,7 +59,7 @@ private:
 	static void UpdateEnemyFlagState(FlagState<T>&, uint8_t);
 
 private:
-	inline static Logger logger{ "Game State Manager" };
+	inline static constexpr const char* logPrefix = "Game State Manager";
 
 	inline static uintptr_t inGameFlagPoolAddress = 0;
 

@@ -44,11 +44,7 @@ namespace ModConfiguration
 
 	extern const std::unordered_map<std::string, std::function<void(const std::string&)>> parameterSetters;
 
-	std::string Trim(const std::string&);
-	bool IsCommentOrEmpty(const std::string&);
 	bool LoadConfigFromFile();
-	bool LoadCustomSongsFromFolder();
-	void BindCustomSongsToAreaTrack(const MusicData&);
 
 	namespace Databases
 	{

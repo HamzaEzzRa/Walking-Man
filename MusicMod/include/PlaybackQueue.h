@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <numeric>
 #include <random>
 #include <vector>
@@ -29,7 +30,7 @@ public:
 	{
 		if (newSize == 0 || newData == nullptr)
 		{
-			logger.Log("Setting empty data to playback queue.");
+			Logging::Write(logPrefix, "Setting empty data to playback queue.");
 			data = nullptr;
 			dataSize = 0;
 			playbackOrder.clear();
@@ -44,12 +45,12 @@ public:
 		dataSize = newSize;
 	}
 
-	const T& GetCurrent()
+	T GetCurrent()
 	{
-		if (dataSize == 0)
+		if (IsEmpty())
 		{
-			logger.Log("Playback queue is empty, cannot get current item.");
-			return nullptr;
+			Logging::Write(logPrefix, "Playback queue is empty, cannot get current item.");
+			return T{};
 		}
 		if (currentIndex < 0)
 		{
@@ -57,22 +58,22 @@ public:
 		}
 		return data[playbackOrder[currentIndex]];
 	}
-	const T& GetNext()
+	T GetNext()
 	{
-		if (dataSize == 0)
+		if (IsEmpty())
 		{
-			logger.Log("Playback queue is empty, cannot get next item.");
-			return nullptr;
+			Logging::Write(logPrefix, "Playback queue is empty, cannot get next item.");
+			return T{};
 		}
 		currentIndex = (currentIndex + 1) % dataSize;
 		return GetCurrent();
 	}
-	const T& GetPrevious()
+	T GetPrevious()
 	{
-		if (dataSize == 0)
+		if (IsEmpty())
 		{
-			logger.Log("Playback queue is empty, cannot get previous item.");
-			return nullptr;
+			Logging::Write(logPrefix, "Playback queue is empty, cannot get previous item.");
+			return T{};
 		}
 		currentIndex = (currentIndex + dataSize - 1) % dataSize;
 		return GetCurrent();
@@ -86,6 +87,11 @@ public:
 	bool IsShuffled() const
 	{
 		return shuffled;
+	}
+
+	bool IsEmpty() const
+	{
+		return dataSize == 0;
 	}
 
 private:
@@ -106,7 +112,7 @@ private:
 	}
 
 private:
-	Logger logger = Logger("Music Playback Queue");
+	inline static constexpr const char* logPrefix = "Music Playback Queue";
 
 	std::unique_ptr<T[]> data;
 	size_t dataSize = 0;

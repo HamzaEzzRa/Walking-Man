@@ -5,6 +5,7 @@
 #include "ModConfiguration.h"
 
 #include "ModManager.h"
+#include "AreaMusicManager.h"
 #include "InputTracker.h"
 #include "MusicPlayer.h"
 #include "UIManager.h"
@@ -12,8 +13,6 @@
 #include "LanguageManager.h"
 
 #include "MinHook.h"
-
-static Logger logger{ "DllMain" };
 
 void OpenDevTerminal()
 {
@@ -56,17 +55,21 @@ bool IsValidProcess()
 
 DWORD WINAPI HookThread(LPVOID lpParam)
 {
+	Logging::Initialize(ModConfiguration::modLogFilename.c_str());
+
 	static ModManager modManager;
 	ModManager::SetInstance(&modManager);
 
 	static InputTracker inputTracker;
 	static MusicPlayer musicPlayer;
+	static AreaMusicManager areaMusicManager;
 	static UIManager uiManager;
 	static GameStateManager gameStateManager;
 	static LanguageManager languageManager;
 
 	modManager.RegisterListener(&inputTracker);
 	modManager.RegisterListener(&musicPlayer);
+	modManager.RegisterListener(&areaMusicManager);
 	modManager.RegisterListener(&uiManager);
 	modManager.RegisterListener(&gameStateManager);
 	modManager.RegisterListener(&languageManager);

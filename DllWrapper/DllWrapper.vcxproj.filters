@@ -51,7 +51,7 @@
     <ClInclude Include="..\MusicMod\include\MusicPlayer.h">
       <Filter>Header Files\Music Mod</Filter>
     </ClInclude>
-    <ClInclude Include="..\MusicMod\include\AreaMusicOverride.h">
+    <ClInclude Include="..\MusicMod\include\AreaMusicManager.h">
       <Filter>Header Files\Music Mod</Filter>
     </ClInclude>
     <ClInclude Include="..\MusicMod\include\AudioDecoder.h">
@@ -144,6 +144,9 @@
     <ClInclude Include="..\MusicMod\include\LanguageManager.h">
       <Filter>Header Files\Music Mod</Filter>
     </ClInclude>
+    <ClInclude Include="..\MusicMod\include\CustomMediaLoader.h">
+      <Filter>Header Files\Music Mod</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\MusicMod\src\ModManager.cpp">
@@ -155,7 +158,7 @@
     <ClCompile Include="..\MusicMod\src\MusicPlayer.cpp">
       <Filter>Source Files\Music Mod</Filter>
     </ClCompile>
-    <ClCompile Include="..\MusicMod\src\AreaMusicOverride.cpp">
+    <ClCompile Include="..\MusicMod\src\AreaMusicManager.cpp">
       <Filter>Source Files\Music Mod</Filter>
     </ClCompile>
     <ClCompile Include="..\MusicMod\src\AudioDecoder.cpp">
@@ -196,6 +199,9 @@
     </ClCompile>
     <ClCompile Include="src\DllMain.cpp">
       <Filter>Source Files\DllWrapper</Filter>
+    </ClCompile>
+    <ClCompile Include="..\MusicMod\src\CustomMediaLoader.cpp">
+      <Filter>Source Files\Music Mod</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

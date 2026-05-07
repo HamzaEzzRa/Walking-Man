@@ -114,7 +114,7 @@ void UIManager::OnScanDone()
 {
 	if (!ModConfiguration::showMusicPlayerUI)
 	{
-		logger.Log("Music player UI is disabled in configuration, skipping UI hooks");
+		Logging::Write(logPrefix, "Music player UI is disabled in configuration, skipping UI hooks");
 		return;
 	}
 
@@ -123,7 +123,7 @@ void UIManager::OnScanDone()
 		"InGameUIUpdateStaticPoolCaller",
 		reinterpret_cast<void*>(&UIManager::InGameUIUpdateStaticPoolCallerHook)
 	);
-	logger.Log(
+	Logging::Write(logPrefix, 
 		"InGameUIUpdateStaticPoolCaller function hook %s",
 		hookResult ? "installed successfully" : "failed"
 	);
@@ -132,7 +132,7 @@ void UIManager::OnScanDone()
 		"AccessStaticUIPool",
 		reinterpret_cast<void*>(&UIManager::AccessStaticUIPoolHook)
 	);
-	logger.Log(
+	Logging::Write(logPrefix, 
 		"AccessStaticUIPool function hook %s",
 		hookResult ? "installed successfully" : "failed"
 	);
@@ -141,7 +141,7 @@ void UIManager::OnScanDone()
 		"InGameUIDrawElement",
 		reinterpret_cast<void*>(&UIManager::InGameUIDrawElementHook)
 	);
-	logger.Log(
+	Logging::Write(logPrefix, 
 		"InGameUIDrawElement function hook %s",
 		hookResult ? "installed successfully" : "failed"
 	);
@@ -150,7 +150,7 @@ void UIManager::OnScanDone()
 		"InGameUIUpdateElement",
 		reinterpret_cast<void*>(&UIManager::InGameUIUpdateElementHook)
 	);
-	logger.Log(
+	Logging::Write(logPrefix, 
 		"InGameUIUpdateElement function hook %s",
 		hookResult ? "installed successfully" : "failed"
 	);
@@ -159,7 +159,7 @@ void UIManager::OnScanDone()
 		"PostMenuExit",
 		reinterpret_cast<void*>(&UIManager::PostMenuExitHook)
 	);
-	logger.Log(
+	Logging::Write(logPrefix, 
 		"PostMenuExit function hook %s",
 		hookResult ? "installed successfully" : "failed"
 	);
@@ -222,7 +222,7 @@ void UIManager::UpdateMusicPlayerUIBlockers(MusicPlayerUIBlocker blocker, bool e
 	{
 		musicPlayerUIBlockers &= ~blocker;
 	}
-	/*logger.Log(
+	/*Logging::Write(logPrefix, 
 		"Music player UI blockers updated: 0x%02X -> 0x%02X (blocker: 0x%02X, enable: %s)",
 		previousBlockers, musicPlayerUIBlockers, blocker, enable ? "true" : "false"
 	);*/
@@ -267,13 +267,13 @@ void UIManager::UpdateMusicPlayerUIBlockers(MusicPlayerUIBlocker blocker, bool e
 
 void UIManager::InGameUIUpdateStaticPoolCallerHook(void* arg1, void* arg2, void* arg3, void* arg4)
 {
-	Logger logger("UI Manager");
+	constexpr const char* logPrefix = "UI Manager";
 	const FunctionData* InGameUIUpdateStaticPoolCallerFuncData =
 		ModManager::GetFunctionData("InGameUIUpdateStaticPoolCaller");
 	if (!InGameUIUpdateStaticPoolCallerFuncData
 		|| !InGameUIUpdateStaticPoolCallerFuncData->originalFunction)
 	{
-		logger.Log("Original InGameUIUpdateStaticPoolCaller function is not found, cannot call it.");
+		Logging::Write(logPrefix, "Original InGameUIUpdateStaticPoolCaller function is not found, cannot call it.");
 		return;
 	}
 	reinterpret_cast<GenericFunction_t>(InGameUIUpdateStaticPoolCallerFuncData->originalFunction)(
@@ -311,7 +311,7 @@ void UIManager::InGameUIUpdateStaticPoolCallerHook(void* arg1, void* arg2, void*
 			{
 				continue;
 			}
-			//logger.Log("Runtime slot index for button %s: %u", button.name, runtimeSlotIndex);
+			//Logging::Write(logPrefix, "Runtime slot index for button %s: %u", button.name, runtimeSlotIndex);
 
 			if (currentRuntimeUIPoolStart && runtimeSlotSize)
 			{
@@ -328,21 +328,21 @@ void UIManager::InGameUIUpdateStaticPoolCallerHook(void* arg1, void* arg2, void*
 					const std::wstring_view& expectedView = buttonState.cachedWideView;
 					textNeedsUpdate = currentView != expectedView;
 
-					/*logger.Log("====================================");
-					logger.Log("Text: %s", buttonState.GetLocalizedText());
-					logger.Log("Current View:");
+					/*Logging::Write(logPrefix, "====================================");
+					Logging::Write(logPrefix, "Text: %s", buttonState.GetLocalizedText());
+					Logging::Write(logPrefix, "Current View:");
 					for (wchar_t wc : currentView)
 					{
-						logger.Log("0x%04X", wc);
+						Logging::Write(logPrefix, "0x%04X", wc);
 					}
 
-					logger.Log("Expected View:");
+					Logging::Write(logPrefix, "Expected View:");
 					for (wchar_t wc : expectedView)
 					{
-						logger.Log("0x%04X", wc);
+						Logging::Write(logPrefix, "0x%04X", wc);
 					}
 
-					logger.Log("Text needs update: %s", textNeedsUpdate ? "true" : "false");*/
+					Logging::Write(logPrefix, "Text needs update: %s", textNeedsUpdate ? "true" : "false");*/
 				}
 
 				if (textNeedsUpdate)
@@ -352,7 +352,7 @@ void UIManager::InGameUIUpdateStaticPoolCallerHook(void* arg1, void* arg2, void*
 					if (!createRuntimeUITextFromStringFuncData
 						|| !createRuntimeUITextFromStringFuncData->address)
 					{
-						logger.Log(
+						Logging::Write(logPrefix, 
 							"CreateRuntimeUITextFromString function was not found, cannot update text."
 						);
 						continue;
@@ -362,7 +362,7 @@ void UIManager::InGameUIUpdateStaticPoolCallerHook(void* arg1, void* arg2, void*
 						ModManager::GetFunctionData("AssignRuntimeUIText");
 					if (!assignRuntimeUITextFuncData || !assignRuntimeUITextFuncData->address)
 					{
-						logger.Log(
+						Logging::Write(logPrefix, 
 							"AssignRuntimeUIText function was not found, cannot assign new text."
 						);
 						continue;
@@ -372,7 +372,7 @@ void UIManager::InGameUIUpdateStaticPoolCallerHook(void* arg1, void* arg2, void*
 						ModManager::GetFunctionData("UpdateRuntimeUIText");
 					if (!updateRuntimeUITextFuncData || !updateRuntimeUITextFuncData->address)
 					{
-						logger.Log(
+						Logging::Write(logPrefix, 
 							"UpdateRuntimeUIText function was not found, cannot update runtime text."
 						);
 						continue;
@@ -381,7 +381,7 @@ void UIManager::InGameUIUpdateStaticPoolCallerHook(void* arg1, void* arg2, void*
 					const std::string& localizedText = buttonState.cachedACPText;
 					const std::string currentText = RuntimeUITextToUtf8(currentRuntimeText);
 					const std::string newText = Utils::GameTextToUtf8(localizedText);
-					logger.Log(
+					Logging::Write(logPrefix, 
 						"Updating runtime text for button %s, slot index: %zu, current text: %s, new text: %s",
 						button.name, runtimeSlotIndex, currentText.c_str(), newText.c_str()
 					);
@@ -422,7 +422,7 @@ void UIManager::InGameUIUpdateStaticPoolCallerHook(void* arg1, void* arg2, void*
 						ModManager::GetFunctionData("TryFreeRuntimeUIText");
 					if (!tryFreeRuntimeUITextFuncData || !tryFreeRuntimeUITextFuncData->address)
 					{
-						logger.Log(
+						Logging::Write(logPrefix, 
 							"TryFreeRuntimeUIText function was not found, cannot free old text. "
 							"Potential memory leak."
 						);
@@ -455,7 +455,7 @@ void UIManager::InGameUIUpdateStaticPoolCallerHook(void* arg1, void* arg2, void*
 
 void UIManager::AccessStaticUIPoolHook(void* arg1, void* arg2, void* arg3, void* arg4)
 {
-	Logger logger("Access Static UI Pool Hook");
+	constexpr const char* logPrefix = "Access Static UI Pool Hook";
 	uintptr_t ownerAddress = reinterpret_cast<uintptr_t>(arg1);
 	uintptr_t poolRootAddress = *(uintptr_t*)(ownerAddress + staticUIPoolOwnerOffset);
 	staticUIPoolAddress = poolRootAddress + GetStaticUIPoolOffset();
@@ -463,7 +463,7 @@ void UIManager::AccessStaticUIPoolHook(void* arg1, void* arg2, void* arg3, void*
 	const FunctionData* functionData = ModManager::GetFunctionData("AccessStaticUIPool");
 	if (!functionData || !functionData->originalFunction)
 	{
-		logger.Log("Original AccessStaticUIPool function was not hooked, cannot call it.");
+		Logging::Write(logPrefix, "Original AccessStaticUIPool function was not hooked, cannot call it.");
 		return;
 	}
 	reinterpret_cast<GenericFunction_t>(functionData->originalFunction)(arg1, arg2, arg3, arg4);
@@ -471,7 +471,7 @@ void UIManager::AccessStaticUIPoolHook(void* arg1, void* arg2, void* arg3, void*
 
 void UIManager::InGameUIUpdateElementHook(void* arg1, void* arg2, void* arg3, void* arg4)
 {
-	Logger logger("UI Manager");
+	constexpr const char* logPrefix = "UI Manager";
 
 	// arg1 is runtime pool start address + 0xC8 + slotSize * slotIndex
 	if (currentRuntimeUIPoolStart)
@@ -479,7 +479,7 @@ void UIManager::InGameUIUpdateElementHook(void* arg1, void* arg2, void* arg3, vo
 		if (!runtimeSlotSize && (uintptr_t)arg1 - currentRuntimeUIPoolStart > 0xC8)
 		{
 			runtimeSlotSize = (uintptr_t)arg1 - currentRuntimeUIPoolStart - 0xC8;
-			logger.Log("Runtime UI slot size: %zu", runtimeSlotSize);
+			Logging::Write(logPrefix, "Runtime UI slot size: %zu", runtimeSlotSize);
 		}
 	}
 
@@ -487,7 +487,7 @@ void UIManager::InGameUIUpdateElementHook(void* arg1, void* arg2, void* arg3, vo
 		ModManager::GetFunctionData("InGameUIUpdateElement");
 	if (!inGameUIUpdateElementFuncData || !inGameUIUpdateElementFuncData->originalFunction)
 	{
-		logger.Log("Original InGameUIUpdateElement function was not hooked, cannot call it.");
+		Logging::Write(logPrefix, "Original InGameUIUpdateElement function was not hooked, cannot call it.");
 		return;
 	}
 	reinterpret_cast<GenericFunction_t>(inGameUIUpdateElementFuncData->originalFunction)(
@@ -497,14 +497,14 @@ void UIManager::InGameUIUpdateElementHook(void* arg1, void* arg2, void* arg3, vo
 
 void UIManager::InGameUIDrawElementHook(void* arg1, void* arg2, void* arg3, void* arg4)
 {
-	Logger logger("UI Manager");
+	constexpr const char* logPrefix = "UI Manager";
 	currentRuntimeUIPoolStart = reinterpret_cast<uintptr_t>(arg1);
 
 	const FunctionData* inGameUIDrawElementFuncData =
 		ModManager::GetFunctionData("InGameUIDrawElement");
 	if (!inGameUIDrawElementFuncData || !inGameUIDrawElementFuncData->originalFunction)
 	{
-		logger.Log("Original InGameUIDrawElement function was not hooked, cannot call it.");
+		Logging::Write(logPrefix, "Original InGameUIDrawElement function was not hooked, cannot call it.");
 		return;
 	}
 	reinterpret_cast<GenericFunction_t>(inGameUIDrawElementFuncData->originalFunction)(
@@ -527,7 +527,7 @@ void UIManager::InGameUIDrawElementHook(void* arg1, void* arg2, void* arg3, void
 		);
 		if (*runtimeCompassOpenFlagAddress1 == 1 && *runtimeCompassOpenFlagAddress2 == 1)
 		{
-			logger.Log(
+			Logging::Write(logPrefix, 
 				"Compass UI detected as OPEN based on runtime flags %p and %p",
 				(void*)runtimeCompassOpenFlagAddress1, (void*)runtimeCompassOpenFlagAddress2
 			);
@@ -542,15 +542,15 @@ void UIManager::InGameUIDrawElementHook(void* arg1, void* arg2, void* arg3, void
 
 void UIManager::PostMenuExitHook(void* arg1, void* arg2, void* arg3, void* arg4)
 {
-	Logger logger("UI Manager");
+	constexpr const char* logPrefix = "UI Manager";
 
 	ResetModCompassState();
-	logger.Log("Compass state reset to CLOSED on menu exit.");
+	Logging::Write(logPrefix, "Compass state reset to CLOSED on menu exit.");
 
 	const FunctionData* postMenuExitFuncData = ModManager::GetFunctionData("PostMenuExit");
 	if (!postMenuExitFuncData || !postMenuExitFuncData->originalFunction)
 	{
-		logger.Log("Original PostMenuExit function was not hooked, cannot call it.");
+		Logging::Write(logPrefix, "Original PostMenuExit function was not hooked, cannot call it.");
 		return;
 	}
 	reinterpret_cast<GenericFunction_t>(postMenuExitFuncData->originalFunction)(
@@ -560,13 +560,13 @@ void UIManager::PostMenuExitHook(void* arg1, void* arg2, void* arg3, void* arg4)
 
 void UIManager::ShowNotificationText(const char* text)
 {
-	Logger logger("Show Notification Text");
+	constexpr const char* logPrefix = "Show Notification Text";
 
 	const FunctionData* createRuntimeUITextFromStringFuncData =
 		ModManager::GetFunctionData("CreateRuntimeUITextFromString");
 	if (!createRuntimeUITextFromStringFuncData || !createRuntimeUITextFromStringFuncData->address)
 	{
-		logger.Log("CreateRuntimeUITextFromString function was not found, cannot show notification text.");
+		Logging::Write(logPrefix, "CreateRuntimeUITextFromString function was not found, cannot show notification text.");
 		return;
 	}
 
@@ -574,7 +574,7 @@ void UIManager::ShowNotificationText(const char* text)
 		ModManager::GetFunctionData("GetNotificationPool");
 	if (!getNotificationPoolFuncData || !getNotificationPoolFuncData->address)
 	{
-		logger.Log("GetNotificationPool function was not found, cannot show notification text.");
+		Logging::Write(logPrefix, "GetNotificationPool function was not found, cannot show notification text.");
 		return;
 	}
 
@@ -582,7 +582,7 @@ void UIManager::ShowNotificationText(const char* text)
 		ModManager::GetFunctionData("DrawNotificationText");
 	if (!drawNotificationTextFuncData || !drawNotificationTextFuncData->address)
 	{
-		logger.Log("DrawNotificationText function was not found, cannot show notification text.");
+		Logging::Write(logPrefix, "DrawNotificationText function was not found, cannot show notification text.");
 		return;
 	}
 
@@ -644,7 +644,7 @@ void UIManager::ShowNotificationText(const char* text)
 		ModManager::GetFunctionData("TryFreeRuntimeUIText");
 	if (!tryFreeRuntimeUITextFuncData || !tryFreeRuntimeUITextFuncData->address)
 	{
-		logger.Log(
+		Logging::Write(logPrefix, 
 			"TryFreeRuntimeUIText function was not found, cannot free notification text. "
 			"Potential memory leak."
 		);

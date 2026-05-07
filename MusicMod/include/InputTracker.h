@@ -58,7 +58,7 @@ private:
 	static void ProcessControllerInputHook(void*, void*, void*, void*);
 
 private:
-	Logger logger = Logger("Input Tracker");
+	inline static constexpr const char* logPrefix = "Input Tracker";
 
 	inline static uintptr_t controllerInputMaskAddress = 0; // Address to watch for controller input mask
 	inline static uintptr_t controllerInputMaskOffset = 0x10; // Offset from the base address to the mask
