@@ -43,6 +43,7 @@ private:
 	static void CancelPendingAreaMusicTransition(const char*);
 	bool QueueAreaMusicTransition(const MusicData*, bool);
 	bool PlaySilenceForAreaMusicTransition();
+	bool ShowMusicDescription(const MusicData*);
 
 	void PlayNextInPool();
 	void PlayPreviousInPool();

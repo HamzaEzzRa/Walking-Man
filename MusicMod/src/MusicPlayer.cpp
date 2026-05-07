@@ -551,6 +551,9 @@ void MusicPlayer::OnUIButtonAction(const UIButtonAction& action)
 void MusicPlayer::PlayMusicHook(void* arg1, void* arg2, void* arg3, void* arg4)
 {
 	constexpr const char* logPrefix = "Play Music Hook";
+	Logging::Write(logPrefix, "PlayMusic called with arg1: %p, arg2: %p, arg3: %p, arg4: %p",
+		arg1, arg2, arg3, arg4
+	);
 	if (!playMusicFuncRCXAddress)
 	{
 		playMusicFuncRCXAddress = reinterpret_cast<uintptr_t>(arg1);
@@ -812,6 +815,106 @@ bool MusicPlayer::QueueAreaMusicTransition(const MusicData* data, bool displayDe
 	return true;
 }
 
+bool MusicPlayer::ShowMusicDescription(const MusicData* data)
+{
+	if (!data || data->type != MusicType::SONG)
+	{
+		return false;
+	}
+
+	const FunctionData* showMusicDescriptionFuncData = ModManager::GetFunctionData("ShowMusicDescription");
+	if (!showMusicDescriptionFuncData || !showMusicDescriptionFuncData->address)
+	{
+		Logging::Write(logPrefix, "Show music description function not found, cannot show description");
+		return false;
+	}
+
+	GenericFunction_t showMusicDescriptionFunc = reinterpret_cast<GenericFunction_t>(
+		showMusicDescriptionFuncData->address
+	);
+
+	if (descriptionDisplayed)
+	{
+		descriptionDisplayed = false;
+		showMusicDescriptionFunc(nullptr, nullptr, nullptr, nullptr); // clear
+	}
+
+	if (data->descriptionID)
+	{
+		void* descriptionId = reinterpret_cast<void*>(data->descriptionID);
+		Logging::Write(logPrefix, "Showing song description for ID: %p", descriptionId);
+		showMusicDescriptionFunc(nullptr, descriptionId, nullptr, nullptr);
+
+		lastDisplayTime = std::chrono::steady_clock::now();
+		descriptionDisplayed = true;
+		return true;
+	}
+
+	if (!data->name || !data->name[0])
+	{
+		return false;
+	}
+
+	const FunctionData* showMusicDescriptionFromTextFuncData =
+		ModManager::GetFunctionData("ShowMusicDescriptionFromText");
+	if (!showMusicDescriptionFromTextFuncData || !showMusicDescriptionFromTextFuncData->address)
+	{
+		Logging::Write(logPrefix, "Show music description from text function not found, cannot show custom description");
+		return false;
+	}
+
+	std::wstring titleText = Utils::Utf8ToWstring(data->name);
+	if (titleText.empty())
+	{
+		Logging::Write(logPrefix, "Could not convert song title to UTF-16, cannot show custom description");
+		return false;
+	}
+
+	std::wstring artistText;
+	const wchar_t* artistTextList[1] = {};
+	int32_t artistTextCount = 0;
+	if (data->artist && data->artist[0])
+	{
+		artistText = Utils::Utf8ToWstring(data->artist);
+		if (!artistText.empty())
+		{
+			artistTextList[0] = artistText.c_str();
+			artistTextCount = 1;
+		}
+	}
+
+	using ShowMusicDescriptionFromText_t = void (*)(
+		uint32_t,
+		const wchar_t*,
+		const wchar_t**,
+		int32_t,
+		const wchar_t**,
+		int32_t,
+		float
+	);
+
+	ShowMusicDescriptionFromText_t showMusicDescriptionFromTextFunc =
+		reinterpret_cast<ShowMusicDescriptionFromText_t>(showMusicDescriptionFromTextFuncData->address);
+	showMusicDescriptionFromTextFunc(
+		0,
+		titleText.c_str(),
+		artistTextCount > 0 ? artistTextList : nullptr,
+		artistTextCount,
+		nullptr,
+		0,
+		0.0f
+	);
+
+	Logging::Write(logPrefix,
+		"Showing custom song description: \"%s\" - \"%s\"",
+		data->name,
+		data->artist ? data->artist : ""
+	);
+	lastDisplayTime = std::chrono::steady_clock::now();
+	descriptionDisplayed = true;
+	return true;
+}
+
 void MusicPlayer::PlayMusic(const MusicData* data, bool displayDescription=true)
 {
 	if (musicAddressWatcher)
@@ -855,33 +958,7 @@ void MusicPlayer::PlayMusic(const MusicData* data, bool displayDescription=true)
 		ModConfiguration::showSongDescription && displayDescription
 	)
 	{
-		const FunctionData* showMusicDescriptionFuncData = ModManager::GetFunctionData("ShowMusicDescription");
-		if (!showMusicDescriptionFuncData || !showMusicDescriptionFuncData->address)
-		{
-			Logging::Write(logPrefix, "Show music description function not found, cannot show description");
-		}
-		else
-		{
-			GenericFunction_t showMusicDescriptionFunc = reinterpret_cast<GenericFunction_t>(
-				showMusicDescriptionFuncData->address
-			);
-
-			if (descriptionDisplayed)
-			{
-				descriptionDisplayed = false;
-				showMusicDescriptionFunc(nullptr, nullptr, nullptr, nullptr); // clear
-			}
-
-			if (data->type == MusicType::SONG && data->descriptionID)
-			{
-				void* descriptionId = reinterpret_cast<void*>(data->descriptionID);
-				Logging::Write(logPrefix, "Showing song description for ID: %p", descriptionId);
-				showMusicDescriptionFunc(nullptr, descriptionId, nullptr, nullptr);
-
-				lastDisplayTime = std::chrono::steady_clock::now();
-				descriptionDisplayed = true;
-			}
-		}
+		ShowMusicDescription(data);
 	}
 
 	void* arg1 = reinterpret_cast<void*>(playMusicFuncRCXAddress);
