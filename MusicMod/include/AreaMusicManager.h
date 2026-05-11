@@ -6,6 +6,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "IEventListener.h"
@@ -60,6 +61,48 @@ private:
 	// Wwise hook
 	static uint32_t __cdecl LoadBankMemoryCopyHook(const void*, unsigned long, unsigned long*);
 	static uint32_t __cdecl LoadBankMemoryViewHook(const void*, unsigned long, unsigned long*);
+	static uint32_t __cdecl SetStateHook(uint32_t, uint32_t);
+
+public:
+	struct LastSetStateObservation
+	{
+		uint32_t stateGroup = 0;
+		uint32_t stateValue = 0;
+		long long timestampMs = 0;
+		bool valid = false;
+	};
+
+	static LastSetStateObservation GetLastSetStateObservation();
+
+	// Open a logging window where WwiseObjectLookup calls for music HIRC items (segment/track/ranseq) are logged.
+	// Used to discover the segment/track/source chain associated with each area song at runtime.
+	static void OpenChainCaptureWindow(const char* tag, long long durationMs);
+
+	// Per-song Wwise chain inside CAkMusicSwitchCntr 878146756. Captured 2026-05-11 (Steam DC) via runtime
+	// WwiseObjectLookup logging + offline HIRC parsing. See memory/area_music_offset_research.md for the table.
+	struct AreaMusicChain
+	{
+		const char* songName;
+		uint32_t ranseqId;
+		uint32_t segmentId;
+		uint32_t trackId;
+		uint32_t sourceId;
+	};
+
+	static const AreaMusicChain* LookupChainForSong(const char* songName);
+
+	// Patches the live Wwise segment + track for `chain` so the next playback starts at `sourceStartMs`.
+	// Unlike the existing Register() / PatchLiveAreaMusicMetadata path which is tied to DBSS's chain and the
+	// custom-WEM-override flow, this function only adjusts timing (BeginTrim / segment duration / markers) — it
+	// does NOT rewrite source IDs, so it's safe to use on native area songs without affecting the source media.
+	// Caller must invoke RestoreNativeAreaMusicOffset() before another song plays, on stop, and on pre-exit.
+	static bool PatchNativeAreaMusicOffset(const AreaMusicChain* chain, long long sourceStartMs);
+	static void RestoreNativeAreaMusicOffset();
+
+	// Diagnostic: log the current value at the patched offsets on `chain`'s segment + track. Used to verify whether
+	// our writes are still in place at a given moment (e.g. after game's PlayMusic returns) or whether Wwise's audio
+	// thread overwrote them during the state transition.
+	static void DiagnosticLogChainState(const AreaMusicChain* chain, const char* tag);
 
 private:
 	struct AkSourceSettings
@@ -76,12 +119,16 @@ private:
 	using AkLoadBankMemoryFn = uint32_t(__cdecl*)(const void*, unsigned long, unsigned long*);
 	using AkUnloadBankMemoryFn = uint32_t(__cdecl*)(uint32_t, const void*);
 	using WwiseObjectLookupFn = void* (__cdecl*)(void*, uint32_t, int);
+	using AkSetStateFn = uint32_t(__cdecl*)(uint32_t, uint32_t);
 
 	inline static constexpr uint32_t akSuccess = 1;
 	inline static constexpr uint32_t areaMusicOverrideMediaId = 14330364;
 	inline static constexpr uint32_t areaMusicOverrideTrackId = 864381405;
 	inline static constexpr uint32_t areaMusicOverrideSegmentId = 515599299;
 	inline static constexpr uint32_t areaMusicOverrideRanSeqId = 124768037;
+	inline static constexpr uint32_t areaMusicSwitchCntrId = 878146756;
+	inline static constexpr uint32_t areaMusicStateGroupId = 0x1A2853AC;
+	inline static constexpr uint32_t areaMusicOverrideStateValue = 0x87D41010;
 	inline static constexpr uint32_t areaMusicOverrideSourcePluginId = 0x00040001;
 	inline static constexpr uint32_t areaMusicOverridePcmSourcePluginId = 0x00010001;
 	inline static constexpr const char* setMediaExportName =
@@ -94,6 +141,8 @@ private:
 		"?LoadBankMemoryView@SoundEngine@AK@@YA?AW4AKRESULT@@PEBXKAEAK@Z";
 	inline static constexpr const char* unloadBankMemoryExportName =
 		"?UnloadBank@SoundEngine@AK@@YA?AW4AKRESULT@@KPEBX@Z";
+	inline static constexpr const char* setStateExportName =
+		"?SetState@SoundEngine@AK@@YA?AW4AKRESULT@@KK@Z";
 
 	struct AreaMusicMetadataPatch
 	{
@@ -165,4 +214,30 @@ private:
 	inline static uint32_t areaMusicOverrideRegisteredMediaId = 0;
 	inline static bool areaMusicOverrideRegistered = false;
 	inline static bool areaMusicOverrideMetadataPatched = false;
+
+	inline static AkSetStateFn setStateFunc = nullptr;
+	inline static AkSetStateFn originalSetStateFunc = nullptr;
+	inline static bool setStateHookInitialized = false;
+	inline static std::mutex lastSetStateMutex{};
+	inline static LastSetStateObservation lastSetStateObservation{};
+
+	// Music-HIRC ID set populated from in-memory bank at first load; used to filter the chain-capture log down
+	// to music-related Wwise objects (segment / track / ranseq / switch-cntr).
+	inline static std::mutex musicIdSetMutex{};
+	inline static std::unordered_map<uint32_t, uint8_t> musicHircIdToType{}; // id -> HIRC type byte
+	inline static std::atomic<long long> chainCaptureExpiryMs{ 0 };
+	inline static std::mutex chainCaptureTagMutex{};
+	inline static std::string chainCaptureTag{};
+
+	struct NativeAreaMusicBackup
+	{
+		bool valid = false;
+		uint32_t segmentId = 0;
+		uint32_t trackId = 0;
+		uint32_t origSegmentDurationTicks = 0;
+		std::vector<uint32_t> origMarkerPositionTicks;
+		uint32_t origTrackSourceDurationTicks = 0;
+		std::vector<uint8_t> origTrackTimingBytes;
+	};
+	inline static NativeAreaMusicBackup nativeAreaMusicBackup{};
 };

@@ -1,6 +1,7 @@
 #include "AreaMusicManager.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 #include <limits>
 #include <string>
@@ -363,6 +364,9 @@ void AreaMusicManager::Initialize()
 	unloadBankMemoryFunc = reinterpret_cast<AkUnloadBankMemoryFn>(
 		GetProcAddress(mainModule, unloadBankMemoryExportName)
 	);
+	setStateFunc = reinterpret_cast<AkSetStateFn>(
+		GetProcAddress(mainModule, setStateExportName)
+	);
 
 	auto installHook = [](AkLoadBankMemoryFn target, void* hook, void** original, const char* name)
 	{
@@ -402,6 +406,41 @@ void AreaMusicManager::Initialize()
 		reinterpret_cast<void**>(&originalLoadBankMemoryViewFunc),
 		"LoadBankMemoryView"
 	);
+
+	if (setStateFunc && !setStateHookInitialized)
+	{
+		constexpr const char* logPrefix = "Area Music Metadata";
+		MH_STATUS created = MH_CreateHook(
+			reinterpret_cast<LPVOID>(setStateFunc),
+			reinterpret_cast<void*>(&AreaMusicManager::SetStateHook),
+			reinterpret_cast<void**>(&originalSetStateFunc)
+		);
+		if (created == MH_OK || created == MH_ERROR_ALREADY_CREATED)
+		{
+			MH_STATUS enabled = MH_EnableHook(reinterpret_cast<LPVOID>(setStateFunc));
+			if (enabled == MH_OK || enabled == MH_ERROR_ENABLED)
+			{
+				setStateHookInitialized = true;
+				Logging::Write(logPrefix,
+					"Installed Wwise SetState hook at %p",
+					reinterpret_cast<void*>(setStateFunc)
+				);
+			}
+			else
+			{
+				Logging::Write(logPrefix, "Failed to enable Wwise SetState hook: %d", enabled);
+			}
+		}
+		else
+		{
+			Logging::Write(logPrefix, "Failed to create Wwise SetState hook: %d", created);
+		}
+	}
+	else if (!setStateFunc)
+	{
+		constexpr const char* logPrefix = "Area Music Metadata";
+		Logging::Write(logPrefix, "Wwise SetState export was not resolved");
+	}
 }
 
 bool AreaMusicManager::InstallWwiseObjectLookupHook()
@@ -498,7 +537,489 @@ void* __cdecl AreaMusicManager::WwiseObjectLookupHook(void* registry, uint32_t o
 	{
 		CaptureWwiseObjectRegistry(registry);
 	}
+
+	// Chain-capture: while a window is open, log any music-typed lookup so we can discover the segment/track/source
+	// chain for the song that just started playing. The window is opened by MusicPlayer::PlayMusic.
+	const long long nowMs =
+		std::chrono::duration_cast<std::chrono::milliseconds>(
+			std::chrono::steady_clock::now().time_since_epoch()
+		).count();
+	if (nowMs < chainCaptureExpiryMs.load(std::memory_order_acquire))
+	{
+		uint8_t hircType = 0;
+		{
+			std::lock_guard<std::mutex> idLock(musicIdSetMutex);
+			auto it = musicHircIdToType.find(objectId);
+			if (it != musicHircIdToType.end())
+			{
+				hircType = it->second;
+			}
+		}
+		if (hircType != 0)
+		{
+			std::string tag;
+			{
+				std::lock_guard<std::mutex> tagLock(chainCaptureTagMutex);
+				tag = chainCaptureTag;
+			}
+			const char* typeName =
+				hircType == 0x0a ? "Segment" :
+				hircType == 0x0b ? "Track" :
+				hircType == 0x0c ? "SwitchCntr" :
+				hircType == 0x0d ? "RanSeqCntr" :
+				"?";
+			constexpr const char* logPrefix = "Area Music Chain";
+			Logging::Write(logPrefix,
+				"Lookup tag=\"%s\" type=%s id=%u (0x%08X)",
+				tag.c_str(),
+				typeName,
+				objectId,
+				objectId
+			);
+		}
+	}
+
 	return object;
+}
+
+void AreaMusicManager::OpenChainCaptureWindow(const char* tag, long long durationMs)
+{
+	const long long nowMs =
+		std::chrono::duration_cast<std::chrono::milliseconds>(
+			std::chrono::steady_clock::now().time_since_epoch()
+		).count();
+	chainCaptureExpiryMs.store(nowMs + durationMs, std::memory_order_release);
+	{
+		std::lock_guard<std::mutex> tagLock(chainCaptureTagMutex);
+		chainCaptureTag = tag ? tag : "";
+	}
+}
+
+void AreaMusicManager::DiagnosticLogChainState(const AreaMusicChain* chain, const char* tag)
+{
+	if (!chain) return;
+	void* segment = LookupWwiseObject(chain->segmentId);
+	void* track = LookupWwiseObject(chain->trackId);
+	if (!segment || !track)
+	{
+		Logging::Write("Chain State", "[%s] chain=\"%s\" could not look up segment(%u)/track(%u)",
+			tag ? tag : "", chain->songName, chain->segmentId, chain->trackId);
+		ReleaseWwiseObject(segment);
+		ReleaseWwiseObject(track);
+		return;
+	}
+
+	uint8_t* segmentBytes = static_cast<uint8_t*>(segment);
+	uint8_t* trackBytes = static_cast<uint8_t*>(track);
+	const LiveWwiseOffsets& offsets = GetLiveWwiseOffsets();
+
+	const uint32_t segDurationTicks =
+		HasReadableMemory(reinterpret_cast<uintptr_t>(segmentBytes + offsets.segmentDuration), sizeof(uint32_t))
+			? ReadUnaligned<uint32_t>(segmentBytes + offsets.segmentDuration) : 0xFFFFFFFFu;
+	const uint32_t trackSrcDurTicks =
+		HasReadableMemory(reinterpret_cast<uintptr_t>(trackBytes + offsets.trackSourceDuration), sizeof(uint32_t))
+			? ReadUnaligned<uint32_t>(trackBytes + offsets.trackSourceDuration) : 0xFFFFFFFFu;
+
+	uint8_t* timingArray = *reinterpret_cast<uint8_t**>(trackBytes + offsets.trackTimingArray);
+	const uint32_t timingCount = ReadUnaligned<uint32_t>(trackBytes + offsets.trackTimingCount);
+	uint32_t timing0PlayAt = 0xFFFFFFFFu, timing0Clip = 0xFFFFFFFFu, timing0SrcDur = 0xFFFFFFFFu, timing0BeginTrim = 0xFFFFFFFFu;
+	if (
+		timingArray
+		&& timingCount > 0
+		&& HasReadableMemory(reinterpret_cast<uintptr_t>(timingArray), liveTrackTimingStride)
+	)
+	{
+		timing0PlayAt = ReadUnaligned<uint32_t>(timingArray + 0x0c);
+		timing0Clip = ReadUnaligned<uint32_t>(timingArray + 0x10);
+		timing0SrcDur = ReadUnaligned<uint32_t>(timingArray + 0x14);
+		timing0BeginTrim = ReadUnaligned<uint32_t>(timingArray + 0x18);
+	}
+
+	Logging::Write("Chain State",
+		"[%s] \"%s\" segDuration=%u trackSrcDur=%u | timing[0] playAt=%u clip=%u srcDur=%u beginTrim=%u (timingCount=%u)",
+		tag ? tag : "", chain->songName,
+		segDurationTicks, trackSrcDurTicks,
+		timing0PlayAt, timing0Clip, timing0SrcDur, timing0BeginTrim,
+		timingCount
+	);
+
+	ReleaseWwiseObject(segment);
+	ReleaseWwiseObject(track);
+}
+
+
+namespace
+{
+	// Captured by hooking AK::SoundEngine::SetState + WwiseObjectLookup. Each chain is a
+	// {ranseq, segment, track, source} tuple inside CAkMusicSwitchCntr 878146756. Patching segment + track
+	// timing fields adjusts where playback starts for the named song without touching its source media.
+	constexpr AreaMusicManager::AreaMusicChain knownAreaMusicChains[] = {
+		{"Don't Be So Serious",              124768037,  515599299,   864381405,   14330364},
+		{"Bones",                            626513893,  924803744,   585844366,   443301537},
+		{"Poznan",                           896125235,  569475449,   905168316,   112514829},
+		{"Anything You Need",                608762905,  871006524,   353167231,   990235427},
+		{"Easy Way Out",                     922675051,  136040502,   411554128,   573918731},
+		{"I'm Leaving",                      504066054,  1004761732,  962966379,   10799056},
+		{"Give Up",                          558666898,  233422843,   312215729,   409126050},
+		{"Gosia",                            359904631,  316694681,   928172596,   1049365324},
+		{"Without You",                      598222498,  352981518,   746624823,   234016975},
+		{"Breathe In",                       821147021,  849466441,   318759929,   811953013},
+		{"Because We Have To",               925185256,  667964839,   747024383,   44821658},
+		{"St. Eriksplan",                    799932185,  520902395,   765370839,   894314852},
+		{"Rolling Over",                     899700136,  992828349,   542864971,   271832813},
+		{"Once in a Long, Long While...",    481140154,  80937257,    396340672,   534432074},
+		{"The Machine",                      177160982,  209990408,   878567193,   931685189},
+		{"Patience",                         356011358,  62893057,    704429786,   1065659883},
+		{"Not Around",                       970173279,  943762408,   44283622,    428823264},
+		{"Please Don't Stop (Chapter 1)",    524824844,  395048971,   533936954,   381534270},
+		{"Tonight, tonight, tonight",        339126489,  1031914594,  1028497934,  819564709},
+		{"Please Don't Stop (Chapter 2)",    508496364,  980712044,   438536405,   574698350},
+		{"Half Asleep",                      1049968,    794164252,   240303610,   320869737},
+		{"Waiting (10 Years)",               927076567,  445852071,   315451892,   1054849995},
+		{"Nobody Else",                      440407878,  1046003322,  205774222,   300265341},
+		{"Asylums For The Feeling",          1023121111, 22286178,    993579869,   208171504},
+		{"Almost Nothing",                   1035153539, 190996573,   61205935,    772358996},
+		{"BB's Theme",                       727898186,  161525664,   47642293,    554273859},
+		{"Pale Yellow",                      624312543,  172520581,   372066990,   630551876},
+		{"Goliath",                          129927267,  250138303,   144702745,   210092545},
+		{"Control",                          370578840,  899176194,   529120711,   674482479},
+		{"Other Me",                         881156219,  506330902,   260773589,   628634042},
+		{"Fragile",                          209950558,  771416739,   359994144,   152808688},
+		{"Ambient 1",                        174738457,  906105034,   997241961,   612428356},
+		{"Ambient 4",                        663805971,  87624654,    1012293903,  378980528},
+		{"Ambient 5",                        421722346,  113873444,   901357345,   491944249},
+		{"Ambient 6",                        437838398,  397518684,   258488343,   459118830},
+		{"Ambient 7",                        475318914,  321848901,   1057275913,  43133207},
+		{"Almost Nothing (Instrumental)",    361567052,  828378002,   424219496,   303176799},
+		{"Almost Nothing (No Beatbox)",      800867414,  165284959,   57199966,    1019908505},
+	};
+}
+
+const AreaMusicManager::AreaMusicChain* AreaMusicManager::LookupChainForSong(const char* songName)
+{
+	if (!songName)
+	{
+		return nullptr;
+	}
+
+	for (const AreaMusicChain& chain : knownAreaMusicChains)
+	{
+		if (chain.songName && std::strcmp(songName, chain.songName) == 0)
+		{
+			return &chain;
+		}
+	}
+	return nullptr;
+}
+
+bool AreaMusicManager::PatchNativeAreaMusicOffset(const AreaMusicChain* chain, long long sourceStartMs)
+{
+	if (!chain || sourceStartMs <= 0)
+	{
+		return false;
+	}
+
+	// First clear any prior patch so we always start from the original Wwise metadata.
+	RestoreNativeAreaMusicOffset();
+
+	void* segment = LookupWwiseObject(chain->segmentId);
+	void* track = LookupWwiseObject(chain->trackId);
+	if (!segment || !track)
+	{
+		constexpr const char* logPrefix = "Area Music Offset";
+		Logging::Write(logPrefix,
+			"Could not locate live Wwise objects for chain (segment=%u track=%u): segment=%p track=%p",
+			chain->segmentId,
+			chain->trackId,
+			segment,
+			track
+		);
+		ReleaseWwiseObject(segment);
+		ReleaseWwiseObject(track);
+		return false;
+	}
+
+	uint8_t* segmentBytes = static_cast<uint8_t*>(segment);
+	uint8_t* trackBytes = static_cast<uint8_t*>(track);
+	const LiveWwiseOffsets& offsets = GetLiveWwiseOffsets();
+
+	if (
+		!HasWritableMemory(reinterpret_cast<uintptr_t>(segmentBytes), offsets.segmentDuration + sizeof(uint32_t))
+		|| !HasWritableMemory(reinterpret_cast<uintptr_t>(trackBytes), offsets.trackSourceDuration + sizeof(uint32_t))
+	)
+	{
+		constexpr const char* logPrefix = "Area Music Offset";
+		Logging::Write(logPrefix, "Refusing native offset patch: segment or track memory is not writable");
+		ReleaseWwiseObject(segment);
+		ReleaseWwiseObject(track);
+		return false;
+	}
+
+	std::lock_guard<std::mutex> lock(areaMusicMetadataMutex);
+
+	// Source duration: read the segment's segmentDuration (matches what the existing custom-track patcher writes there
+	// for the custom WEM duration; on a native, unmodified Wwise object it equals the full source duration in ticks).
+	// The track's `trackSourceDuration` at +0x110 is NOT reliable on native tracks — it tends to hold a smaller runtime
+	// value unrelated to actual source length.
+	const uint32_t origSegmentDurationTicks = ReadUnaligned<uint32_t>(
+		segmentBytes + offsets.segmentDuration
+	);
+	if (origSegmentDurationTicks == 0)
+	{
+		constexpr const char* logPrefix = "Area Music Offset";
+		Logging::Write(logPrefix, "Cannot patch \"%s\": live segment duration is 0", chain->songName);
+		ReleaseWwiseObject(segment);
+		ReleaseWwiseObject(track);
+		return false;
+	}
+
+	const long long sourceDurationMs =
+		static_cast<long long>(origSegmentDurationTicks) / wwiseTicksPerMillisecond;
+	// Sanity guard: when Wwise hasn't fully initialized the segment yet (typically on the first activation of a
+	// state in a process lifetime) `segmentDuration` can be stale or near-zero. Patching with a tiny duration
+	// truncates playback to a few ms and the song auto-advances, which is worse than just restarting at offset 0.
+	// Skip the patch in that case and let the song restart cleanly; the next pause/resume will see a properly
+	// initialized segment and apply the offset.
+	if (sourceDurationMs < 1000 || sourceDurationMs > (60LL * 60 * 1000))
+	{
+		constexpr const char* logPrefix = "Area Music Offset";
+		Logging::Write(logPrefix,
+			"Skipping native offset patch for \"%s\": live segment duration is implausible (%lld ms from %u ticks)",
+			chain->songName,
+			sourceDurationMs,
+			origSegmentDurationTicks
+		);
+		ReleaseWwiseObject(segment);
+		ReleaseWwiseObject(track);
+		return false;
+	}
+	const long long clampedStartMs = ClampSourceStartOffsetMs(sourceStartMs, sourceDurationMs);
+	const long long effectiveDurationMs = (std::max)(1LL, sourceDurationMs - clampedStartMs);
+	const uint32_t sourceStartTicks = MillisecondsToWwiseTicksAllowZero(clampedStartMs);
+	const uint32_t effectiveDurationTicks = MillisecondsToWwiseTicks(effectiveDurationMs);
+
+	uint8_t* timingArray = *reinterpret_cast<uint8_t**>(
+		trackBytes + offsets.trackTimingArray
+	);
+	const uint32_t timingCount = ReadUnaligned<uint32_t>(
+		trackBytes + offsets.trackTimingCount
+	);
+	if (
+		timingCount > 256
+		|| (timingArray && timingCount > 0
+			&& !HasWritableMemory(reinterpret_cast<uintptr_t>(timingArray),
+				static_cast<size_t>(timingCount) * liveTrackTimingStride))
+	)
+	{
+		ReleaseWwiseObject(segment);
+		ReleaseWwiseObject(track);
+		return false;
+	}
+
+	// The track's first timing entry's BeginTrimOffset is the existing source-skip the bank ships with — many area
+	// songs have a non-zero intro trim (e.g. DBSS has ~13.9 s of pre-song WEM data that's normally skipped). The
+	// user's saved playtime is measured in "audible time" (clock starts when PlayMusic fires), so the new BeginTrim
+	// must be ORIGINAL + saved-playtime, not just saved-playtime — otherwise resume plays from earlier in the WEM
+	// than the user expects.
+	uint32_t origBeginTrimTicks = 0;
+	if (timingArray && timingCount > 0)
+	{
+		origBeginTrimTicks = ReadUnaligned<uint32_t>(timingArray + 0x18);
+	}
+	const uint32_t newBeginTrimTicks = origBeginTrimTicks + sourceStartTicks;
+
+	const uint32_t origSourceDurationTicks = ReadUnaligned<uint32_t>(
+		trackBytes + offsets.trackSourceDuration
+	);
+
+	uint8_t* markerArray = *reinterpret_cast<uint8_t**>(
+		segmentBytes + offsets.segmentMarkerArray
+		);
+	const uint32_t markerCount = ReadUnaligned<uint32_t>(
+		segmentBytes + offsets.segmentMarkerCount
+	);
+	if (
+		markerCount > 256
+		|| (markerArray && markerCount > 0
+			&& !HasWritableMemory(reinterpret_cast<uintptr_t>(markerArray),
+				static_cast<size_t>(markerCount) * liveSegmentMarkerStride))
+		)
+	{
+		ReleaseWwiseObject(segment);
+		ReleaseWwiseObject(track);
+		return false;
+	}
+
+	NativeAreaMusicBackup backup;
+	backup.valid = true;
+	backup.segmentId = chain->segmentId;
+	backup.trackId = chain->trackId;
+	backup.origSegmentDurationTicks = ReadUnaligned<uint32_t>(
+		segmentBytes + offsets.segmentDuration
+	);
+	backup.origTrackSourceDurationTicks = origSourceDurationTicks;
+	if (markerArray && markerCount > 0)
+	{
+		backup.origMarkerPositionTicks.reserve(markerCount);
+		for (uint32_t i = 0; i < markerCount; ++i)
+		{
+			backup.origMarkerPositionTicks.push_back(ReadUnaligned<uint32_t>(
+				markerArray + (static_cast<size_t>(i) * liveSegmentMarkerStride)
+				+ liveSegmentMarkerPositionOffset
+			));
+		}
+	}
+	if (timingArray && timingCount > 0)
+	{
+		const size_t timingBytes = static_cast<size_t>(timingCount) * liveTrackTimingStride;
+		backup.origTrackTimingBytes.assign(timingArray, timingArray + timingBytes);
+	}
+
+	WriteUnaligned<uint32_t>(segmentBytes + offsets.segmentDuration, effectiveDurationTicks);
+	if (markerArray && markerCount > 0)
+	{
+		for (uint32_t i = 0; i < markerCount; ++i)
+		{
+			const uint32_t markerTicks = ReadUnaligned<uint32_t>(
+				markerArray + (static_cast<size_t>(i) * liveSegmentMarkerStride)
+				+ liveSegmentMarkerPositionOffset
+			);
+			if (markerTicks > 0 && markerTicks != effectiveDurationTicks)
+			{
+				WriteUnaligned<uint32_t>(
+					markerArray + (static_cast<size_t>(i) * liveSegmentMarkerStride)
+					+ liveSegmentMarkerPositionOffset,
+					effectiveDurationTicks
+				);
+			}
+		}
+	}
+
+	if (timingArray && timingCount > 0)
+	{
+		for (uint32_t i = 0; i < timingCount; ++i)
+		{
+			uint8_t* entry = timingArray + (static_cast<size_t>(i) * liveTrackTimingStride);
+			WriteUnaligned<uint32_t>(entry + 0x0c, 0);                            // PlayAt
+			WriteUnaligned<uint32_t>(entry + 0x10, effectiveDurationTicks);       // ClipDuration
+			WriteUnaligned<uint32_t>(entry + 0x18, newBeginTrimTicks);            // BeginTrimOffset (orig + offset)
+		}
+	}
+
+	nativeAreaMusicBackup = std::move(backup);
+
+	constexpr const char* logPrefix = "Area Music Offset";
+	Logging::Write(logPrefix,
+		"Patched native offset for \"%s\" (segment=%u track=%u source=%u) sourceDur=%lld ms, audibleStart=%lld ms, effective=%lld ms, origBeginTrim=%u ticks, newBeginTrim=%u ticks",
+		chain->songName,
+		chain->segmentId,
+		chain->trackId,
+		chain->sourceId,
+		sourceDurationMs,
+		clampedStartMs,
+		effectiveDurationMs,
+		origBeginTrimTicks,
+		newBeginTrimTicks
+	);
+
+	ReleaseWwiseObject(segment);
+	ReleaseWwiseObject(track);
+	return true;
+}
+
+void AreaMusicManager::RestoreNativeAreaMusicOffset()
+{
+	NativeAreaMusicBackup backup;
+	{
+		std::lock_guard<std::mutex> lock(areaMusicMetadataMutex);
+		if (!nativeAreaMusicBackup.valid)
+		{
+			return;
+		}
+		backup = nativeAreaMusicBackup;
+		nativeAreaMusicBackup = {};
+	}
+
+	void* segment = LookupWwiseObject(backup.segmentId);
+	void* track = LookupWwiseObject(backup.trackId);
+	if (!segment || !track)
+	{
+		constexpr const char* logPrefix = "Area Music Offset";
+		Logging::Write(logPrefix,
+			"Could not restore native offset (segment=%u track=%u not found)",
+			backup.segmentId,
+			backup.trackId
+		);
+		ReleaseWwiseObject(segment);
+		ReleaseWwiseObject(track);
+		return;
+	}
+
+	uint8_t* segmentBytes = static_cast<uint8_t*>(segment);
+	uint8_t* trackBytes = static_cast<uint8_t*>(track);
+	const LiveWwiseOffsets& offsets = GetLiveWwiseOffsets();
+
+	std::lock_guard<std::mutex> lock(areaMusicMetadataMutex);
+
+	if (HasWritableMemory(reinterpret_cast<uintptr_t>(segmentBytes), offsets.segmentDuration + sizeof(uint32_t)))
+	{
+		WriteUnaligned<uint32_t>(
+			segmentBytes + offsets.segmentDuration,
+			backup.origSegmentDurationTicks
+		);
+	}
+
+	uint8_t* markerArray = *reinterpret_cast<uint8_t**>(
+		segmentBytes + offsets.segmentMarkerArray
+	);
+	const uint32_t markerCount = ReadUnaligned<uint32_t>(
+		segmentBytes + offsets.segmentMarkerCount
+	);
+	if (
+		markerArray
+		&& markerCount == backup.origMarkerPositionTicks.size()
+		&& markerCount > 0
+		&& HasWritableMemory(
+			reinterpret_cast<uintptr_t>(markerArray),
+			static_cast<size_t>(markerCount) * liveSegmentMarkerStride
+		)
+	)
+	{
+		for (uint32_t i = 0; i < markerCount; ++i)
+		{
+			WriteUnaligned<uint32_t>(
+				markerArray + (static_cast<size_t>(i) * liveSegmentMarkerStride)
+				+ liveSegmentMarkerPositionOffset,
+				backup.origMarkerPositionTicks[i]
+			);
+		}
+	}
+
+	uint8_t* timingArray = *reinterpret_cast<uint8_t**>(
+		trackBytes + offsets.trackTimingArray
+	);
+	const uint32_t timingCount = ReadUnaligned<uint32_t>(
+		trackBytes + offsets.trackTimingCount
+	);
+	if (
+		timingArray
+		&& !backup.origTrackTimingBytes.empty()
+		&& static_cast<size_t>(timingCount) * liveTrackTimingStride == backup.origTrackTimingBytes.size()
+		&& HasWritableMemory(reinterpret_cast<uintptr_t>(timingArray), backup.origTrackTimingBytes.size())
+	)
+	{
+		std::memcpy(timingArray, backup.origTrackTimingBytes.data(), backup.origTrackTimingBytes.size());
+	}
+
+	constexpr const char* logPrefix = "Area Music Offset";
+	Logging::Write(logPrefix,
+		"Restored native offset (segment=%u track=%u)",
+		backup.segmentId,
+		backup.trackId
+	);
+
+	ReleaseWwiseObject(segment);
+	ReleaseWwiseObject(track);
 }
 
 void* AreaMusicManager::LookupWwiseObjectInTable(uint32_t objectId, int tableIndex)
@@ -1335,6 +1856,62 @@ void AreaMusicManager::RememberAreaMusicBankMemory(
 		bankSize,
 		bankId
 	);
+
+	// Walk the HIRC chunk to collect all music-related item IDs (segment / track / switch-cntr / ranseq). The set lets
+	// us filter WwiseObjectLookup logging down to just music lookups, so when the game looks up Half Asleep's chain
+	// during PlayMusic we see segment / track / ranseq IDs in the log without drowning in unrelated lookups.
+	{
+		size_t offset = 0;
+		std::unordered_map<uint32_t, uint8_t> ids;
+		while (offset + wwiseChunkHeaderSize <= bankSize)
+		{
+			const uint32_t chunkSize = ReadUnaligned<uint32_t>(writableBankData + offset + 4);
+			if (chunkSize > bankSize - offset - wwiseChunkHeaderSize)
+			{
+				break;
+			}
+			if (std::memcmp(writableBankData + offset, "HIRC", 4) == 0)
+			{
+				uint8_t* hirc = writableBankData + offset + wwiseChunkHeaderSize;
+				if (chunkSize >= sizeof(uint32_t))
+				{
+					const uint32_t itemCount = ReadUnaligned<uint32_t>(hirc);
+					size_t itemOff = sizeof(uint32_t);
+					for (uint32_t i = 0; i < itemCount && itemOff + hircItemHeaderSize <= chunkSize; ++i)
+					{
+						const uint8_t type = hirc[itemOff];
+						const uint32_t bodySize = ReadUnaligned<uint32_t>(hirc + itemOff + 1);
+						if (bodySize > chunkSize - itemOff - hircItemHeaderSize)
+						{
+							break;
+						}
+						if ((type == 0x0a || type == 0x0b || type == 0x0c || type == 0x0d)
+							&& bodySize >= sizeof(uint32_t))
+						{
+							const uint32_t id = ReadUnaligned<uint32_t>(hirc + itemOff + hircItemHeaderSize);
+							ids[id] = type;
+						}
+						itemOff += hircItemHeaderSize + bodySize;
+					}
+				}
+				break;
+			}
+			offset += wwiseChunkHeaderSize + chunkSize;
+		}
+
+		if (!ids.empty())
+		{
+			std::lock_guard<std::mutex> idLock(musicIdSetMutex);
+			if (musicHircIdToType.empty())
+			{
+				musicHircIdToType = std::move(ids);
+				Logging::Write(logPrefix,
+					"Indexed %zu music HIRC items (segment/track/switch/ranseq) from bank",
+					musicHircIdToType.size()
+				);
+			}
+		}
+	}
 }
 
 void AreaMusicManager::RestoreAreaMusicBankMetadata()
@@ -1504,6 +2081,59 @@ bool AreaMusicManager::ReloadAreaMusicBankMetadata(bool patched)
 		patched ? "patched" : "original"
 	);
 	return false;
+}
+
+uint32_t __cdecl AreaMusicManager::SetStateHook(uint32_t stateGroup, uint32_t stateValue)
+{
+	// Only capture and log music state group
+	if (stateGroup == areaMusicStateGroupId)
+	{
+		const long long timestampMs =
+			std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::steady_clock::now().time_since_epoch()
+			).count();
+
+		bool changed = false;
+		{
+			std::lock_guard<std::mutex> lock(lastSetStateMutex);
+			if (
+				!lastSetStateObservation.valid
+				|| lastSetStateObservation.stateGroup != stateGroup
+				|| lastSetStateObservation.stateValue != stateValue
+			)
+			{
+				changed = true;
+			}
+			lastSetStateObservation = LastSetStateObservation{
+				stateGroup,
+				stateValue,
+				timestampMs,
+				true
+			};
+		}
+
+		if (changed)
+		{
+			constexpr const char* logPrefix = "Area Music State";
+			Logging::Write(logPrefix,
+				"SetState(group=0x%08X, value=0x%08X)",
+				stateGroup,
+				stateValue
+			);
+		}
+	}
+
+	if (!originalSetStateFunc)
+	{
+		return 0;
+	}
+	return originalSetStateFunc(stateGroup, stateValue);
+}
+
+AreaMusicManager::LastSetStateObservation AreaMusicManager::GetLastSetStateObservation()
+{
+	std::lock_guard<std::mutex> lock(lastSetStateMutex);
+	return lastSetStateObservation;
 }
 
 uint32_t __cdecl AreaMusicManager::LoadBankMemoryCopyHook(

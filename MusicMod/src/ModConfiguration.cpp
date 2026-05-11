@@ -436,7 +436,7 @@ namespace ModConfiguration
 			},
 			{
 				"Don't Be So Serious",
-				{21, MusicType::SONG, 20000, "Don't Be So Serious", "Low Roar",
+				{21, MusicType::SONG, 0, "Don't Be So Serious", "Low Roar",
 				"?? ?? ?? ?? ?? 7F 00 00 C4 BB 56 A4 5F B0 4A C5 A4 28 D8 65 FE 45 73 12"}
 			},
 			{

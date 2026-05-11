@@ -82,6 +82,9 @@ private:
 	inline static bool gameCalledInterruptor = false;
 	inline static std::atomic<long long> currentMusicPlayTime = 0; // in ms, used to track current playback time
 	inline static std::atomic<long long> currentMusicMaxLength = 0; // in ms, runtime guard for current playback
+	// Native-area-song offset to apply on the next PlayMusic call. Set by RestartCurrentMusicFromSavedPosition for
+	// native songs (the custom-track resume path uses AreaMusicManager::SetNextPlaybackStartOffsetMs instead).
+	inline static std::atomic<long long> pendingNativeOffsetMs = 0;
 
 	inline static const MusicData* currentMusicData = nullptr;
 	inline static std::chrono::time_point<std::chrono::steady_clock> currentMusicStartTime;

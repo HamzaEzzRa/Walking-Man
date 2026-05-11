@@ -739,6 +739,8 @@ void MusicPlayer::OnPreExit()
 		SetAreaMusicPauseState(false);
 	}
 	CancelPendingAreaMusicTransition("pre-exit");
+	pendingNativeOffsetMs.store(0);
+	AreaMusicManager::RestoreNativeAreaMusicOffset();
 	currentMusicData = nullptr;
 	currentMusicIsPlaying.store(false);
 	currentMusicMaxLength.store(0);
@@ -1301,9 +1303,19 @@ bool MusicPlayer::RestartCurrentMusicFromSavedPosition(const char* reason)
 
 	const long long resumeMs = (std::max)(0LL, currentMusicPlayTime.load());
 	const bool usesAreaOverride = AreaMusicManager::UsesOverride(data);
+	const AreaMusicManager::AreaMusicChain* nativeChain =
+		(!usesAreaOverride && resumeMs > 0)
+			? AreaMusicManager::LookupChainForSong(data->name)
+			: nullptr;
 	if (usesAreaOverride && resumeMs > 0)
 	{
+		// Custom-track path: patches DBSS chain via Register() after PlayMusic.
 		AreaMusicManager::SetNextPlaybackStartOffsetMs(resumeMs);
+	}
+	else if (nativeChain)
+	{
+		// Native area song path: stash the offset so PlayMusic applies it to the resolved chain inline.
+		pendingNativeOffsetMs.store(resumeMs);
 	}
 
 	if (areaMusicPauseStateActive.load())
@@ -1324,6 +1336,11 @@ bool MusicPlayer::RestartCurrentMusicFromSavedPosition(const char* reason)
 		{
 			AreaMusicManager::SetNextPlaybackStartOffsetMs(0);
 		}
+		if (nativeChain)
+		{
+			AreaMusicManager::RestoreNativeAreaMusicOffset();
+		}
+		pendingNativeOffsetMs.store(0);
 		currentMusicData = data;
 		currentMusicPausedByBlocker.store(false);
 		currentMusicIsPlaying.store(false);
@@ -1334,19 +1351,20 @@ bool MusicPlayer::RestartCurrentMusicFromSavedPosition(const char* reason)
 		return false;
 	}
 
-	if (usesAreaOverride && resumeMs > 0)
+	if ((usesAreaOverride || nativeChain) && resumeMs > 0)
 	{
 		currentMusicPlayTime.store(resumeMs);
 		currentMusicStartTime = std::chrono::steady_clock::now()
 			- std::chrono::milliseconds(resumeMs);
 	}
 
-	if (usesAreaOverride && resumeMs > 0)
+	if ((usesAreaOverride || nativeChain) && resumeMs > 0)
 	{
 		Logging::Write(logPrefix,
-			"Resumed area music \"%s\" from %lld ms%s%s",
+			"Resumed area music \"%s\" from %lld ms%s%s%s",
 			data->name ? data->name : "",
 			resumeMs,
+			nativeChain ? " (native chain)" : "",
 			reason && reason[0] ? ": " : "",
 			reason && reason[0] ? reason : ""
 		);
@@ -1478,7 +1496,7 @@ bool MusicPlayer::ShowMusicDescription(const MusicData* data)
 		return false;
 	}
 
-	std::wstring titleText = Utils::Utf8ToWstring(data->name);
+	std::wstring titleText = Utils::Utf8ToWstring("\"" + std::string(data->name) + "\"");
 	if (titleText.empty())
 	{
 		Logging::Write(logPrefix, "Could not convert song title to UTF-16, cannot show custom description");
@@ -1538,10 +1556,37 @@ void MusicPlayer::PlayMusic(const MusicData* data, bool displayDescription=true)
 		musicAddressWatcher.reset();
 	}
 
+	// Any prior native-area-song offset patch (BeginTrim / segment duration) is undone here so each playback starts
+	// from a clean Wwise state. If a pending offset has been queued by RestartCurrentMusicFromSavedPosition, the
+	// resolved chain gets re-patched below, after the per-track logic has identified the song.
+	AreaMusicManager::RestoreNativeAreaMusicOffset();
+
 	if (!data || !data->address)
 	{
 		Logging::Write(logPrefix, "Invalid music data provided, cannot play music");
+		pendingNativeOffsetMs.store(0);
 		return;
+	}
+
+	const long long stagedNativeOffsetMs = pendingNativeOffsetMs.exchange(0);
+	const AreaMusicManager::AreaMusicChain* diagnosticChain =
+		(data->name && !AreaMusicManager::UsesOverride(data))
+			? AreaMusicManager::LookupChainForSong(data->name)
+			: nullptr;
+	if (diagnosticChain)
+	{
+		AreaMusicManager::DiagnosticLogChainState(diagnosticChain, "pre-patch");
+	}
+	if (stagedNativeOffsetMs > 0 && !AreaMusicManager::UsesOverride(data) && data->name)
+	{
+		if (diagnosticChain)
+		{
+			AreaMusicManager::PatchNativeAreaMusicOffset(diagnosticChain, stagedNativeOffsetMs);
+		}
+	}
+	if (diagnosticChain)
+	{
+		AreaMusicManager::DiagnosticLogChainState(diagnosticChain, "post-patch-pre-PlayMusic");
 	}
 
 	const FunctionData* playMusicFuncData = ModManager::GetFunctionData("PlayMusic");
@@ -1631,7 +1676,15 @@ void MusicPlayer::PlayMusic(const MusicData* data, bool displayDescription=true)
 	currentMusicMaxLength.store(playbackMaxLength);
 	currentMusicPausedByBlocker.store(false);
 	currentMusicStartTime = std::chrono::steady_clock::now();
+	// Open a chain-capture window so any music-typed Wwise object lookup that follows gets logged with the song name.
+	// The game's PlayMusic for an area song triggers Wwise to look up the active music-switch, segment, track, source
+	// in order; logging those tells us the chain to patch for offset-resume.
+	AreaMusicManager::OpenChainCaptureWindow(data->name ? data->name : "", 2000);
 	reinterpret_cast<GenericFunction_t>(playMusicFuncData->originalFunction)(arg1, arg2, arg3, 0);
+	if (diagnosticChain)
+	{
+		AreaMusicManager::DiagnosticLogChainState(diagnosticChain, "post-PlayMusic-return");
+	}
 	Logging::Write(logPrefix,
 		"Playing BGM: \"%s\" (runtime duration guard %lld ms)",
 		data->name,
