@@ -24,7 +24,6 @@ namespace CustomMediaLoader
 		std::string artist = "Custom";
 	};
 
-	extern const uint32_t customAreaMusicOriginalMediaId;
 	extern std::vector<std::unique_ptr<std::string>> customSongStringStorage;
 
 	const char* StoreCustomSongString(const std::string& value);
@@ -32,4 +31,6 @@ namespace CustomMediaLoader
 
 	bool LoadCustomSongsFromFolder();
 	void BindCustomSongsToAreaTrack(const MusicData& baseTrack);
+
+	constexpr const char* logPrefix = "Custom Media Loader";
 }

@@ -51,6 +51,9 @@
     <ClInclude Include="..\MusicMod\include\MusicPlayer.h">
       <Filter>Header Files\Music Mod</Filter>
     </ClInclude>
+    <ClInclude Include="..\MusicMod\include\AreaMusicData.h">
+      <Filter>Header Files\Music Mod</Filter>
+    </ClInclude>
     <ClInclude Include="..\MusicMod\include\AreaMusicManager.h">
       <Filter>Header Files\Music Mod</Filter>
     </ClInclude>

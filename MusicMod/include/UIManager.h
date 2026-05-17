@@ -99,6 +99,7 @@ public:
 		BT_BLOCK = 1 << 0, // Blocked by BT detection
 		MULE_BLOCK = 1 << 1, // Blocked by MULE detection
 		CHIRAL_BLOCK = 1 << 2, // Blocked by Chiral Network turned off
+		FACILITY_BLOCK = 1 << 3, // Blocked inside facilities
 	};
 	uint8_t musicPlayerUIBlockers = 0; // Bitmask of events preventing music player UI from showing
 
@@ -143,7 +144,7 @@ private:
 	inline static uintptr_t staticSlotGrayedFlagOffset = 0x2A; // Offset to flag indicating whether the icon is grayed out
 	inline static uintptr_t staticSlotOrderOffset = 0x57; // Offset of the order in the static pool (3 bytes available, 56-58)
 	inline static uintptr_t staticSlotRuntimeOrderOffset = 0x44; // Final order at the runtime pool
-	
+
 	inline static size_t staticSlotSize = 0x60; // Size of each static slot in the pool
 
 	inline static size_t notificationTextOffset = 0x28;
@@ -164,7 +165,7 @@ private:
 
 	inline static uintptr_t currentRuntimeUIPoolStart = 0;
 	inline static uintptr_t runtimeUITextOffsetToActiveFlag = -24; // Offset to the active flag from the runtime UI text
-	
+
 	inline static CompassState currentCompassState = CLOSED;
 	inline static uintptr_t GetRuntimeCompassFlagOffset()
 	{

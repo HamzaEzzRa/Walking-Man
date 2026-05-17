@@ -246,6 +246,16 @@ namespace ModConfiguration
 				"41 57 41 56 41 55 41 54 56 57 55 53 B8 ?? ?? "
 				"00 00 E8 ?? ?? ?? ?? 48 29 C4 44 0F 29 9C 24"}
 			},
+			{
+				"FacilityManagerUpdate",
+				{"FacilityManagerUpdate",
+				"48 8B C4 48 89 58 20 56 57 41 ?? 41 56 41 57 "
+				"48 81 EC ?? ?? ?? ?? C5 78 29 48",
+				// gp version
+				"48 8B C4 57 48 81 EC ?? ?? ?? ?? C5 F8 29 78 C8 "
+				"C5 78 29 40 B8 48 8B 05 ?? ?? ?? ?? 48 33 C4 "
+				"48 89 84 24 20 01 00 00 48 8B 3D ?? ?? ?? ?? C5 F8 28 F9"}
+			},
 
 			// In-game UI functions
 			{
@@ -534,11 +544,11 @@ namespace ModConfiguration
 				{16, MusicType::SONG, 0, "Please Don't Stop (Chapter 2)", "Low Roar",
 				"?? ?? ?? ?? ?? 7F 00 00 08 E1 2B 67 43 59 42 C7 93 DF 5A 7E 98 AF 0B DA"}
 			},
-			{
+			/*{
 				"I'll Keep Coming",
 				{12, MusicType::SONG, 0, "I'll Keep Coming", "Low Roar",
 				"?? ?? ?? ?? ?? 7F 00 00 14 D0 B6 9E C7 40 4C 0E A0 9C FB 04 D1 7C 3B B1"}
-			},
+			},*/
 			{
 				"Half Asleep",
 				{0, MusicType::SONG, 0, "Half Asleep", "Low Roar",
@@ -569,7 +579,7 @@ namespace ModConfiguration
 				{35, MusicType::SONG, 0, "BB's Theme", "Ludvig Forssell",
 				"?? ?? ?? ?? ?? 7F 00 00 F3 A0 F0 58 1A 9C 42 2F 8D 34 A7 E9 70 3A 45 23"}
 			},
-			{
+			/*{
 				"Yellow Box",
 				{40, MusicType::SONG, 0, "Yellow Box", "The Neighbourhood",
 				"?? ?? ?? ?? ?? 7F 00 00 FA 7F C9 EB 62 AB 43 86 BB F5 E8 A1 50 E3 18 E8"}
@@ -598,7 +608,7 @@ namespace ModConfiguration
 				"Pop Virus",
 				{50, MusicType::SONG, 0, "Pop Virus", "Gen Hoshino",
 				"?? ?? ?? ?? ?? 7F 00 00 23 A9 DD 3C 14 F4 49 24 BA 14 B4 B0 51 ED C7 E7"}
-			},
+			},*/
 
 			// Director's cut exclusives
 			{
@@ -721,7 +731,6 @@ namespace ModConfiguration
 				"?? ?? ?? ?? ?? 7F 00 00 F9 11 18 09 E1 ED 40 BF 89 71 17 49 FC 70 D8 15"}
 			},
 		};
-
 		std::unordered_map<std::string, MusicData> customSongDatabase = {};
 
 		// Basically similar to interruptorDatabase, but these are UI sounds that indicate a music interruption
@@ -780,7 +789,7 @@ namespace ModConfiguration
 				{TextLanguage::GERMAN, u"Musik stoppen"},
 				{TextLanguage::SPANISH_SPAIN, u"Detener música"},
 				{TextLanguage::PORTUGUESE_PORTUGAL, u"Parar música"},
-				{TextLanguage::GREEK, u"Σταμάτησε μουσική"},
+				{TextLanguage::GREEK, u"Διακοπή μουσικής"},
 				{TextLanguage::POLISH, u"Zatrzymaj muzykę"},
 				{TextLanguage::RUSSIAN, u"Остановить плеер"},
 				{TextLanguage::SPANISH_LATIN_AMERICA, u"Detener música"},
@@ -798,7 +807,7 @@ namespace ModConfiguration
 			{"Loop Mode (All)", LocalizedText{{
 				{TextLanguage::ENGLISH_US, u"Loop Mode (All)"},
 				{TextLanguage::ENGLISH_UK, u"Loop Mode (All)"},
-				{TextLanguage::FRENCH, u"Mode de boucle (Tous)"},
+				{TextLanguage::FRENCH, u"Mode boucle (Tout)"},
 				{TextLanguage::ITALIAN, u"Modalità Loop (Tutti)"},
 				{TextLanguage::GERMAN, u"Schleifenmodus (Alle)"},
 				{TextLanguage::SPANISH_SPAIN, u"Modo bucle (Todos)"},
@@ -821,7 +830,7 @@ namespace ModConfiguration
 			{"Loop Mode (One)", LocalizedText{{
 				{TextLanguage::ENGLISH_US, u"Loop Mode (One)"},
 				{TextLanguage::ENGLISH_UK, u"Loop Mode (One)"},
-				{TextLanguage::FRENCH, u"Mode de boucle (Seul)"},
+				{TextLanguage::FRENCH, u"Mode boucle (Seul)"},
 				{TextLanguage::ITALIAN, u"Modalità Loop (Uno)"},
 				{TextLanguage::GERMAN, u"Schleifenmodus (Eins)"},
 				{TextLanguage::SPANISH_SPAIN, u"Modo bucle (Uno)"},
@@ -844,7 +853,7 @@ namespace ModConfiguration
 			{"Loop Mode (None)", LocalizedText{{
 				{TextLanguage::ENGLISH_US, u"Loop Mode (None)"},
 				{TextLanguage::ENGLISH_UK, u"Loop Mode (None)"},
-				{TextLanguage::FRENCH, u"Mode de boucle (Aucun)"},
+				{TextLanguage::FRENCH, u"Mode boucle (Aucun)"},
 				{TextLanguage::ITALIAN, u"Modalità Loop (Nessuna)"},
 				{TextLanguage::GERMAN, u"Schleifenmodus (Kein)"},
 				{TextLanguage::SPANISH_SPAIN, u"Modo bucle (Ninguno)"},
@@ -859,7 +868,7 @@ namespace ModConfiguration
 				{TextLanguage::DUTCH, u"Lusmodus (Geen)"},
 				{TextLanguage::CZECH, u"Režim smyčky (Žádná)"},
 				{TextLanguage::TURKISH, u"Döngü Modu (Hiçbiri)"},
-				{TextLanguage::HUNGARIAN, u"Loop mód (Egyetlen)"},
+				{TextLanguage::HUNGARIAN, u"Loop mód (Nincs)"},
 				{TextLanguage::KOREAN, u"루프 모드 (없음)"},
 				{TextLanguage::CHINESE_TRADITIONAL, u"循環模式 (無)"},
 				{TextLanguage::CHINESE_SIMPLIFIED, u"循环模式 (无)"},
@@ -914,12 +923,12 @@ namespace ModConfiguration
 			{"Threat nearby: music player deactivated.", LocalizedText{{
 				{TextLanguage::ENGLISH_US, u"Threat nearby: music player deactivated."},
 				{TextLanguage::ENGLISH_UK, u"Threat nearby: music player deactivated."},
-				{TextLanguage::FRENCH, u"Menace à proximité: le lecteur de musique est désactivé."},
+				{TextLanguage::FRENCH, u"Menace à proximité: lecteur de musique désactivé."},
 				{TextLanguage::ITALIAN, u"Minaccia vicina: lettore musicale disattivato."},
 				{TextLanguage::GERMAN, u"Bedrohung in der Nähe: Musik-Player deaktiviert."},
 				{TextLanguage::SPANISH_SPAIN, u"Amenaza cercana: reproductor de música desactivado."},
 				{TextLanguage::PORTUGUESE_PORTUGAL, u"Ameaça próxima: leitor de música desativado."},
-				{TextLanguage::GREEK, u"Κλειστή απειλή: η συσκευή αναπαραγωγής μουσικής είναι απενεργοποιημένη."},
+				{TextLanguage::GREEK, u"Κοντινή απειλή: η αναπαραγωγή μουσικής απενεργοποιήθηκε."},
 				{TextLanguage::POLISH, u"Niebezpieczeństwo w pobliżu: wyłączony odtwarzacz muzyki."},
 				{TextLanguage::RUSSIAN, u"Угроза рядом: музыкальный плеер недоступен."},
 				{TextLanguage::SPANISH_LATIN_AMERICA, u"Amenaza cercana: reproductor de música desactivado."},
@@ -931,36 +940,36 @@ namespace ModConfiguration
 				{TextLanguage::TURKISH, u"Tehdit yakın: müzik çalar devre dışı."},
 				{TextLanguage::HUNGARIAN, u"Fenyegetés a közelben: a zenelejátszó kikapcsolt."},
 				{TextLanguage::KOREAN, u"주변 위협: 음악 플레이어가 비활성화되었습니다."},
-				{TextLanguage::CHINESE_TRADITIONAL, u"威胁临近：音乐播放器已停用。"},
+				{TextLanguage::CHINESE_TRADITIONAL, u"威脅臨近：音樂播放器已停用。"},
 				{TextLanguage::CHINESE_SIMPLIFIED, u"威胁临近：音乐播放器已停用。"},
 			}}},
-			{"Threat cleared: music player can be activated.", LocalizedText{{
-				{TextLanguage::ENGLISH_US, u"Threat cleared: music player can be activated."},
-				{TextLanguage::ENGLISH_UK, u"Threat cleared: music player can be activated."},
-				{TextLanguage::FRENCH, u"Menace écartée: le lecteur de musique peut être activé."},
-				{TextLanguage::ITALIAN, u"Minaccia sventata: lettore musicale riattivabile."},
-				{TextLanguage::GERMAN, u"Bedrohung in der Nähe: Musik-Player aktivierbar."},
-				{TextLanguage::SPANISH_SPAIN, u"Amenaza despejada: se puede activar el reproductor de música."},
-				{TextLanguage::PORTUGUESE_PORTUGAL, u"Ameaça evitada: leitor de música pode ser ativado."},
-				{TextLanguage::GREEK, u"Εκκαθάριση απειλής: η συσκευή αναπαραγωγής μουσικής μπορεί να ενεργοποιηθεί."},
-				{TextLanguage::POLISH, u"Usunięto zagrożenie: można aktywować odtwarzacz muzyki."},
-				{TextLanguage::RUSSIAN, u"Угрозы нет: музыкальный плеер доступен."},
-				{TextLanguage::SPANISH_LATIN_AMERICA, u"Amenaza despejada: reproductor de música puede activarse."},
-				{TextLanguage::PORTUGUESE_LATIN_AMERICA, u"Ameaça eliminada: reprodutor de música pode ser ativado."},
-				{TextLanguage::JAPANESE, u"脅威クリア：ミュージックプレーヤーがアクティベート可能。"},
-				{TextLanguage::ARABIC, u"نهاية الخطر: يمكن تفعيل مشغل الموسيقى."},
-				{TextLanguage::DUTCH, u"Bedreiging geweken: muziekspeler kan worden geactiveerd."},
-				{TextLanguage::CZECH, u"Hrozba odstraněna: hudební přehrávač lze aktivovat."},
-				{TextLanguage::TURKISH, u"Tehdit temizlendi: müzik çalar etkinleştirilebilir."},
-				{TextLanguage::HUNGARIAN, u"Fenyegetés elhárítva: a zenelejátszó aktiválható."},
-				{TextLanguage::KOREAN, u"위협이 제거되었습니다: 음악 플레이어를 활성화할 수 있습니다."},
-				{TextLanguage::CHINESE_TRADITIONAL, u"威脅消失：音樂播放器可以啟動。"},
-				{TextLanguage::CHINESE_SIMPLIFIED, u"威胁消失：音乐播放器可以启动。"},
+			{"Threat cleared: music player activated.", LocalizedText{{
+				{TextLanguage::ENGLISH_US, u"Threat cleared: music player activated."},
+				{TextLanguage::ENGLISH_UK, u"Threat cleared: music player activated."},
+				{TextLanguage::FRENCH, u"Menace écartée: lecteur de musique activé."},
+				{TextLanguage::ITALIAN, u"Minaccia sventata: lettore musicale riattivato."},
+				{TextLanguage::GERMAN, u"Bedrohung beseitigt: Musik-Player aktiviert."},
+				{TextLanguage::SPANISH_SPAIN, u"Amenaza despejada: reproductor de música activado."},
+				{TextLanguage::PORTUGUESE_PORTUGAL, u"Ameaça evitada: leitor de música ativado."},
+				{TextLanguage::GREEK, u"Εκκαθάριση απειλής: η συσκευή αναπαραγωγής μουσικής ενεργοποιήθηκε."},
+				{TextLanguage::POLISH, u"Usunięto zagrożenie: odtwarzacz muzyki aktywowany."},
+				{TextLanguage::RUSSIAN, u"Угрозы нет: музыкальный плеер активирован."},
+				{TextLanguage::SPANISH_LATIN_AMERICA, u"Amenaza despejada: reproductor de música activado."},
+				{TextLanguage::PORTUGUESE_LATIN_AMERICA, u"Ameaça eliminada: reprodutor de música ativado."},
+				{TextLanguage::JAPANESE, u"脅威クリア：ミュージックプレーヤーが有効化されました。"},
+				{TextLanguage::ARABIC, u"نهاية الخطر: تم تفعيل مشغل الموسيقى."},
+				{TextLanguage::DUTCH, u"Bedreiging geweken: muziekspeler geactiveerd."},
+				{TextLanguage::CZECH, u"Hrozba odstraněna: hudební přehrávač aktivován."},
+				{TextLanguage::TURKISH, u"Tehdit temizlendi: müzik çalar etkinleştirildi."},
+				{TextLanguage::HUNGARIAN, u"Fenyegetés elhárítva: a zenelejátszó aktiválva."},
+				{TextLanguage::KOREAN, u"위협이 제거되었습니다: 음악 플레이어가 활성화되었습니다."},
+				{TextLanguage::CHINESE_TRADITIONAL, u"威脅消失：音樂播放器已啟動。"},
+				{TextLanguage::CHINESE_SIMPLIFIED, u"威胁消失：音乐播放器已启动。"},
 			}}},
 			{"Chiral network off: music player deactivated.", LocalizedText{{
 				{TextLanguage::ENGLISH_US, u"Chiral network off: music player deactivated."},
 				{TextLanguage::ENGLISH_UK, u"Chiral network off: music player deactivated."},
-				{TextLanguage::FRENCH, u"Déconnecté du réseau chiral: le lecteur de musique est désactivé."},
+				{TextLanguage::FRENCH, u"Déconnecté du réseau chiral: lecteur de musique désactivé."},
 				{TextLanguage::ITALIAN, u"Rete chirale spenta: lettore musicale disattivato."},
 				{TextLanguage::GERMAN, u"Chiral‑Netz aus: Musik‑Player deaktiviert."},
 				{TextLanguage::SPANISH_SPAIN, u"Red quiral desactivada: reproductor de música desactivado."},
@@ -977,31 +986,77 @@ namespace ModConfiguration
 				{TextLanguage::TURKISH, u"Ağ kapalı: müzik çalar devre dışı."},
 				{TextLanguage::HUNGARIAN, u"Hálózat letiltva: a zenelejátszó le van tiltva."},
 				{TextLanguage::KOREAN, u"네트워크 꺼짐: 음악 플레이어가 비활성화됩니다."},
-				{TextLanguage::CHINESE_TRADITIONAL, u"網路關閉：音乐播放器已停用。"},
-				{TextLanguage::CHINESE_SIMPLIFIED, u"网路关闭：音乐播放器已停用。"},
+				{TextLanguage::CHINESE_TRADITIONAL, u"網路關閉：音樂播放器已停用。"},
+				{TextLanguage::CHINESE_SIMPLIFIED, u"网络关闭：音乐播放器已停用。"},
 			}}},
-			{"Chiral network on: music player can be activated.", LocalizedText{{
-				{TextLanguage::ENGLISH_US, u"Chiral network on: music player can be activated."},
-				{TextLanguage::ENGLISH_UK, u"Chiral network on: music player can be activated."},
-				{TextLanguage::FRENCH, u"Connecté au réseau chiral: le lecteur de musique peut être activé."},
-				{TextLanguage::ITALIAN, u"Rete chirale attiva: lettore musicale riattivabile."},
-				{TextLanguage::GERMAN, u"Chiral‑Netz an: Musik‑Player aktivierbar."},
-				{TextLanguage::SPANISH_SPAIN, u"Red quiral activa: se puede activar el reproductor de música."},
-				{TextLanguage::PORTUGUESE_PORTUGAL, u"Rede quiral ligada: leitor de música pode ser ativado."},
-				{TextLanguage::GREEK, u"Δίκτυο ενεργοποιημένο: η συσκευή αναπαραγωγής μουσικής μπορεί να ενεργοποιηθεί."},
-				{TextLanguage::POLISH, u"Sieć aktywna: można włączyć odtwarzacz muzyki."},
-				{TextLanguage::RUSSIAN, u"Хиральная сеть подключена: музыкальный плеер доступен."},
-				{TextLanguage::SPANISH_LATIN_AMERICA, u"Red quiral encendida: reproductor de música puede activarse."},
-				{TextLanguage::PORTUGUESE_LATIN_AMERICA, u"Rede quiral ligada: reprodutor de música pode ser ativado."},
-				{TextLanguage::JAPANESE, u"キラルネットワークオン：ミュージックプレーヤーがアクティベーション可能。"},
-				{TextLanguage::ARABIC, u"الشبكة الكيرالية مفعّلة: يمكن تفعيل مشغل الموسيقى."},
-				{TextLanguage::DUTCH, u"Chiraal netwerk aan: muziekspeler kan geactiveerd worden."},
-				{TextLanguage::CZECH, u"Chirální síť povolena: hudební přehrávač lze aktivovat."},
-				{TextLanguage::TURKISH, u"Ağ açık: müzik çalar etkinleştirilebilir."},
-				{TextLanguage::HUNGARIAN, u"Hálózat engedélyezve: a zenelejátszó aktiválható."},
-				{TextLanguage::KOREAN, u"네트워크 켜짐: 음악 플레이어를 활성화할 수 있습니다."},
-				{TextLanguage::CHINESE_TRADITIONAL, u"已啟用網路：音樂播放器可以啟動。"},
-				{TextLanguage::CHINESE_SIMPLIFIED, u"已启用网路：音乐播放器可以启动。"},
+			{"Chiral network on: music player activated.", LocalizedText{{
+				{TextLanguage::ENGLISH_US, u"Chiral network on: music player activated."},
+				{TextLanguage::ENGLISH_UK, u"Chiral network on: music player activated."},
+				{TextLanguage::FRENCH, u"Connecté au réseau chiral: lecteur de musique activé."},
+				{TextLanguage::ITALIAN, u"Rete chirale attiva: lettore musicale attivato."},
+				{TextLanguage::GERMAN, u"Chiral‑Netz an: Musik‑Player aktiviert."},
+				{TextLanguage::SPANISH_SPAIN, u"Red quiral activa: reproductor de música activado."},
+				{TextLanguage::PORTUGUESE_PORTUGAL, u"Rede quiral ligada: leitor de música ativado."},
+				{TextLanguage::GREEK, u"Δίκτυο ενεργοποιημένο: η συσκευή αναπαραγωγής μουσικής ενεργοποιήθηκε."},
+				{TextLanguage::POLISH, u"Sieć aktywna: odtwarzacz muzyki aktywowany."},
+				{TextLanguage::RUSSIAN, u"Хиральная сеть подключена: музыкальный плеер активирован."},
+				{TextLanguage::SPANISH_LATIN_AMERICA, u"Red quiral encendida: reproductor de música activado."},
+				{TextLanguage::PORTUGUESE_LATIN_AMERICA, u"Rede quiral ligada: reprodutor de música ativado."},
+				{TextLanguage::JAPANESE, u"キラルネットワークオン：ミュージックプレーヤーが有効化されました。"},
+				{TextLanguage::ARABIC, u"الشبكة الكيرالية مفعّلة: تم تفعيل مشغل الموسيقى."},
+				{TextLanguage::DUTCH, u"Chiraal netwerk aan: muziekspeler geactiveerd."},
+				{TextLanguage::CZECH, u"Chirální síť povolena: hudební přehrávač aktivován."},
+				{TextLanguage::TURKISH, u"Ağ açık: müzik çalar etkinleştirildi."},
+				{TextLanguage::HUNGARIAN, u"Hálózat engedélyezve: a zenelejátszó aktiválva."},
+				{TextLanguage::KOREAN, u"네트워크 켜짐: 음악 플레이어가 활성화되었습니다."},
+				{TextLanguage::CHINESE_TRADITIONAL, u"已啟用網路：音樂播放器已啟動。"},
+				{TextLanguage::CHINESE_SIMPLIFIED, u"网络已启用：音乐播放器已启动。"},
+			}}},
+			{"Entering facility: music player deactivated.", LocalizedText{{
+				{TextLanguage::ENGLISH_US, u"Entering facility: music player deactivated."},
+				{TextLanguage::ENGLISH_UK, u"Entering facility: music player deactivated."},
+				{TextLanguage::FRENCH, u"Accès à l'installation: lecteur de musique désactivé."},
+				{TextLanguage::ITALIAN, u"Entrata in struttura: riproduzione musicale disattivata."},
+				{TextLanguage::GERMAN, u"Einrichtung betreten: Musik-Player deaktiviert."},
+				{TextLanguage::SPANISH_SPAIN, u"Entrando en la instalación: reproductor de música desactivado."},
+				{TextLanguage::PORTUGUESE_PORTUGAL, u"Entrar na instalação: leitor de música desativado."},
+				{TextLanguage::GREEK, u"Είσοδος στους χώρους: αναπαραγωγή μουσικής απενεργοποιημένη."},
+				{TextLanguage::POLISH, u"Wejście do obiektu: odtwarzacz muzyki dezaktywowany."},
+				{TextLanguage::RUSSIAN, u"Вход на объект: музыкальный плеер деактивирован."},
+				{TextLanguage::SPANISH_LATIN_AMERICA, u"Entrando en la instalación: reproductor de música desactivado."},
+				{TextLanguage::PORTUGUESE_LATIN_AMERICA, u"Entrando nas instalações: reprodutor de música desativado."},
+				{TextLanguage::JAPANESE, u"施設に入る：音楽プレーヤーが無効化されました。"},
+				{TextLanguage::ARABIC, u"دخول المنشأة: تم تعطيل مشغل الموسيقى."},
+				{TextLanguage::DUTCH, u"Binnengaan faciliteit: muziekspeler uitgeschakeld."},
+				{TextLanguage::CZECH, u"Přístup k zařízení: hudební přehrávač deaktivován."},
+				{TextLanguage::TURKISH, u"Tesise giriliyor: müzik çalar devre dışı bırakıldı."},
+				{TextLanguage::HUNGARIAN, u"Hozzáférés a létesítményhez: zenelejátszó deaktiválva."},
+				{TextLanguage::KOREAN, u"시설 진입 중: 음악 플레이어가 비활성화되었습니다."},
+				{TextLanguage::CHINESE_TRADITIONAL, u"進入設施：音樂播放器已停用。"},
+				{TextLanguage::CHINESE_SIMPLIFIED, u"进入设施：音乐播放器已停用。"},
+			}}},
+			{"Exiting facility: music player activated.", LocalizedText{{
+				{TextLanguage::ENGLISH_US, u"Exiting facility: music player activated."},
+				{TextLanguage::ENGLISH_UK, u"Exiting facility: music player activated."},
+				{TextLanguage::FRENCH, u"Sortie de l'installation: lecteur de musique activé."},
+				{TextLanguage::ITALIAN, u"Uscita dalla struttura: lettore musicale attivato."},
+				{TextLanguage::GERMAN, u"Einrichtung verlassen: Musik-Player aktiviert."},
+				{TextLanguage::SPANISH_SPAIN, u"Saliendo de la instalación: reproductor de música activado."},
+				{TextLanguage::PORTUGUESE_PORTUGAL, u"Sair da instalação: leitor de música ativado."},
+				{TextLanguage::GREEK, u"Έξοδος από τους χώρους: αναπαραγωγή μουσικής ενεργοποιημένη."},
+				{TextLanguage::POLISH, u"Wyjście z obiektu: odtwarzacz muzyki aktywowany."},
+				{TextLanguage::RUSSIAN, u"Выход из объекта: музыкальный плеер активирован."},
+				{TextLanguage::SPANISH_LATIN_AMERICA, u"Saliendo de la instalación: reproductor de música activado."},
+				{TextLanguage::PORTUGUESE_LATIN_AMERICA, u"Sair das instalações: reprodutor de música ativado."},
+				{TextLanguage::JAPANESE, u"施設から出る：音楽プレーヤーが有効化されました。"},
+				{TextLanguage::ARABIC, u"خروج من المنشأة: تم تفعيل مشغل الموسيقى."},
+				{TextLanguage::DUTCH, u"Faciliteit verlaten: muziekspeler geactiveerd."},
+				{TextLanguage::CZECH, u"Opouští zařízení: hudební přehrávač aktivován."},
+				{TextLanguage::TURKISH, u"Tesisten çıkılıyor: müzik çalar etkinleştirildi."},
+				{TextLanguage::HUNGARIAN, u"Kilépés a létesítményből: zenelejátszó aktiválva."},
+				{TextLanguage::KOREAN, u"시설 퇴장 중: 음악 플레이어가 활성화되었습니다."},
+				{TextLanguage::CHINESE_TRADITIONAL, u"退出設施：音樂播放器已啟動。"},
+				{TextLanguage::CHINESE_SIMPLIFIED, u"退出设施：音乐播放器已启动。"},
 			}}},
 
 			{"Music player interrupted.", LocalizedText{{
@@ -1026,29 +1081,6 @@ namespace ModConfiguration
 				{TextLanguage::KOREAN, u"음악 플레이어가 중단되었습니다."},
 				{TextLanguage::CHINESE_TRADITIONAL, u"音樂播放器中斷。"},
 				{TextLanguage::CHINESE_SIMPLIFIED, u"音乐播放器中断。"},
-			}}},
-			{"Entering facility: music player interrupted.", LocalizedText{{
-				{TextLanguage::ENGLISH_US, u"Entering facility: music player interrupted."},
-				{TextLanguage::ENGLISH_UK, u"Entering facility: music player interrupted."},
-				{TextLanguage::FRENCH, u"Accès à l'installation: le lecteur de musique a été interrompu."},
-				{TextLanguage::ITALIAN, u"Entrata in struttura: riproduzione musicale interrotta."},
-				{TextLanguage::GERMAN, u"Einrichtung betreten: Musik-Player unterbrochen."},
-				{TextLanguage::SPANISH_SPAIN, u"Entrando la instalación: reproductor de música interrumpido."},
-				{TextLanguage::PORTUGUESE_PORTUGAL, u"Entrar na instalação: leitor de música interrompido."},
-				{TextLanguage::GREEK, u"Είσοδος στους χώρους: διακοπή αναπαραγωγής μουσικής."},
-				{TextLanguage::POLISH, u"Wejście do obiektu: odtwarzacz muzyki przerwany."},
-				{TextLanguage::RUSSIAN, u"Вход на объект: музыкальный плеер остановлен."},
-				{TextLanguage::SPANISH_LATIN_AMERICA, u"Entrando la instalación: reproductor de música interrumpido."},
-				{TextLanguage::PORTUGUESE_LATIN_AMERICA, u"Entrando nas instalações: reprodutor de música interrompido."},
-				{TextLanguage::JAPANESE, u"施設に入る：音楽プレーヤーが中断。"},
-				{TextLanguage::ARABIC, u"دخول المنشأة: تم توقيف مشغل الموسيقى."},
-				{TextLanguage::DUTCH, u"Binnengaan faciliteit: muziekspeler onderbroken."},
-				{TextLanguage::CZECH, u"Přístup k instalaci: hudební přehrávač přerušen."},
-				{TextLanguage::TURKISH, u"Tesise giriliyor: müzik çalar kesintiye uğradı."},
-				{TextLanguage::HUNGARIAN, u"Hozzáférés a létesítményhez: zenelejátszó megszakítva."},
-				{TextLanguage::KOREAN, u"시설 진입 중: 음악 플레이어가 중단되었습니다."},
-				{TextLanguage::CHINESE_TRADITIONAL, u"進入設施： 音樂播放器中斷。"},
-				{TextLanguage::CHINESE_SIMPLIFIED, u"进入设施： 音乐播放器中断。"},
 			}}}
 		};
 	}

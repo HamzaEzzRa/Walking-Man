@@ -170,8 +170,7 @@ void InputTracker::PollGamepad()
 
 void InputTracker::SendInputPress(const InputCode& code)
 {
-	ModManager* instance = ModManager::GetInstance();
-	if (instance)
+	if (ModManager* instance = ModManager::GetInstance())
 	{
 		instance->DispatchEvent(ModEvent{ ModEventType::InputPressResolved, this, code });
 	}
@@ -179,8 +178,7 @@ void InputTracker::SendInputPress(const InputCode& code)
 
 void InputTracker::SendInputDown(const InputCode& code)
 {
-	ModManager* instance = ModManager::GetInstance();
-	if (instance)
+	if (ModManager* instance = ModManager::GetInstance())
 	{
 		instance->DispatchEvent(ModEvent{ ModEventType::InputDownResolved, this, code });
 	}
@@ -188,8 +186,7 @@ void InputTracker::SendInputDown(const InputCode& code)
 
 void InputTracker::SendInputUp(const InputCode& code)
 {
-	ModManager* instance = ModManager::GetInstance();
-	if (instance)
+	if (ModManager* instance = ModManager::GetInstance())
 	{
 		instance->DispatchEvent(ModEvent{ ModEventType::InputUpResolved, this, code });
 	}

@@ -13,14 +13,21 @@ enum class EnemyTerritoryFlag
 	SAFE = 0,
 	THREATENED = 1,
 	DETECTING = 2,
-	DETECTED = 3
+	DETECTED = 3,
+};
+
+enum class FacilityFlag
+{
+	UNKNOWN = -1,
+	OUTSIDE = 0,
+	INSIDE = 1,
 };
 
 enum class ChiralNetworkFlag
 {
 	UNKNOWN = -1,
 	OFF = 0,
-	ON = 1
+	ON = 1,
 };
 
 template<typename T>
@@ -37,6 +44,11 @@ struct FlagState
 	FlagState(size_t standardOffset, size_t dcOffset, ModEventType eventType, T initialState)
 		: standardFlagPoolOffset(standardOffset), dcFlagPoolOffset(dcOffset),
 		dispatchEventType(eventType), previous(initialState), current(initialState) {}
+
+	size_t GetFlagOffset(bool useDCVersion) const
+	{
+		return useDCVersion ? dcFlagPoolOffset : standardFlagPoolOffset;
+	}
 };
 
 class GameStateManager : public IEventListener, public FunctionHook
@@ -51,6 +63,7 @@ private:
 	void OnPreExit();
 
 	static void InGameFlagUpdateHook(void*, void*, void*, void*);
+	static void FacilityManagerUpdateHook(void*);
 
 	template<typename T>
 	void OnFlagStateChanged(FlagState<T>&);
@@ -70,6 +83,9 @@ private:
 	);
 	inline static FlagState<EnemyTerritoryFlag> muleTerritoryState = FlagState<EnemyTerritoryFlag>(
 		0xB90, 0xCC8, ModEventType::MuleTerritoryStateChanged, EnemyTerritoryFlag::UNKNOWN // Pretty much no way around having 2 offsets here
+	);
+	inline static FlagState<FacilityFlag> facilityTerritoryState = FlagState<FacilityFlag>(
+		0x228, 0x290, ModEventType::FacilityTerritoryStateChanged, FacilityFlag::UNKNOWN
 	);
 	inline static FlagState<ChiralNetworkFlag> chiralNetworkState = FlagState<ChiralNetworkFlag>(
 		0x174, 0x174, ModEventType::ChiralNetworkStateChanged, ChiralNetworkFlag::UNKNOWN

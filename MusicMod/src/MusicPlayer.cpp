@@ -1,12 +1,11 @@
 #include "MusicPlayer.h"
 
-#include "AreaMusicManager.h"
+#include "AreaMusicData.h"
 
 #include <algorithm>
 #include <chrono>
 #include <cstring>
 #include <string>
-#include <utility>
 #include <vector>
 #include <Windows.h>
 
@@ -19,257 +18,9 @@
 #include "MemoryUtils.h"
 #include "MinHook.h"
 
-#include "PatternScanner.h"
-
 #include "UIButton.h"
 
 #include "Utils.h"
-
-namespace
-{
-	constexpr uint32_t NativeAreaMusicPauseEventId = 183800411;
-	constexpr uint32_t NativeAreaMusicResumeEventId = 4253292098;
-	constexpr ptrdiff_t NativeAreaMusicPauseCounterOffset = 0xf8;
-	constexpr const char* PostEventExportName =
-		"?PostEvent@SoundEngine@AK@@YAKK_KKP6AXW4AkCallbackType@@PEAUAkCallbackInfo@@@ZPEAXKPEAUAkExternalSourceInfo@@K@Z";
-	constexpr const char* NativeAreaMusicPauseBodyPattern =
-		"B8 01 00 00 00 F0 0F C1 ?? F8 00 00 00 33 ?? 45 33 C9 "
-		"?? ?? 24 38 45 33 C0 48 89 ?? 24 30 33 D2 ?? ?? 24 28 "
-		"48 89 ?? 24 20 B9 5B 92 F4 0A";
-	constexpr const char* NativeAreaMusicResumeBodyPattern =
-		"B8 FF FF FF FF F0 0F C1 ?? F8 00 00 00 ?? ?? F8 00 00 "
-		"00 00 7F 4A";
-	constexpr const char* NativeAreaMusicPauseBodyPatternGP =
-		"F0 FF 83 F8 00 00 00 33 C0 45 33 C9 89 44 24 38 45 33 "
-		"C0 48 89 44 24 30 33 D2 89 44 24 28 B9 5B 92 F4 0A";
-	constexpr const char* NativeAreaMusicResumeBodyPatternGP =
-		"F0 FF 89 F8 00 00 00 83 B9 F8 00 00 00 00 0F 8F";
-	constexpr const char* NativeAreaMusicResumeCallsitePattern =
-		"80 ?? 58 00 74 ?? 48 8B 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? C6 ?? 58 00";
-
-	using AkPostEventFn = unsigned long(__cdecl*)(
-		uint32_t,
-		uint64_t,
-		uint32_t,
-		void*,
-		void*,
-		uint32_t,
-		void*,
-		uint32_t
-	);
-	using NativeAreaMusicFunc = void (*)(void*);
-
-	struct NativeAreaMusicControls
-	{
-		uintptr_t pauseFunction = 0;
-		uintptr_t resumeFunction = 0;
-		uintptr_t contextSlot = 0;
-		bool resolved = false;
-	};
-
-	AkPostEventFn ResolvePostEvent()
-	{
-		static AkPostEventFn postEvent = nullptr;
-		static bool resolved = false;
-		if (resolved)
-		{
-			return postEvent;
-		}
-
-		resolved = true;
-		HMODULE mainModule = GetModuleHandle(nullptr);
-		if (!mainModule)
-		{
-			return nullptr;
-		}
-
-		postEvent = reinterpret_cast<AkPostEventFn>(
-			GetProcAddress(mainModule, PostEventExportName)
-		);
-		return postEvent;
-	}
-
-	bool GetMainModuleRange(uintptr_t* start, uintptr_t* end)
-	{
-		HMODULE mainModule = GetModuleHandle(nullptr);
-		if (!mainModule)
-		{
-			return false;
-		}
-
-		auto* dosHeader = reinterpret_cast<IMAGE_DOS_HEADER*>(mainModule);
-		if (dosHeader->e_magic != IMAGE_DOS_SIGNATURE)
-		{
-			return false;
-		}
-
-		auto* ntHeaders = reinterpret_cast<IMAGE_NT_HEADERS*>(
-			reinterpret_cast<uint8_t*>(mainModule) + dosHeader->e_lfanew
-		);
-		if (ntHeaders->Signature != IMAGE_NT_SIGNATURE)
-		{
-			return false;
-		}
-
-		*start = reinterpret_cast<uintptr_t>(mainModule);
-		*end = *start + ntHeaders->OptionalHeader.SizeOfImage;
-		return true;
-	}
-
-	std::vector<uintptr_t> ScanMainModule(const char* pattern)
-	{
-		uintptr_t moduleStart = 0;
-		uintptr_t moduleEnd = 0;
-		if (!GetMainModuleRange(&moduleStart, &moduleEnd))
-		{
-			return {};
-		}
-
-		return PatternScanner::ScanAll(
-			pattern,
-			PAGE_EXECUTE_READ,
-			std::chrono::milliseconds(0),
-			0,
-			false,
-			moduleStart,
-			moduleEnd
-		);
-	}
-
-	uintptr_t FindFunctionStart(uintptr_t bodyAddress)
-	{
-		constexpr uintptr_t maxFunctionPrefixSize = 0x140;
-		uintptr_t scanStart = bodyAddress > maxFunctionPrefixSize
-			? bodyAddress - maxFunctionPrefixSize
-			: 0;
-
-		for (uintptr_t address = bodyAddress; address > scanStart; --address)
-		{
-			auto* current = reinterpret_cast<uint8_t*>(address);
-			auto* previous = reinterpret_cast<uint8_t*>(address - 1);
-			if (*previous == 0xcc && *current != 0xcc)
-			{
-				return address;
-			}
-		}
-
-		return 0;
-	}
-
-	uintptr_t ResolveFunctionFromBodyPattern(const char* pattern)
-	{
-		std::vector<uintptr_t> matches = ScanMainModule(pattern);
-		if (matches.empty())
-		{
-			return 0;
-		}
-
-		uintptr_t bodyAddress = *std::min_element(matches.begin(), matches.end());
-		return FindFunctionStart(bodyAddress);
-	}
-
-	uintptr_t ResolveNativeAreaMusicContextSlot(uintptr_t resumeFunction)
-	{
-		std::vector<uintptr_t> matches = ScanMainModule(NativeAreaMusicResumeCallsitePattern);
-		for (uintptr_t callsite : matches)
-		{
-			int32_t callDisplacement = *reinterpret_cast<int32_t*>(callsite + 14);
-			uintptr_t callTarget = callsite + 18 + callDisplacement;
-			if (callTarget != resumeFunction)
-			{
-				continue;
-			}
-
-			int32_t loadDisplacement = *reinterpret_cast<int32_t*>(callsite + 9);
-			return callsite + 13 + loadDisplacement;
-		}
-
-		return 0;
-	}
-
-	NativeAreaMusicControls& ResolveNativeAreaMusicControls()
-	{
-		static NativeAreaMusicControls controls{};
-		if (controls.resolved)
-		{
-			return controls;
-		}
-
-		controls.resolved = true;
-		controls.pauseFunction = ResolveFunctionFromBodyPattern(NativeAreaMusicPauseBodyPattern);
-		controls.resumeFunction = ResolveFunctionFromBodyPattern(NativeAreaMusicResumeBodyPattern);
-		if (!controls.pauseFunction || !controls.resumeFunction)
-		{
-			controls.pauseFunction = ResolveFunctionFromBodyPattern(NativeAreaMusicPauseBodyPatternGP);
-			controls.resumeFunction = ResolveFunctionFromBodyPattern(NativeAreaMusicResumeBodyPatternGP);
-		}
-
-		if (controls.resumeFunction)
-		{
-			controls.contextSlot = ResolveNativeAreaMusicContextSlot(controls.resumeFunction);
-		}
-
-		Logging::Write("Music Player",
-			"Native area music controls resolved: pause=%p resume=%p context slot=%p",
-			reinterpret_cast<void*>(controls.pauseFunction),
-			reinterpret_cast<void*>(controls.resumeFunction),
-			reinterpret_cast<void*>(controls.contextSlot)
-		);
-		return controls;
-	}
-
-	uintptr_t ReadNativeAreaMusicContext(uintptr_t contextSlot)
-	{
-		if (
-			!contextSlot
-			|| !MemoryUtils::IsReadablePointer(
-				reinterpret_cast<void*>(contextSlot),
-				sizeof(uintptr_t)
-			)
-		)
-		{
-			return 0;
-		}
-
-		uintptr_t context = *reinterpret_cast<uintptr_t*>(contextSlot);
-		if (
-			!context
-			|| !MemoryUtils::IsReadablePointer(
-				reinterpret_cast<void*>(context + NativeAreaMusicPauseCounterOffset),
-				sizeof(long)
-			)
-		)
-		{
-			return 0;
-		}
-
-		return context;
-	}
-
-	bool PostNativeAreaMusicEvent(bool paused)
-	{
-		AkPostEventFn postEvent = ResolvePostEvent();
-		if (!postEvent)
-		{
-			return false;
-		}
-
-		const uint32_t eventId = paused
-			? NativeAreaMusicPauseEventId
-			: NativeAreaMusicResumeEventId;
-		postEvent(
-			eventId,
-			0,
-			0,
-			nullptr,
-			nullptr,
-			0,
-			nullptr,
-			0
-		);
-		return true;
-	}
-}
 
 MusicPlayer::MusicPlayer()
 {
@@ -294,114 +45,99 @@ void MusicPlayer::CancelPendingAreaMusicTransition(const char* reason)
 	pendingMusicOverridePrepared = false;
 	currentMusicPlayTime.store(0);
 	currentMusicMaxLength.store(0);
-	AreaMusicManager::Unset();
+	if (ModManager* instance = ModManager::GetInstance())
+	{
+		instance->DispatchEvent(ModEvent{ ModEventType::AreaMusicUnsetRequested, nullptr, nullptr });
+	}
 }
 
 void MusicPlayer::OnEvent(const ModEvent& event)
 {
 	switch (event.type)
 	{
-	case ModEventType::ScanCompleted:
-	{
-		OnScanDone();
-		break;
-	}
-	case ModEventType::FrameRendered:
-	{
-		OnRender();
-		break;
-	}
-	case ModEventType::PreExitTriggered:
-	{
-		OnPreExit();
-		break;
-	}
-	case ModEventType::UIButtonPressed:
-	{
-		UIButtonAction action = std::any_cast<UIButtonAction>(event.data);
-		OnUIButtonAction(action);
-		break;
-	}
-	case ModEventType::InputPressResolved:
-	{
-		const InputCode& inputCode = std::any_cast<InputCode>(event.data);
-		OnInputPress(inputCode);
-		break;
-	}
-	case ModEventType::BTTerritoryStateChanged:
-	case ModEventType::MuleTerritoryStateChanged:
-	{
-		auto* territoryFlagState = std::any_cast<FlagState<EnemyTerritoryFlag>*>(event.data);
-		const bool wasBlocked = HasActiveMusicBlocker();
-		std::atomic<bool>& territoryBlocker = event.type == ModEventType::BTTerritoryStateChanged
-			? btTerritoryBlocksMusic
-			: muleTerritoryBlocksMusic;
-		territoryBlocker.store(territoryFlagState->current != EnemyTerritoryFlag::SAFE);
-		const bool isBlocked = HasActiveMusicBlocker();
-
-		if (!wasBlocked && isBlocked && (currentMusicData || pendingMusicData))
+		case ModEventType::ScanCompleted:
 		{
-			if (!PauseCurrentMusicForBlocker("enemy territory"))
-			{
-				CancelPendingAreaMusicTransition("enemy territory interruption");
-				if (AreaMusicManager::UsesOverride(currentMusicData))
-				{
-					AreaMusicManager::Unset();
-				}
-				currentMusicData = nullptr;
-				currentMusicIsPlaying.store(false);
-				currentMusicPausedByBlocker.store(false);
-				currentMusicPlayTime.store(0);
-				currentMusicMaxLength.store(0);
-
-				ModManager* instance = ModManager::GetInstance();
-				if (instance)
-				{
-					instance->DispatchEvent(
-						ModEvent{ ModEventType::MusicPlayerStopped, this, nullptr }
-					);
-				}
-			}
+			OnScanDone();
+			break;
 		}
-		else if (wasBlocked && !isBlocked)
+		case ModEventType::FrameRendered:
 		{
-			ResumeCurrentMusicForBlocker("enemy territory cleared");
+			OnRender();
+			break;
 		}
-		break;
-	}
-	case ModEventType::ChiralNetworkStateChanged:
-	{
-		if (ModConfiguration::connectToChiralNetwork)
+		case ModEventType::PreExitTriggered:
 		{
-			auto* chiralNetworkFlagState = std::any_cast<FlagState<ChiralNetworkFlag>*>(event.data);
+			OnPreExit();
+			break;
+		}
+		case ModEventType::UIButtonPressed:
+		{
+			UIButtonAction action = std::any_cast<UIButtonAction>(event.data);
+			OnUIButtonAction(action);
+			break;
+		}
+		case ModEventType::InputPressResolved:
+		{
+			const InputCode& inputCode = std::any_cast<InputCode>(event.data);
+			OnInputPress(inputCode);
+			break;
+		}
+		case ModEventType::BTTerritoryStateChanged:
+		case ModEventType::MuleTerritoryStateChanged:
+		{
+			auto* territoryFlagState = std::any_cast<FlagState<EnemyTerritoryFlag>*>(event.data);
 			const bool wasBlocked = HasActiveMusicBlocker();
-			chiralNetworkBlocksMusic.store(chiralNetworkFlagState->current == ChiralNetworkFlag::OFF);
+			std::atomic<bool>& territoryBlocker = event.type == ModEventType::BTTerritoryStateChanged
+				? btTerritoryBlocksMusic
+				: muleTerritoryBlocksMusic;
+			territoryBlocker.store(territoryFlagState->current != EnemyTerritoryFlag::SAFE);
 			const bool isBlocked = HasActiveMusicBlocker();
 
-			if (!wasBlocked && isBlocked && (currentMusicData || pendingMusicData))
-			{
-				if (!PauseCurrentMusicForBlocker("chiral network off"))
-				{
-					StopMusic();
-
-					ModManager* instance = ModManager::GetInstance();
-					if (instance)
-					{
-						instance->DispatchEvent(
-							ModEvent{ ModEventType::MusicPlayerStopped, this, nullptr }
-						);
-					}
-				}
-			}
-			else if (wasBlocked && !isBlocked)
-			{
-				ResumeCurrentMusicForBlocker("chiral network restored");
-			}
+			HandleMusicBlockerChange(
+				wasBlocked,
+				isBlocked,
+				"enemy territory",
+				"enemy territory cleared",
+				"enemy territory interruption"
+			);
+			break;
 		}
-		break;
-	}
-	default:
-		break;
+		case ModEventType::FacilityTerritoryStateChanged:
+		{
+			auto* facilityFlagState = std::any_cast<FlagState<FacilityFlag>*>(event.data);
+			const bool wasBlocked = HasActiveMusicBlocker();
+			facilityTerritoryBlocksMusic.store(facilityFlagState->current == FacilityFlag::INSIDE);
+			const bool isBlocked = HasActiveMusicBlocker();
+
+			HandleMusicBlockerChange(
+				wasBlocked,
+				isBlocked,
+				"in facility",
+				"facility territory cleared",
+				"facility territory interruption"
+			);
+			break;
+		}
+		case ModEventType::ChiralNetworkStateChanged:
+		{
+			if (ModConfiguration::connectToChiralNetwork)
+			{
+				auto* chiralNetworkFlagState = std::any_cast<FlagState<ChiralNetworkFlag>*>(event.data);
+				const bool wasBlocked = HasActiveMusicBlocker();
+				chiralNetworkBlocksMusic.store(chiralNetworkFlagState->current == ChiralNetworkFlag::OFF);
+				const bool isBlocked = HasActiveMusicBlocker();
+
+				HandleMusicBlockerChange(
+					wasBlocked,
+					isBlocked,
+					"chiral network off",
+					"chiral network restored",
+					"chiral network interruption"
+				);
+			}
+			break;
+		}
+		default: break;
 	}
 }
 
@@ -425,7 +161,6 @@ void MusicPlayer::OnScanDone()
 	{
 		playingLoopAddress = playingLoopData->address;
 	}
-	ResolveNativeAreaMusicControls();
 
 	hookResult = ModManager::TryHookFunction(
 		"PlayUISound",
@@ -445,7 +180,7 @@ void MusicPlayer::OnScanDone()
 		hookResult ? "installed successfully" : "failed"
 	);
 
-	auto baseAreaTrackIt = ModConfiguration::Databases::songDatabase.find(AreaMusicManager::TargetTrackName);
+	auto baseAreaTrackIt = ModConfiguration::Databases::songDatabase.find(AreaMusic::OverrideTarget.songName);
 	if (baseAreaTrackIt != ModConfiguration::Databases::songDatabase.end())
 	{
 		CustomMediaLoader::BindCustomSongsToAreaTrack(baseAreaTrackIt->second);
@@ -454,7 +189,7 @@ void MusicPlayer::OnScanDone()
 	{
 		Logging::Write(logPrefix,
 			"Base area track \"%s\" not found in song database; custom area tracks will not be bound",
-			AreaMusicManager::TargetTrackName
+			AreaMusic::OverrideTarget.songName
 		);
 	}
 
@@ -507,7 +242,6 @@ void MusicPlayer::OnScanDone()
 				);
 
 				uintptr_t currentAddress = poolMusicData.address;
-				// Take the first 8 bytes and compare with each new address start to check if we're still within the pool
 				uint64_t poolMusicSignature = *reinterpret_cast<uint64_t*>(poolMusicData.address);
 				size_t index = 0;
 
@@ -570,9 +304,21 @@ void MusicPlayer::OnRender()
 		const MusicData* data = pendingMusicData;
 		const bool displayDescription = pendingMusicDisplayDescription;
 
-		if (!pendingMusicOverridePrepared && AreaMusicManager::UsesOverride(data))
+		if (!pendingMusicOverridePrepared && AreaMusic::UsesOverride(data))
 		{
-			if (!AreaMusicManager::Register(data))
+			AreaMusic::RegisterRequest registration{};
+			registration.data = data;
+
+			if (ModManager* instance = ModManager::GetInstance())
+			{
+				instance->DispatchEvent(ModEvent{
+					ModEventType::AreaMusicRegisterRequested,
+					nullptr,
+					&registration
+				});
+			}
+
+			if (!registration.handled || !registration.success)
 			{
 				Logging::Write(logPrefix,
 					"Area music override was not prepared for queued track \"%s\"; canceling playback",
@@ -581,7 +327,10 @@ void MusicPlayer::OnRender()
 				pendingMusicData = nullptr;
 				pendingMusicDisplayDescription = true;
 				pendingMusicOverridePrepared = false;
-				AreaMusicManager::Unset();
+				if (ModManager* instance = ModManager::GetInstance())
+				{
+					instance->DispatchEvent(ModEvent{ ModEventType::AreaMusicUnsetRequested, nullptr, nullptr });
+				}
 				currentMusicData = nullptr;
 				currentMusicIsPlaying.store(false);
 				currentMusicPlayTime.store(0);
@@ -635,13 +384,15 @@ void MusicPlayer::OnRender()
 				gameCalledSong = false;
 				gameCalledInterruptor = false;
 
-				if (AreaMusicManager::UsesOverride(currentMusicData))
+				if (AreaMusic::UsesOverride(currentMusicData))
 				{
-					AreaMusicManager::Unset();
+					if (ModManager* instance = ModManager::GetInstance())
+					{
+						instance->DispatchEvent(ModEvent{ ModEventType::AreaMusicUnsetRequested, nullptr, nullptr });
+					}
 				}
 				currentMusicData = nullptr;
-				ModManager* instance = ModManager::GetInstance();
-				if (instance)
+				if (ModManager* instance = ModManager::GetInstance())
 				{
 					const char* interruptionMessage = "Music player interrupted.";
 					instance->DispatchEvent(ModEvent{
@@ -684,19 +435,17 @@ void MusicPlayer::OnRender()
 							musicAddressWatcher.reset();
 						}
 
-						ModManager* instance = ModManager::GetInstance();
-						if (instance)
+						if (ModManager* instance = ModManager::GetInstance())
 						{
 							instance->DispatchEvent(ModEvent{
 								ModEventType::MusicPlayerStopped,
 								this,
 								nullptr
-								});
+							});
 						}
 						break;
 					}
-					default:
-						break;
+					default: break;
 				}
 			}
 		}
@@ -734,18 +483,14 @@ void MusicPlayer::OnRender()
 
 void MusicPlayer::OnPreExit()
 {
-	if (currentMusicPausedByBlocker.exchange(false) || areaMusicPauseStateActive.load())
-	{
-		SetAreaMusicPauseState(false);
-	}
+	currentMusicPausedByBlocker.store(false);
 	CancelPendingAreaMusicTransition("pre-exit");
-	pendingNativeOffsetMs.store(0);
-	AreaMusicManager::RestoreNativeAreaMusicOffset();
 	currentMusicData = nullptr;
 	currentMusicIsPlaying.store(false);
 	currentMusicMaxLength.store(0);
 	btTerritoryBlocksMusic.store(false);
 	muleTerritoryBlocksMusic.store(false);
+	facilityTerritoryBlocksMusic.store(false);
 	chiralNetworkBlocksMusic.store(false);
 	if (musicAddressWatcher)
 	{
@@ -787,8 +532,7 @@ void MusicPlayer::OnUIButtonAction(const UIButtonAction& action)
 			{
 				songQueue.Reset();
 				StopMusic();
-				ModManager* instance = ModManager::GetInstance();
-				if (instance)
+			    if (ModManager* instance = ModManager::GetInstance())
 				{
 					instance->DispatchEvent(ModEvent{
 						ModEventType::MusicPlayerStopped,
@@ -800,14 +544,13 @@ void MusicPlayer::OnUIButtonAction(const UIButtonAction& action)
 			else
 			{
 				songQueue.Shuffle();
-				ModManager* instance = ModManager::GetInstance();
-				if (instance)
+			    if (ModManager* instance = ModManager::GetInstance())
 				{
 					instance->DispatchEvent(ModEvent{
 						ModEventType::MusicPlayerShuffled,
 						this,
 						nullptr
-						});
+					});
 				}
 				PlayNextSong();
 			}
@@ -830,12 +573,7 @@ void MusicPlayer::PlayMusicHook(void* arg1, void* arg2, void* arg3, void* arg4)
 {
 	constexpr const char* logPrefix = "Play Music Hook";
 	const bool blockerPausedByActiveBlocker = currentMusicPausedByBlocker.load() && HasActiveMusicBlocker();
-	if (!blockerPausedByActiveBlocker)
-	{
-		Logging::Write(logPrefix, "PlayMusic called with arg1: %p, arg2: %p, arg3: %p, arg4: %p",
-			arg1, arg2, arg3, arg4
-		);
-	}
+
 	if (!playMusicFuncRCXAddress)
 	{
 		playMusicFuncRCXAddress = reinterpret_cast<uintptr_t>(arg1);
@@ -891,7 +629,7 @@ void MusicPlayer::PlayMusicHook(void* arg1, void* arg2, void* arg3, void* arg4)
 		{
 			if (name == "Music Pool Start")
 			{
-				continue; // Skip pool music start, it's in the database for dev purposes
+				continue;
 			}
 
 			if (reinterpret_cast<uintptr_t>(arg3) == musicData.address)
@@ -928,48 +666,43 @@ void MusicPlayer::PlayMusicHook(void* arg1, void* arg2, void* arg3, void* arg4)
 			}
 			return;
 		}
-		else
-		{
-			if (currentMusicPausedByBlocker.exchange(false) || areaMusicPauseStateActive.load())
-			{
-				SetAreaMusicPauseState(false);
-			}
-			CancelPendingAreaMusicTransition(interruptionReason);
-			if (AreaMusicManager::UsesOverride(currentMusicData))
-			{
-				AreaMusicManager::Unset();
-			}
-			currentMusicData = nullptr;
-			currentMusicIsPlaying.store(false);
-			currentMusicPlayTime.store(0);
-			currentMusicMaxLength.store(0);
 
-			ModManager* instance = ModManager::GetInstance();
-			if (instance)
+		currentMusicPausedByBlocker.store(false);
+		CancelPendingAreaMusicTransition(interruptionReason);
+		if (AreaMusic::UsesOverride(currentMusicData))
+		{
+			if (ModManager* instance = ModManager::GetInstance())
 			{
-				const char* interruptionMessage = "Music player interrupted.";
-				instance->DispatchEvent(ModEvent{
-					ModEventType::MusicPlayerInterrupted,
-					nullptr,
-					&interruptionMessage
-				});
+				instance->DispatchEvent(ModEvent{ ModEventType::AreaMusicUnsetRequested, nullptr, nullptr });
 			}
+		}
+		currentMusicData = nullptr;
+		currentMusicIsPlaying.store(false);
+		currentMusicPlayTime.store(0);
+		currentMusicMaxLength.store(0);
+
+		if (ModManager* instance = ModManager::GetInstance())
+		{
+			const char* interruptionMessage = "Music player interrupted.";
+			instance->DispatchEvent(ModEvent{
+				ModEventType::MusicPlayerInterrupted,
+				nullptr,
+				&interruptionMessage
+			});
 		}
 	}
 
 	if (
 		songToPlay
 		&& songToPlay->name
-		&& std::strcmp(songToPlay->name, AreaMusicManager::TargetTrackName) == 0
+		&& std::strcmp(songToPlay->name, AreaMusic::OverrideTarget.songName) == 0
 	)
 	{
-		AreaMusicManager::Unset();
+		if (ModManager* instance = ModManager::GetInstance())
+		{
+			instance->DispatchEvent(ModEvent{ ModEventType::AreaMusicUnsetRequested, nullptr, nullptr });
+		}
 	}
-
-	/*if (!gameCalledSong && !gameCalledInterruptor)
-	{
-		Logging::Write(logPrefix, "Game called PlayMusic function with arg3: %p", arg3);
-	}*/
 
 	reinterpret_cast<GenericFunction_t>(playMusicFuncData->originalFunction)(arg1, arg2, arg3, arg4);
 }
@@ -996,57 +729,19 @@ void MusicPlayer::PlayUISoundHook(void* arg1, void* arg2, void* arg3, void* arg4
 				{
 					if (*reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(arg2) + i) != targetBytes[i])
 					{
-						//Logging::Write(logPrefix, "Interruptor %s not matched at offset %zu", interruptor.name, i);
 						match = false;
-						break; // not matched, skip to next interruptor
+						break;
 					}
 				}
 			}
 
 			if (match)
 			{
-				Logging::Write(logPrefix, "Interruptor %s matched, stopping autoplay", interruptor.name);
-				if (currentMusicPausedByBlocker.load() && HasActiveMusicBlocker())
-				{
-					Logging::Write(logPrefix,
-						"UI interruptor \"%s\" occurred while area music is blocker-paused; preserving paused track",
-						interruptor.name
-					);
-				}
-				else
-				{
-					if (currentMusicPausedByBlocker.exchange(false) || areaMusicPauseStateActive.load())
-					{
-						SetAreaMusicPauseState(false);
-					}
-					CancelPendingAreaMusicTransition(interruptor.name);
-					if (AreaMusicManager::UsesOverride(currentMusicData))
-					{
-						AreaMusicManager::Unset();
-					}
-					currentMusicData = nullptr;
-					currentMusicIsPlaying.store(false);
-					currentMusicMaxLength.store(0);
-
-					ModManager* instance = ModManager::GetInstance();
-					if (instance)
-					{
-						std::string interruptionReasonStr = std::string(interruptor.name) + ": music player interrupted.";
-						const char* interruptionReason = interruptionReasonStr.c_str();
-						instance->DispatchEvent(ModEvent{
-							ModEventType::MusicPlayerInterrupted,
-							nullptr,
-							&interruptionReason
-						});
-					}
-				}
-
-				break;
+				Logging::Write(logPrefix, "Interruptor %s matched, skipping UI sound", interruptor.name);
+				return;
 			}
 		}
 	}
-
-	//Logging::Write(logPrefix, "PlayUISound called with arg2: %p", arg2);
 
 	const FunctionData* playUISoundFuncData = ModManager::GetFunctionData("PlayUISound");
 	if (!playUISoundFuncData || !playUISoundFuncData->originalFunction)
@@ -1077,91 +772,57 @@ void MusicPlayer::ShowMusicDescriptionCoreHook(void* arg1, void* arg2, void* arg
 	reinterpret_cast<GenericFunction_t>(showMusicDescriptionCoreFuncData->originalFunction)(arg1, arg2, arg3, arg4);
 }
 
-bool MusicPlayer::SetAreaMusicPauseState(bool paused)
-{
-	if (paused)
-	{
-		if (areaMusicPauseStateActive.exchange(true))
-		{
-			return true;
-		}
-	}
-	else
-	{
-		if (!areaMusicPauseStateActive.exchange(false))
-		{
-			return true;
-		}
-	}
-
-	auto postEventFallback = [paused](const char* missingControl) {
-		if (PostNativeAreaMusicEvent(paused))
-		{
-			Logging::Write(logPrefix, "Native area music %s unavailable; posted %s event fallback",
-				missingControl,
-				paused ? "pause" : "resume"
-			);
-			return true;
-		}
-
-		areaMusicPauseStateActive.store(!paused);
-		Logging::Write(logPrefix, "Native area music %s unavailable, cannot %s area music",
-			missingControl,
-			paused ? "pause" : "resume"
-		);
-		return false;
-	};
-
-	NativeAreaMusicControls& controls = ResolveNativeAreaMusicControls();
-	if (!controls.pauseFunction || !controls.resumeFunction || !controls.contextSlot)
-	{
-		return postEventFallback("controls");
-	}
-
-	uintptr_t context = ReadNativeAreaMusicContext(controls.contextSlot);
-	if (!context)
-	{
-		return postEventFallback("context");
-	}
-
-	volatile long* pauseCounter = reinterpret_cast<volatile long*>(
-		context + NativeAreaMusicPauseCounterOffset
-	);
-	long counterBefore = *pauseCounter;
-	if (!paused && counterBefore < 1)
-	{
-		InterlockedExchange(pauseCounter, 1);
-		counterBefore = 1;
-	}
-
-	uintptr_t functionAddress = paused
-		? controls.pauseFunction
-		: controls.resumeFunction;
-	reinterpret_cast<NativeAreaMusicFunc>(functionAddress)(reinterpret_cast<void*>(context));
-
-	long counterAfter = *pauseCounter;
-	if (paused && counterAfter <= counterBefore)
-	{
-		InterlockedIncrement(pauseCounter);
-		counterAfter = *pauseCounter;
-		PostNativeAreaMusicEvent(true);
-	}
-
-	Logging::Write(logPrefix, "Called native area music %s function at %p (context %p, counter %ld -> %ld)",
-		paused ? "pause" : "resume",
-		reinterpret_cast<void*>(functionAddress),
-		reinterpret_cast<void*>(context),
-		counterBefore,
-		counterAfter
-	);
-	return true;
-}
-
 bool MusicPlayer::HasActiveMusicBlocker()
 {
 	return btTerritoryBlocksMusic.load()
 		|| muleTerritoryBlocksMusic.load()
+		|| facilityTerritoryBlocksMusic.load()
 		|| chiralNetworkBlocksMusic.load();
+}
+
+void MusicPlayer::HandleMusicBlockerChange(
+	bool wasBlocked,
+	bool isBlocked,
+	const char* pauseReason,
+	const char* resumeReason,
+	const char* interruptionReason
+)
+{
+	if (!wasBlocked && isBlocked && (currentMusicData || pendingMusicData))
+	{
+		if (!PauseCurrentMusicForBlocker(pauseReason))
+		{
+			CancelPendingAreaMusicTransition(interruptionReason);
+			if (AreaMusic::UsesOverride(currentMusicData))
+			{
+				if (ModManager* instance = ModManager::GetInstance())
+				{
+					instance->DispatchEvent(ModEvent{ ModEventType::AreaMusicUnsetRequested, nullptr, nullptr });
+				}
+			}
+
+			if (musicAddressWatcher)
+			{
+				musicAddressWatcher->Uninstall();
+				musicAddressWatcher.reset();
+			}
+
+			currentMusicData = nullptr;
+			currentMusicIsPlaying.store(false);
+			currentMusicPausedByBlocker.store(false);
+			currentMusicPlayTime.store(0);
+			currentMusicMaxLength.store(0);
+
+			if (ModManager* instance = ModManager::GetInstance())
+			{
+				instance->DispatchEvent(ModEvent{ ModEventType::MusicPlayerStopped, this, nullptr });
+			}
+		}
+	}
+	else if (wasBlocked && !isBlocked)
+	{
+		ResumeCurrentMusicForBlocker(resumeReason);
+	}
 }
 
 void MusicPlayer::InstallMusicAddressWatcher()
@@ -1276,17 +937,12 @@ bool MusicPlayer::ResumeCurrentMusicForBlocker(const char* reason)
 
 	if (!currentMusicPausedByBlocker.load())
 	{
-		if (areaMusicPauseStateActive.load())
-		{
-			SetAreaMusicPauseState(false);
-		}
 		return false;
 	}
 
 	if (!currentMusicData)
 	{
 		currentMusicPausedByBlocker.store(false);
-		SetAreaMusicPauseState(false);
 		return false;
 	}
 
@@ -1301,46 +957,34 @@ bool MusicPlayer::RestartCurrentMusicFromSavedPosition(const char* reason)
 		return false;
 	}
 
-	const long long resumeMs = (std::max)(0LL, currentMusicPlayTime.load());
-	const bool usesAreaOverride = AreaMusicManager::UsesOverride(data);
-	const AreaMusicManager::AreaMusicChain* nativeChain =
+	const long long savedResumeMs = (std::max)(0LL, currentMusicPlayTime.load());
+	const long long resumeMs = savedResumeMs > 0 ? savedResumeMs + resumeCompensationMs : 0;
+	const bool usesAreaOverride = AreaMusic::UsesOverride(data);
+	const AreaMusic::AreaMusicChain* nativeChain =
 		(!usesAreaOverride && resumeMs > 0)
-			? AreaMusicManager::LookupChainForSong(data->name)
+			? AreaMusic::LookupChainForSong(data->name)
 			: nullptr;
-	if (usesAreaOverride && resumeMs > 0)
-	{
-		// Custom-track path: patches DBSS chain via Register() after PlayMusic.
-		AreaMusicManager::SetNextPlaybackStartOffsetMs(resumeMs);
-	}
-	else if (nativeChain)
-	{
-		// Native area song path: stash the offset so PlayMusic applies it to the resolved chain inline.
-		pendingNativeOffsetMs.store(resumeMs);
-	}
-
-	if (areaMusicPauseStateActive.load())
-	{
-		SetAreaMusicPauseState(false);
-	}
 
 	currentMusicData = nullptr;
 	currentMusicPausedByBlocker.store(false);
 	currentMusicIsPlaying.store(false);
 	gameCalledInterruptor = false;
 	gameCalledSong = false;
-	PlayMusic(data, false);
+	PlayMusic(data, false, resumeMs);
 
 	if (currentMusicData != data || !currentMusicIsPlaying.load())
 	{
-		if (usesAreaOverride)
-		{
-			AreaMusicManager::SetNextPlaybackStartOffsetMs(0);
-		}
 		if (nativeChain)
 		{
-			AreaMusicManager::RestoreNativeAreaMusicOffset();
+			if (ModManager* instance = ModManager::GetInstance())
+			{
+				instance->DispatchEvent(ModEvent{
+					ModEventType::AreaMusicRestoreNativeOffsetRequested,
+					nullptr,
+					nullptr
+				});
+			}
 		}
-		pendingNativeOffsetMs.store(0);
 		currentMusicData = data;
 		currentMusicPausedByBlocker.store(false);
 		currentMusicIsPlaying.store(false);
@@ -1413,22 +1057,22 @@ bool MusicPlayer::PlaySilenceForAreaMusicTransition()
 
 bool MusicPlayer::QueueAreaMusicTransition(const MusicData* data, bool displayDescription)
 {
-	if (!data || !AreaMusicManager::IsTemplateTrack(data))
+	if (!data || !AreaMusic::IsTemplateTrack(data))
 	{
 		return false;
 	}
 
-	if (currentMusicPausedByBlocker.exchange(false) || areaMusicPauseStateActive.load())
-	{
-		SetAreaMusicPauseState(false);
-	}
+	currentMusicPausedByBlocker.store(false);
 
 	if (!PlaySilenceForAreaMusicTransition())
 	{
 		return false;
 	}
 
-	AreaMusicManager::Unset();
+	if (ModManager* instance = ModManager::GetInstance())
+	{
+		instance->DispatchEvent(ModEvent{ ModEventType::AreaMusicUnsetRequested, nullptr, nullptr });
+	}
 
 	if (musicAddressWatcher)
 	{
@@ -1548,7 +1192,7 @@ bool MusicPlayer::ShowMusicDescription(const MusicData* data)
 	return true;
 }
 
-void MusicPlayer::PlayMusic(const MusicData* data, bool displayDescription=true)
+void MusicPlayer::PlayMusic(const MusicData* data, bool displayDescription, long long resumeOffsetMs)
 {
 	if (musicAddressWatcher)
 	{
@@ -1556,38 +1200,26 @@ void MusicPlayer::PlayMusic(const MusicData* data, bool displayDescription=true)
 		musicAddressWatcher.reset();
 	}
 
-	// Any prior native-area-song offset patch (BeginTrim / segment duration) is undone here so each playback starts
-	// from a clean Wwise state. If a pending offset has been queued by RestartCurrentMusicFromSavedPosition, the
-	// resolved chain gets re-patched below, after the per-track logic has identified the song.
-	AreaMusicManager::RestoreNativeAreaMusicOffset();
+	if (ModManager* instance = ModManager::GetInstance())
+	{
+		instance->DispatchEvent(ModEvent{
+			ModEventType::AreaMusicRestoreNativeOffsetRequested,
+			nullptr,
+			nullptr
+		});
+	}
 
 	if (!data || !data->address)
 	{
 		Logging::Write(logPrefix, "Invalid music data provided, cannot play music");
-		pendingNativeOffsetMs.store(0);
 		return;
 	}
 
-	const long long stagedNativeOffsetMs = pendingNativeOffsetMs.exchange(0);
-	const AreaMusicManager::AreaMusicChain* diagnosticChain =
-		(data->name && !AreaMusicManager::UsesOverride(data))
-			? AreaMusicManager::LookupChainForSong(data->name)
+	const bool usesAreaOverride = AreaMusic::UsesOverride(data);
+	const AreaMusic::AreaMusicChain* nativeChain =
+		(data->name && !usesAreaOverride && resumeOffsetMs > 0)
+			? AreaMusic::LookupChainForSong(data->name)
 			: nullptr;
-	if (diagnosticChain)
-	{
-		AreaMusicManager::DiagnosticLogChainState(diagnosticChain, "pre-patch");
-	}
-	if (stagedNativeOffsetMs > 0 && !AreaMusicManager::UsesOverride(data) && data->name)
-	{
-		if (diagnosticChain)
-		{
-			AreaMusicManager::PatchNativeAreaMusicOffset(diagnosticChain, stagedNativeOffsetMs);
-		}
-	}
-	if (diagnosticChain)
-	{
-		AreaMusicManager::DiagnosticLogChainState(diagnosticChain, "post-patch-pre-PlayMusic");
-	}
 
 	const FunctionData* playMusicFuncData = ModManager::GetFunctionData("PlayMusic");
 	if (!playMusicFuncData || !playMusicFuncData->originalFunction)
@@ -1602,8 +1234,8 @@ void MusicPlayer::PlayMusic(const MusicData* data, bool displayDescription=true)
 
 	if (
 		currentMusicData
-		&& AreaMusicManager::IsTemplateTrack(currentMusicData)
-		&& AreaMusicManager::IsTemplateTrack(data)
+		&& AreaMusic::IsTemplateTrack(currentMusicData)
+		&& AreaMusic::IsTemplateTrack(data)
 	)
 	{
 		Logging::Write(logPrefix, "Queueing area music restart for \"%s\"", data->name);
@@ -1641,15 +1273,31 @@ void MusicPlayer::PlayMusic(const MusicData* data, bool displayDescription=true)
 	Logging::Write(logPrefix, "Third argument read successfully: %p", arg3);
 
 	long long playbackMaxLength = data->maxLength;
-	if (AreaMusicManager::UsesOverride(data))
+	if (usesAreaOverride)
 	{
-		if (!AreaMusicManager::Register(data))
+		AreaMusic::RegisterRequest registration{};
+		registration.data = data;
+		registration.sourceStartMs = resumeOffsetMs;
+
+		if (ModManager* instance = ModManager::GetInstance())
+		{
+			instance->DispatchEvent(ModEvent{
+				ModEventType::AreaMusicRegisterRequested,
+				nullptr,
+				&registration
+			});
+		}
+
+		if (!registration.handled || !registration.success)
 		{
 			Logging::Write(logPrefix,
 				"Area music override was not registered for \"%s\"; canceling playback",
 				data->name ? data->name : ""
 			);
-			AreaMusicManager::Unset();
+			if (ModManager* instance = ModManager::GetInstance())
+			{
+				instance->DispatchEvent(ModEvent{ ModEventType::AreaMusicUnsetRequested, nullptr, nullptr });
+			}
 			PlaySilenceForAreaMusicTransition();
 			currentMusicData = nullptr;
 			currentMusicIsPlaying.store(false);
@@ -1658,33 +1306,46 @@ void MusicPlayer::PlayMusic(const MusicData* data, bool displayDescription=true)
 			currentMusicPausedByBlocker.store(false);
 			return;
 		}
-		playbackMaxLength = AreaMusicManager::GetRegisteredEffectiveDurationMs(data);
+		playbackMaxLength = registration.effectiveDurationMs > 0
+			? registration.effectiveDurationMs
+			: data->maxLength;
 		Logging::Write(logPrefix,
-			AreaMusicManager::DurationControlledByWwise()
-				? "Using patched Wwise media metadata for custom area track \"%s\"; runtime duration guard is %lld ms"
-				: "Wwise media metadata was not patched for custom area track \"%s\"; runtime duration guard is %lld ms",
+			registration.metadataPatched
+			? "Using patched Wwise media metadata for custom area track \"%s\"; runtime duration guard is %lld ms"
+			: "Wwise media metadata was not patched for custom area track \"%s\"; runtime duration guard is %lld ms",
 			data->name ? data->name : "",
 			playbackMaxLength
 		);
 	}
 	else
 	{
-		AreaMusicManager::Unset();
+		if (ModManager* instance = ModManager::GetInstance())
+		{
+			instance->DispatchEvent(ModEvent{ ModEventType::AreaMusicUnsetRequested, nullptr, nullptr });
+		}
+	}
+
+	if (nativeChain)
+	{
+		AreaMusic::PatchNativeOffsetRequest request{};
+		request.chain = nativeChain;
+		request.sourceStartMs = resumeOffsetMs;
+
+		if (ModManager* instance = ModManager::GetInstance())
+		{
+			instance->DispatchEvent(ModEvent{
+				ModEventType::AreaMusicPatchNativeOffsetRequested,
+				nullptr,
+				&request
+			});
+		}
 	}
 
 	currentMusicPlayTime.store(0);
 	currentMusicMaxLength.store(playbackMaxLength);
 	currentMusicPausedByBlocker.store(false);
 	currentMusicStartTime = std::chrono::steady_clock::now();
-	// Open a chain-capture window so any music-typed Wwise object lookup that follows gets logged with the song name.
-	// The game's PlayMusic for an area song triggers Wwise to look up the active music-switch, segment, track, source
-	// in order; logging those tells us the chain to patch for offset-resume.
-	AreaMusicManager::OpenChainCaptureWindow(data->name ? data->name : "", 2000);
 	reinterpret_cast<GenericFunction_t>(playMusicFuncData->originalFunction)(arg1, arg2, arg3, 0);
-	if (diagnosticChain)
-	{
-		AreaMusicManager::DiagnosticLogChainState(diagnosticChain, "post-PlayMusic-return");
-	}
 	Logging::Write(logPrefix,
 		"Playing BGM: \"%s\" (runtime duration guard %lld ms)",
 		data->name,
@@ -1792,10 +1453,7 @@ void MusicPlayer::PlayByName(const std::string& name)
 
 void MusicPlayer::StopMusic()
 {
-	if (currentMusicPausedByBlocker.exchange(false) || areaMusicPauseStateActive.load())
-	{
-		SetAreaMusicPauseState(false);
-	}
+	currentMusicPausedByBlocker.store(false);
 
 	CancelPendingAreaMusicTransition("stop requested");
 
@@ -1899,8 +1557,7 @@ void MusicPlayer::OnInputPress(const InputCode& inputCode)
 		if (inputCode.code == VK_F9)
 		{
 			StopMusic();
-			ModManager* instance = ModManager::GetInstance();
-			if (instance)
+			if (ModManager* instance = ModManager::GetInstance())
 			{
 				instance->DispatchEvent(ModEvent{
 					ModEventType::MusicPlayerStopped,

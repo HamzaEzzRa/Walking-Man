@@ -1,11 +1,12 @@
 #include "AudioDecoder.h"
 
-#include <algorithm>
 #include <cstring>
 #include <filesystem>
 #include <limits>
 #include <memory>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <Windows.h>
 #include <mfapi.h>
 #include <mfidl.h>
@@ -21,10 +22,15 @@
 
 namespace
 {
+	constexpr const char* logPrefix = "Audio Decoder";
 	constexpr uint32_t wwisePcmSourcePluginId = 0x00010001;
 	constexpr uint32_t wwiseVorbisSourcePluginId = 0x00040001;
+	constexpr uint32_t pcmWemRiffSizeWithoutData = 60;
+	constexpr size_t pcmWemHeaderSize = 68;
+	constexpr size_t maxPcmByteCount =
+		static_cast<size_t>((std::numeric_limits<uint32_t>::max)() - pcmWemRiffSizeWithoutData);
 
-	const std::vector<std::string> supportedAudioExtensions = {
+	constexpr std::string_view supportedAudioExtensions[] = {
 		".wem",
 		".wav",
 		".wave",
@@ -44,8 +50,6 @@ namespace
 		".aifc",
 		".alac",
 		".ac3",
-		".amr",
-		".ape",
 		".au",
 		".caf",
 		".mka",
@@ -92,7 +96,7 @@ namespace
 			}
 		}
 
-		bool Initialize(const char* logPrefix)
+		bool Initialize()
 		{
 			const HRESULT coResult = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 			if (SUCCEEDED(coResult))
@@ -117,15 +121,69 @@ namespace
 		}
 	};
 
-	uint16_t DetectRiffFormatTag(const std::vector<uint8_t>& bytes)
+	struct MediaBufferLock
 	{
-		if (
-			bytes.size() < 20
-			|| std::memcmp(bytes.data(), "RIFF", 4) != 0
-			|| std::memcmp(bytes.data() + 8, "WAVE", 4) != 0
-		)
+		IMFMediaBuffer* buffer = nullptr;
+		BYTE* bytes = nullptr;
+		DWORD size = 0;
+		bool locked = false;
+
+		explicit MediaBufferLock(IMFMediaBuffer* mediaBuffer)
+			: buffer(mediaBuffer)
+		{}
+
+		MediaBufferLock(const MediaBufferLock&) = delete;
+		MediaBufferLock& operator=(const MediaBufferLock&) = delete;
+
+		~MediaBufferLock()
 		{
-			return 0;
+			if (locked && buffer)
+			{
+				buffer->Unlock();
+			}
+		}
+
+		HRESULT Lock()
+		{
+			if (!buffer)
+			{
+				return E_POINTER;
+			}
+
+			DWORD capacity = 0;
+			const HRESULT result = buffer->Lock(&bytes, &capacity, &size);
+			locked = SUCCEEDED(result);
+			return result;
+		}
+	};
+
+	struct WaveChunk
+	{
+		size_t headerOffset = 0;
+		size_t dataOffset = 0;
+		uint32_t dataSize = 0;
+	};
+
+	bool HasWaveHeader(const std::vector<uint8_t>& bytes)
+	{
+		return bytes.size() >= 20
+			&& std::memcmp(bytes.data(), "RIFF", 4) == 0
+			&& std::memcmp(bytes.data() + 8, "WAVE", 4) == 0;
+	}
+
+	bool IsChunkId(const std::vector<uint8_t>& bytes, const WaveChunk& chunk, std::string_view id)
+	{
+		return id.size() == 4
+			&& chunk.headerOffset + 4 <= bytes.size()
+			&& std::memcmp(bytes.data() + chunk.headerOffset, id.data(), 4) == 0;
+	}
+
+	template<typename Callback>
+	bool ForEachWaveChunk(const std::vector<uint8_t>& bytes, Callback callback)
+	{
+		if (!HasWaveHeader(bytes))
+		{
+			return false;
 		}
 
 		size_t offset = 12;
@@ -135,36 +193,61 @@ namespace
 			const size_t dataOffset = offset + 8;
 			if (chunkSize > bytes.size() - dataOffset)
 			{
-				return 0;
+				return false;
 			}
 
-			if (std::memcmp(bytes.data() + offset, "fmt ", 4) == 0 && chunkSize >= 2)
+			if (!callback(WaveChunk{ offset, dataOffset, chunkSize }))
 			{
-				return Utils::ReadLe16FromBytes(bytes, dataOffset);
+				return true;
 			}
 
 			offset = dataOffset + chunkSize + (chunkSize & 1);
 		}
 
-		return 0;
+		return true;
+	}
+
+	bool IsSupportedExtension(std::string_view extension)
+	{
+		for (std::string_view supported : supportedAudioExtensions)
+		{
+			if (extension == supported)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	uint16_t DetectRiffFormatTag(const std::vector<uint8_t>& bytes)
+	{
+		uint16_t formatTag = 0;
+		ForEachWaveChunk(bytes,
+			[&](const WaveChunk& chunk)
+			{
+				if (IsChunkId(bytes, chunk, "fmt ") && chunk.dataSize >= 2)
+				{
+					formatTag = Utils::ReadLe16FromBytes(bytes, chunk.dataOffset);
+					return false;
+				}
+
+				return true;
+			}
+		);
+		return formatTag;
 	}
 
 	uint32_t GetDefaultChannelMask(uint32_t channels)
 	{
 		switch (channels)
 		{
-		case 1:
-			return 0x4;
-		case 2:
-			return 0x3;
-		case 4:
-			return 0x33;
-		case 6:
-			return 0x3f;
-		case 8:
-			return 0x63f;
-		default:
-			return channels < 32 ? ((1u << channels) - 1u) : 0;
+			case 1: return 0x4;
+			case 2: return 0x3;
+			case 4: return 0x33;
+			case 6: return 0x3f;
+			case 8: return 0x63f;
+			default: return channels < 32 ? ((1u << channels) - 1u) : 0;
 		}
 	}
 
@@ -211,40 +294,28 @@ namespace
 		sampleRate = 0;
 		bitsPerSample = 0;
 
-		if (
-			bytes.size() < 20
-			|| std::memcmp(bytes.data(), "RIFF", 4) != 0
-			|| std::memcmp(bytes.data() + 8, "WAVE", 4) != 0
-		)
-		{
-			return false;
-		}
-
 		uint16_t formatTag = 0;
 		uint32_t dataSize = 0;
-		size_t offset = 12;
-		while (offset + 8 <= bytes.size())
+		if (!ForEachWaveChunk(bytes,
+			[&](const WaveChunk& chunk)
+			{
+				if (IsChunkId(bytes, chunk, "fmt ") && chunk.dataSize >= 16)
+				{
+					formatTag = Utils::ReadLe16FromBytes(bytes, chunk.dataOffset);
+					channels = Utils::ReadLe16FromBytes(bytes, chunk.dataOffset + 2);
+					sampleRate = Utils::ReadLe32FromBytes(bytes, chunk.dataOffset + 4);
+					bitsPerSample = Utils::ReadLe16FromBytes(bytes, chunk.dataOffset + 14);
+				}
+				else if (IsChunkId(bytes, chunk, "data"))
+				{
+					dataSize = chunk.dataSize;
+				}
+
+				return true;
+			}
+		))
 		{
-			const uint32_t chunkSize = Utils::ReadLe32FromBytes(bytes, offset + 4);
-			const size_t dataOffset = offset + 8;
-			if (chunkSize > bytes.size() - dataOffset)
-			{
-				return false;
-			}
-
-			if (std::memcmp(bytes.data() + offset, "fmt ", 4) == 0 && chunkSize >= 16)
-			{
-				formatTag = Utils::ReadLe16FromBytes(bytes, dataOffset);
-				channels = Utils::ReadLe16FromBytes(bytes, dataOffset + 2);
-				sampleRate = Utils::ReadLe32FromBytes(bytes, dataOffset + 4);
-				bitsPerSample = Utils::ReadLe16FromBytes(bytes, dataOffset + 14);
-			}
-			else if (std::memcmp(bytes.data() + offset, "data", 4) == 0)
-			{
-				dataSize = chunkSize;
-			}
-
-			offset = dataOffset + chunkSize + (chunkSize & 1);
+			return false;
 		}
 
 		if (
@@ -273,38 +344,29 @@ namespace
 		channels = 0;
 		sampleRate = 0;
 
-		if (
-			bytes.size() < 20
-			|| std::memcmp(bytes.data(), "RIFF", 4) != 0
-			|| std::memcmp(bytes.data() + 8, "WAVE", 4) != 0
-		)
-		{
-			return false;
-		}
-
-		size_t offset = 12;
-		while (offset + 8 <= bytes.size())
-		{
-			const uint32_t chunkSize = Utils::ReadLe32FromBytes(bytes, offset + 4);
-			const size_t dataOffset = offset + 8;
-			if (chunkSize > bytes.size() - dataOffset)
+		bool found = false;
+		bool valid = true;
+		if (!ForEachWaveChunk(bytes,
+			[&](const WaveChunk& chunk)
 			{
-				return false;
-			}
+				if (!IsChunkId(bytes, chunk, "fmt ") || chunk.dataSize < 0x1c)
+				{
+					return true;
+				}
 
-			if (std::memcmp(bytes.data() + offset, "fmt ", 4) == 0 && chunkSize >= 0x1c)
-			{
-				const uint16_t formatTag = Utils::ReadLe16FromBytes(bytes, dataOffset);
+				const uint16_t formatTag = Utils::ReadLe16FromBytes(bytes, chunk.dataOffset);
 				if (formatTag != 0xffff)
 				{
+					valid = false;
 					return false;
 				}
 
-				channels = Utils::ReadLe16FromBytes(bytes, dataOffset + 2);
-				sampleRate = Utils::ReadLe32FromBytes(bytes, dataOffset + 4);
-				const uint32_t sampleCount = Utils::ReadLe32FromBytes(bytes, dataOffset + 0x18);
+				channels = Utils::ReadLe16FromBytes(bytes, chunk.dataOffset + 2);
+				sampleRate = Utils::ReadLe32FromBytes(bytes, chunk.dataOffset + 4);
+				const uint32_t sampleCount = Utils::ReadLe32FromBytes(bytes, chunk.dataOffset + 0x18);
 				if (channels == 0 || sampleRate == 0 || sampleCount == 0)
 				{
+					valid = false;
 					return false;
 				}
 
@@ -312,13 +374,15 @@ namespace
 					(static_cast<unsigned long long>(sampleCount) * 1000ULL)
 					/ sampleRate
 				);
-				return durationMs > 0;
+				found = durationMs > 0;
+				return false;
 			}
-
-			offset = dataOffset + chunkSize + (chunkSize & 1);
+		) || !valid)
+		{
+			return false;
 		}
 
-		return false;
+		return found;
 	}
 
 	bool BuildPcmWemBytes(
@@ -335,7 +399,7 @@ namespace
 			|| sampleRate == 0
 			|| bitsPerSample == 0
 			|| bitsPerSample % 8 != 0
-			|| pcmBytes.size() > static_cast<size_t>((std::numeric_limits<uint32_t>::max)() - 60)
+			|| pcmBytes.size() > maxPcmByteCount
 		)
 		{
 			return false;
@@ -353,7 +417,7 @@ namespace
 		}
 
 		const uint32_t dataSize = static_cast<uint32_t>(pcmBytes.size());
-		const uint32_t riffSize = 60 + dataSize;
+		const uint32_t riffSize = pcmWemRiffSizeWithoutData + dataSize;
 		const uint8_t pcmSubFormatGuid[16] = {
 			0x01, 0x00, 0x00, 0x00,
 			0x00, 0x00,
@@ -363,7 +427,7 @@ namespace
 		};
 
 		wemBytes.clear();
-		wemBytes.reserve(static_cast<size_t>(68) + pcmBytes.size());
+		wemBytes.reserve(pcmWemHeaderSize + pcmBytes.size());
 		wemBytes.insert(wemBytes.end(), { 'R', 'I', 'F', 'F' });
 		Utils::AppendLe32(wemBytes, riffSize);
 		wemBytes.insert(wemBytes.end(), { 'W', 'A', 'V', 'E' });
@@ -389,22 +453,49 @@ namespace
 		return true;
 	}
 
-	bool DecodeAudioFileWithMediaFoundation(const std::string& path, AudioDecoder::WwiseMediaBuffer& output)
+	bool FinishPcmDecode(
+		const std::string& path,
+		const std::vector<uint8_t>& pcmBytes,
+		uint32_t channels,
+		uint32_t sampleRate,
+		uint32_t bitsPerSample,
+		AudioDecoder::WwiseMediaBuffer& output
+	)
 	{
-		constexpr const char* logPrefix = "Audio Decoder";
-		MediaFoundationScope mediaFoundation;
-		if (!mediaFoundation.Initialize(logPrefix))
+		if (!BuildPcmWemBytes(pcmBytes, channels, sampleRate, bitsPerSample, output.bytes))
 		{
 			return false;
 		}
 
+		output.path = path;
+		output.sourcePluginId = wwisePcmSourcePluginId;
+		output.durationMs = CalculatePcmDurationMs(pcmBytes.size(), channels, sampleRate, bitsPerSample);
+		output.channels = channels;
+		output.sampleRate = sampleRate;
+		output.bitsPerSample = bitsPerSample;
+		output.decodedToPcm = true;
+		return true;
+	}
+
+	bool DecodeAudioFileWithMediaFoundation(const std::string& path, AudioDecoder::WwiseMediaBuffer& output)
+	{
+		MediaFoundationScope mediaFoundation;
+		if (!mediaFoundation.Initialize())
+		{
+			return false;
+		}
+
+		const std::string filename = Utils::FilenameFromPath(path);
 		const std::wstring widePath = Utils::ToWidePath(path);
 		IMFSourceReader* rawReader = nullptr;
 		HRESULT result = MFCreateSourceReaderFromURL(widePath.c_str(), nullptr, &rawReader);
 		UniqueComPtr<IMFSourceReader> reader(rawReader);
 		if (FAILED(result) || !reader)
 		{
-			Logging::Write(logPrefix, "Failed to open audio file with Media Foundation: %s (0x%08x)", path.c_str(), result);
+			Logging::Write(logPrefix,
+				"Failed to open audio file with Media Foundation: %s (0x%08x)",
+				filename.c_str(), result
+			);
 			return false;
 		}
 
@@ -412,7 +503,10 @@ namespace
 		result = reader->SetStreamSelection(MF_SOURCE_READER_FIRST_AUDIO_STREAM, TRUE);
 		if (FAILED(result))
 		{
-			Logging::Write(logPrefix, "Failed to select first audio stream for %s (0x%08x)", path.c_str(), result);
+			Logging::Write(logPrefix,
+				"Failed to select first audio stream for %s (0x%08x)",
+				filename.c_str(), result
+			);
 			return false;
 		}
 
@@ -421,7 +515,10 @@ namespace
 		UniqueComPtr<IMFMediaType> targetType(rawTargetType);
 		if (FAILED(result) || !targetType)
 		{
-			Logging::Write(logPrefix, "Failed to create target PCM media type for %s (0x%08x)", path.c_str(), result);
+			Logging::Write(logPrefix,
+				"Failed to create target PCM media type for %s (0x%08x)",
+				filename.c_str(), result
+			);
 			return false;
 		}
 
@@ -470,8 +567,6 @@ namespace
 		}
 
 		std::vector<uint8_t> pcmBytes;
-		const size_t maxPcmByteCount =
-			static_cast<size_t>((std::numeric_limits<uint32_t>::max)() - 60);
 		for (;;)
 		{
 			DWORD streamIndex = 0;
@@ -512,43 +607,30 @@ namespace
 				return false;
 			}
 
-			BYTE* sampleBytes = nullptr;
-			DWORD maxLength = 0;
-			DWORD currentLength = 0;
-			result = buffer->Lock(&sampleBytes, &maxLength, &currentLength);
+			MediaBufferLock sampleData(buffer.get());
+			result = sampleData.Lock();
 			if (FAILED(result))
 			{
 				Logging::Write(logPrefix, "Failed to lock decoded audio sample for %s (0x%08x)", path.c_str(), result);
 				return false;
 			}
-			(void)maxLength;
 
-			if (sampleBytes && currentLength > 0)
+			if (sampleData.bytes && sampleData.size > 0)
 			{
-				if (currentLength > maxPcmByteCount || pcmBytes.size() > maxPcmByteCount - currentLength)
+				if (sampleData.size > maxPcmByteCount || pcmBytes.size() > maxPcmByteCount - sampleData.size)
 				{
-					buffer->Unlock();
 					Logging::Write(logPrefix, "Decoded audio is too large for Wwise media memory: %s", path.c_str());
 					return false;
 				}
-				pcmBytes.insert(pcmBytes.end(), sampleBytes, sampleBytes + currentLength);
+				pcmBytes.insert(pcmBytes.end(), sampleData.bytes, sampleData.bytes + sampleData.size);
 			}
-			buffer->Unlock();
 		}
 
-		if (!BuildPcmWemBytes(pcmBytes, channels, sampleRate, bitsPerSample, output.bytes))
+		if (!FinishPcmDecode(path, pcmBytes, channels, sampleRate, bitsPerSample, output))
 		{
 			Logging::Write(logPrefix, "Failed to build PCM WEM media bytes for %s", path.c_str());
 			return false;
 		}
-
-		output.path = path;
-		output.sourcePluginId = wwisePcmSourcePluginId;
-		output.durationMs = CalculatePcmDurationMs(pcmBytes.size(), channels, sampleRate, bitsPerSample);
-		output.channels = channels;
-		output.sampleRate = sampleRate;
-		output.bitsPerSample = bitsPerSample;
-		output.decodedToPcm = true;
 
 		Logging::Write(logPrefix,
 			"Decoded %s to PCM WEM with Media Foundation (%u Hz, %u channel(s), %u-bit, %lld ms, %zu bytes)",
@@ -564,7 +646,7 @@ namespace
 
 	bool DecodeAudioFileWithFfmpeg(const std::string& path, AudioDecoder::WwiseMediaBuffer& output)
 	{
-		constexpr const char* logPrefix = "Audio Decoder";
+		const std::string filename = Utils::FilenameFromPath(path);
 		const std::wstring widePath = Utils::ToWidePath(path);
 		std::wstring ffmpegPath = Utils::FindExecutableOnPath(L"ffmpeg.exe");
 		if (ffmpegPath.empty())
@@ -573,7 +655,7 @@ namespace
 		}
 		if (ffmpegPath.empty())
 		{
-			Logging::Write(logPrefix, "No ffmpeg.exe found for fallback decode of %s", path.c_str());
+			Logging::Write(logPrefix, "No ffmpeg.exe found for fallback decode of %s", filename.c_str());
 
 			const std::string extension = Utils::GetLowerExtension(path);
 			const std::string format = extension.empty()
@@ -583,14 +665,13 @@ namespace
 				+ ", ffmpeg needed and ffmpeg not found!\n\nFile: " + path
 				+ "\n\nGet and put ffmpeg.exe in game's directory.";
 			Logging::Write(logPrefix, "Raised error: %s", message.c_str());
-			MessageBoxA(nullptr, message.c_str(), "Walking Man", MB_OK | MB_ICONERROR | MB_SYSTEMMODAL);
 			return false;
 		}
 
 		std::wstring rawPcmPath;
 		if (!Utils::CreateTempFilePath(rawPcmPath))
 		{
-			Logging::Write(logPrefix, "Failed to create temporary PCM output path for %s", path.c_str());
+			Logging::Write(logPrefix, "Failed to create temporary PCM output path for %s", filename.c_str());
 			return false;
 		}
 
@@ -605,17 +686,15 @@ namespace
 		if (!Utils::RunProcessAndWait(commandLine, 300000, exitCode) || exitCode != 0)
 		{
 			DeleteFileW(rawPcmPath.c_str());
-			Logging::Write(logPrefix, "ffmpeg failed while decoding %s (exit=%lu)", path.c_str(), exitCode);
+			Logging::Write(logPrefix, "ffmpeg failed while decoding %s (exit=%lu)", filename.c_str(), exitCode);
 			return false;
 		}
 
 		std::vector<uint8_t> pcmBytes;
-		const size_t maxPcmByteCount =
-			static_cast<size_t>((std::numeric_limits<uint32_t>::max)() - 60);
 		if (!Utils::ReadFileBytesWide(rawPcmPath, pcmBytes, maxPcmByteCount))
 		{
 			DeleteFileW(rawPcmPath.c_str());
-			Logging::Write(logPrefix, "Failed to read ffmpeg PCM output for %s", path.c_str());
+			Logging::Write(logPrefix, "Failed to read ffmpeg PCM output for %s", filename.c_str());
 			return false;
 		}
 		DeleteFileW(rawPcmPath.c_str());
@@ -623,23 +702,15 @@ namespace
 		constexpr uint32_t channels = 2;
 		constexpr uint32_t sampleRate = 48000;
 		constexpr uint32_t bitsPerSample = 16;
-		if (!BuildPcmWemBytes(pcmBytes, channels, sampleRate, bitsPerSample, output.bytes))
+		if (!FinishPcmDecode(path, pcmBytes, channels, sampleRate, bitsPerSample, output))
 		{
-			Logging::Write(logPrefix, "Failed to build ffmpeg PCM WEM media bytes for %s", path.c_str());
+			Logging::Write(logPrefix, "Failed to build ffmpeg PCM WEM media bytes for %s", filename.c_str());
 			return false;
 		}
 
-		output.path = path;
-		output.sourcePluginId = wwisePcmSourcePluginId;
-		output.durationMs = CalculatePcmDurationMs(pcmBytes.size(), channels, sampleRate, bitsPerSample);
-		output.channels = channels;
-		output.sampleRate = sampleRate;
-		output.bitsPerSample = bitsPerSample;
-		output.decodedToPcm = true;
-
 		Logging::Write(logPrefix,
 			"Decoded %s to PCM WEM with ffmpeg (%u Hz, %u channel(s), %u-bit, %lld ms, %zu bytes)",
-			path.c_str(),
+			filename.c_str(),
 			sampleRate,
 			channels,
 			bitsPerSample,
@@ -655,11 +726,7 @@ namespace AudioDecoder
 	bool IsSupportedCustomAudioPath(const std::string& path)
 	{
 		const std::string extension = Utils::GetLowerExtension(path);
-		return std::find(
-			supportedAudioExtensions.begin(),
-			supportedAudioExtensions.end(),
-			extension
-		) != supportedAudioExtensions.end();
+		return IsSupportedExtension(extension);
 	}
 
 	bool IsSupportedCustomAudioPath(const std::filesystem::path& path)
@@ -670,12 +737,8 @@ namespace AudioDecoder
 			return false;
 		}
 
-		std::string formattedExt = Utils::ToLowerAscii(extension);
-		return std::find(
-			supportedAudioExtensions.begin(),
-			supportedAudioExtensions.end(),
-			formattedExt
-		) != supportedAudioExtensions.end();
+		const std::string formattedExt = Utils::ToLowerAscii(extension);
+		return IsSupportedExtension(formattedExt);
 	}
 
 	bool LoadWwiseMedia(const std::string& path, WwiseMediaBuffer& output)
@@ -705,7 +768,6 @@ namespace AudioDecoder
 		std::vector<uint8_t> bytes;
 		if (!Utils::ReadFileBytesWide(Utils::ToWidePath(path), bytes))
 		{
-			constexpr const char* logPrefix = "Audio Decoder";
 			Logging::Write(logPrefix, "Failed to read Wwise media file: %s", path.c_str());
 			return false;
 		}
@@ -716,6 +778,7 @@ namespace AudioDecoder
 		output.sourcePluginId = (formatTag == 1 || formatTag == 0xfffe)
 			? wwisePcmSourcePluginId
 			: wwiseVorbisSourcePluginId;
+
 		TryReadPcmWaveDuration(
 			output.bytes,
 			output.durationMs,

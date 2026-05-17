@@ -32,7 +32,7 @@ public:
 	void OnInputPress(const InputCode&);
 
 private:
-	void PlayMusic(const MusicData*, bool);
+	void PlayMusic(const MusicData*, bool = true, long long = 0);
 
 	void PlayCurrentSong();
 	void PlayNextSong();
@@ -41,10 +41,10 @@ private:
 	void PlayByName(const std::string&);
 	void StopMusic();
 	static void CancelPendingAreaMusicTransition(const char*);
+	void HandleMusicBlockerChange(bool, bool, const char*, const char*, const char*);
 	bool PauseCurrentMusicForBlocker(const char*);
 	bool ResumeCurrentMusicForBlocker(const char*);
 	bool RestartCurrentMusicFromSavedPosition(const char*);
-	static bool SetAreaMusicPauseState(bool);
 	static bool HasActiveMusicBlocker();
 	void InstallMusicAddressWatcher();
 	bool QueueAreaMusicTransition(const MusicData*, bool);
@@ -58,7 +58,6 @@ private:
 	static void PlayUISoundHook(void*, void*, void*, void*);
 	static void ShowMusicDescriptionCoreHook(void*, void*, void*, void*);
 
-private:
 	enum LoopMode
 	{
 		ALL,
@@ -82,21 +81,21 @@ private:
 	inline static bool gameCalledInterruptor = false;
 	inline static std::atomic<long long> currentMusicPlayTime = 0; // in ms, used to track current playback time
 	inline static std::atomic<long long> currentMusicMaxLength = 0; // in ms, runtime guard for current playback
-	// Native-area-song offset to apply on the next PlayMusic call. Set by RestartCurrentMusicFromSavedPosition for
-	// native songs (the custom-track resume path uses AreaMusicManager::SetNextPlaybackStartOffsetMs instead).
-	inline static std::atomic<long long> pendingNativeOffsetMs = 0;
+
+	inline static constexpr long long resumeCompensationMs = 500; // ms to add on resume to compensate for fade-out time
 
 	inline static const MusicData* currentMusicData = nullptr;
 	inline static std::chrono::time_point<std::chrono::steady_clock> currentMusicStartTime;
 	inline static std::atomic<bool> currentMusicIsPlaying = false;
 	inline static std::atomic<bool> currentMusicPausedByBlocker = false;
-	inline static std::atomic<bool> areaMusicPauseStateActive = false;
 	inline static const MusicData* pendingMusicData = nullptr;
 	inline static bool pendingMusicDisplayDescription = true;
 	inline static bool pendingMusicOverridePrepared = false;
 	inline static std::chrono::time_point<std::chrono::steady_clock> pendingMusicStartTime;
+
 	inline static std::atomic<bool> btTerritoryBlocksMusic = false;
 	inline static std::atomic<bool> muleTerritoryBlocksMusic = false;
+	inline static std::atomic<bool> facilityTerritoryBlocksMusic = false;
 	inline static std::atomic<bool> chiralNetworkBlocksMusic = false;
 
 	inline static LoopMode loopMode = LoopMode::ALL;

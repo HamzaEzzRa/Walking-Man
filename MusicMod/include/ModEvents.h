@@ -13,17 +13,23 @@ enum class ModEventType
 	InputPressResolved,
 	InputDownResolved,
 	InputUpResolved,
-	
+
 	CompassStateChanged,
 	UIButtonPressed,
-	
+
 	MusicPlayerStarted,
 	MusicPlayerShuffled,
 	MusicPlayerStopped,
 	MusicPlayerInterrupted,
 
+	AreaMusicRegisterRequested,
+	AreaMusicUnsetRequested,
+	AreaMusicPatchNativeOffsetRequested,
+	AreaMusicRestoreNativeOffsetRequested,
+
 	BTTerritoryStateChanged,
 	MuleTerritoryStateChanged,
+	FacilityTerritoryStateChanged,
 	ChiralNetworkStateChanged
 };
 

@@ -47,8 +47,7 @@ void LanguageManager::OnRender()
 		Logging::Write(logPrefix, "Current language ID changed to: %u", currentTextLanguageId);
 		ReloadCache();
 
-		ModManager* instance = ModManager::GetInstance();
-		if (instance)
+		if (ModManager* instance = ModManager::GetInstance())
 		{
 			instance->DispatchEvent(ModEvent{
 				ModEventType::TextLanguageChanged,

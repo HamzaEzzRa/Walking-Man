@@ -58,6 +58,14 @@ void UIManager::OnEvent(const ModEvent& event)
 			);
 			break;
 		}
+		case ModEventType::FacilityTerritoryStateChanged:
+		{
+			auto* facilityFlagState = std::any_cast<FlagState<FacilityFlag>*>(event.data);
+			UpdateMusicPlayerUIBlockers(
+				MusicPlayerUIBlocker::FACILITY_BLOCK, facilityFlagState->current == FacilityFlag::INSIDE
+			);
+			break;
+		}
 		case ModEventType::ChiralNetworkStateChanged:
 		{
 			if (ModConfiguration::connectToChiralNetwork)
@@ -105,8 +113,7 @@ void UIManager::OnEvent(const ModEvent& event)
 			}
 			break;
 		}
-		default:
-			break;
+		default: break;
 	}
 }
 
@@ -186,8 +193,7 @@ void UIManager::OnInputPress(const InputCode& inputCode)
 				if (inputCode == buttonInputCode)
 				{
 					button.OnPress(true); // Update state and refresh icon (blink)
-					ModManager* instance = ModManager::GetInstance();
-					if (instance)
+					if (ModManager* instance = ModManager::GetInstance())
 					{
 						instance->DispatchEvent(
 							ModEvent{ ModEventType::UIButtonPressed, this, button.action }
@@ -233,34 +239,56 @@ void UIManager::UpdateMusicPlayerUIBlockers(MusicPlayerUIBlocker blocker, bool e
 		button.Toggle(musicPlayerUIBlockers == MusicPlayerUIBlocker::NONE);
 	}
 
-	if ((blocker & MusicPlayerUIBlocker::BT_BLOCK) || (blocker & MusicPlayerUIBlocker::MULE_BLOCK))
+	switch (blocker)
 	{
-		if (musicPlayerUIBlockers > 0 && previousBlockers == 0)
+		case MusicPlayerUIBlocker::BT_BLOCK:
+		case MusicPlayerUIBlocker::MULE_BLOCK:
 		{
-			ShowNotificationText(
-				LanguageManager::GetLocalizedText("Threat nearby: music player deactivated.").c_str()
-			);
+			if (musicPlayerUIBlockers > 0 && previousBlockers == 0)
+			{
+				ShowNotificationText(
+					LanguageManager::GetLocalizedText("Threat nearby: music player deactivated.").c_str()
+				);
+			}
+			else if (musicPlayerUIBlockers == 0 && previousBlockers > 0)
+			{
+				ShowNotificationText(
+					LanguageManager::GetLocalizedText("Threat cleared: music player activated.").c_str()
+				);
+			}
+			break;
 		}
-		else if (musicPlayerUIBlockers == 0 && previousBlockers > 0)
+		case MusicPlayerUIBlocker::CHIRAL_BLOCK:
 		{
-			ShowNotificationText(
-				LanguageManager::GetLocalizedText("Threat cleared: music player can be activated.").c_str()
-			);
+			if (musicPlayerUIBlockers > 0 && previousBlockers == 0)
+			{
+				ShowNotificationText(
+					LanguageManager::GetLocalizedText("Chiral network off: music player deactivated.").c_str()
+				);
+			}
+			else if (musicPlayerUIBlockers == 0 && previousBlockers > 0)
+			{
+				ShowNotificationText(
+					LanguageManager::GetLocalizedText("Chiral network on: music player activated.").c_str()
+				);
+			}
+			break;
 		}
-	}
-	else if (blocker & MusicPlayerUIBlocker::CHIRAL_BLOCK)
-	{
-		if (musicPlayerUIBlockers > 0 && previousBlockers == 0)
+		case MusicPlayerUIBlocker::FACILITY_BLOCK:
 		{
-			ShowNotificationText(
-				LanguageManager::GetLocalizedText("Chiral network off: music player deactivated.").c_str()
-			);
-		}
-		else if (musicPlayerUIBlockers == 0 && previousBlockers > 0)
-		{
-			ShowNotificationText(
-				LanguageManager::GetLocalizedText("Chiral network on: music player can be activated.").c_str()
-			);
+			if (musicPlayerUIBlockers > 0 && previousBlockers == 0)
+			{
+				ShowNotificationText(
+					LanguageManager::GetLocalizedText("Entering facility: music player deactivated.").c_str()
+				);
+			}
+			else if (musicPlayerUIBlockers == 0 && previousBlockers > 0)
+			{
+				ShowNotificationText(
+					LanguageManager::GetLocalizedText("Exiting facility: music player activated.").c_str()
+				);
+			}
+			break;
 		}
 	}
 }
@@ -527,7 +555,7 @@ void UIManager::InGameUIDrawElementHook(void* arg1, void* arg2, void* arg3, void
 		);
 		if (*runtimeCompassOpenFlagAddress1 == 1 && *runtimeCompassOpenFlagAddress2 == 1)
 		{
-			Logging::Write(logPrefix, 
+			Logging::Write(logPrefix,
 				"Compass UI detected as OPEN based on runtime flags %p and %p",
 				(void*)runtimeCompassOpenFlagAddress1, (void*)runtimeCompassOpenFlagAddress2
 			);

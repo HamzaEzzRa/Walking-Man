@@ -633,6 +633,12 @@ namespace Utils {
 		bytes.push_back(static_cast<uint8_t>((value >> 24) & 0xff));
 	}
 
+	static std::string FilenameFromPath(const std::string& path)
+	{
+		const size_t slashPos = path.find_last_of("\\/");
+		return slashPos == std::string::npos ? path : path.substr(slashPos + 1);
+	}
+
 	static uintptr_t KeepTopHex(uintptr_t addr, int hexDigitsToKeep)
 	{
 		if (addr == 0 || hexDigitsToKeep <= 0)

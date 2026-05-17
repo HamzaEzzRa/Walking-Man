@@ -57,7 +57,7 @@ bool ModManager::TryHookFunction(const std::string& name, void* hookFunction)
 		);
 		if (created != MH_OK)
 		{
-			Logging::Write(logPrefix, 
+			Logging::Write(logPrefix,
 				"Failed to create hook for function \"%s\" at address %p",
 				name.c_str(), funcData.address
 			);
@@ -67,7 +67,7 @@ bool ModManager::TryHookFunction(const std::string& name, void* hookFunction)
 		auto enabled = MH_EnableHook(reinterpret_cast<LPVOID>(funcData.address));
 		if (enabled != MH_OK)
 		{
-			Logging::Write(logPrefix, 
+			Logging::Write(logPrefix,
 				"Failed to enable hook for function \"%s\" at address %p",
 				name.c_str(), funcData.address
 			);
@@ -94,7 +94,7 @@ bool ModManager::TryUnhookFunction(const FunctionData& func)
 		auto disabled = MH_DisableHook(reinterpret_cast<LPVOID>(func.address));
 		if (disabled != MH_OK)
 		{
-			Logging::Write(logPrefix, 
+			Logging::Write(logPrefix,
 				"Failed to disable hook for function \"%s\" at address %p",
 				func.name, func.address
 			);
@@ -121,7 +121,7 @@ void ModManager::Initialize()
 	Logging::Write(logPrefix, "Initializing...");
 
 	bool configLoaded = ModConfiguration::LoadConfigFromFile();
-	Logging::Write(logPrefix, 
+	Logging::Write(logPrefix,
 		configLoaded ? "Ini configuration loaded successfully"
 		: "Failed to load ini configuration, using default settings"
 	);
@@ -132,9 +132,9 @@ void ModManager::Initialize()
 	}
 	else
 	{
-		Logging::Write(logPrefix, 
+		Logging::Write(logPrefix,
 			customSongsLoaded ? "Custom songs loaded successfully"
-			: "Custom songs were not loaded"
+			: "Custom songs failed to load"
 		);
 	}
 	if (ModConfiguration::activePlaylist.empty())
@@ -143,13 +143,13 @@ void ModManager::Initialize()
 	}
 
 	ModConfiguration::gameProvider = DetectProvider();
-	Logging::Write(logPrefix, 
+	Logging::Write(logPrefix,
 		"Detected game provider: %s",
 		ModConfiguration::gameProvider == GameProvider::XBOX_GAMEPASS ? "Xbox Gamepass" : "Steam/Epic"
 	);
 
 	ModConfiguration::gameVersion = DetectVersion();
-	Logging::Write(logPrefix, 
+	Logging::Write(logPrefix,
 		"Detected game version: %s",
 		ModConfiguration::gameVersion == GameVersion::DC ? "DC" : "Standard"
 	);
@@ -164,25 +164,25 @@ void ModManager::Initialize()
 			scanInProgress.store(false);
 
 			bool hookResult = TryHookFunction("GamePreExit", &GamePreExitHook);
-			Logging::Write(logPrefix, 
+			Logging::Write(logPrefix,
 				"GamePreExit function hook %s",
 				hookResult ? "installed successfully" : "failed"
 			);
 
 			hookResult = TryHookFunction("RenderTask", &RenderTaskHook);
-			Logging::Write(logPrefix, 
+			Logging::Write(logPrefix,
 				"RenderTask function hook %s",
 				hookResult ? "installed successfully" : "failed"
 			);
 
 			hookResult = TryHookFunction("GamePreLoad", &GamePreLoadHook);
-			Logging::Write(logPrefix, 
+			Logging::Write(logPrefix,
 				"GamePreLoad function hook %s",
 				hookResult ? "installed successfully" : "failed"
 			);
 
 			hookResult = TryHookFunction("AccessMusicPool", &AccessMusicPoolHook);
-			Logging::Write(logPrefix, 
+			Logging::Write(logPrefix,
 				"AccessMusicPool function hook %s",
 				hookResult ? "installed successfully" : "failed"
 			);
@@ -274,8 +274,7 @@ void ModManager::OnRender()
 	}
 
 	ModEvent renderEvent{ ModEventType::FrameRendered, nullptr, nullptr };
-	ModManager* instance = ModManager::GetInstance();
-	if (instance)
+	if (ModManager* instance = ModManager::GetInstance())
 	{
 		instance->DispatchEvent(renderEvent);
 	}
@@ -365,8 +364,7 @@ void ModManager::RenderTaskHook(void* arg1, void* arg2, void* arg3, void* arg4, 
 
 void ModManager::GamePreExitHook(void* arg1, void* arg2, void* arg3, void* arg4)
 {
-	ModManager* instance = ModManager::GetInstance();
-	if (instance)
+	if (ModManager* instance = ModManager::GetInstance())
 	{
 		instance->DispatchEvent(ModEvent{ ModEventType::PreExitTriggered, nullptr, nullptr });
 	}
@@ -396,7 +394,7 @@ void ModManager::AccessMusicPoolHook(void* arg1, void* arg2, void* arg3, void* a
 	);
 
 	uintptr_t entryAddress = reinterpret_cast<uintptr_t>(arg1);
-	Logging::Write(logPrefix, 
+	Logging::Write(logPrefix,
 		"AccessMusicPool function called with entry pointer: %p",
 		(void*)entryAddress
 	);
@@ -404,7 +402,7 @@ void ModManager::AccessMusicPoolHook(void* arg1, void* arg2, void* arg3, void* a
 	if (!musicPoolScanStartAddress && entryAddress)
 	{
 		musicPoolScanStartAddress = Utils::KeepTopHex(entryAddress, 4);
-		Logging::Write(logPrefix, 
+		Logging::Write(logPrefix,
 			"Music pool start address set to: %p (from %p)",
 			(void*)musicPoolScanStartAddress,
 			(void*)entryAddress
@@ -433,7 +431,7 @@ void ModManager::GamePreLoadHook(void* arg1, void* arg2, void* arg3, void* arg4)
 	Logging::Write(logPrefix, "GamePreLoad function called, gamePreLoadCalled set to true");
 
 	bool unhookResult = TryUnhookFunction(*gamePreLoadFuncData);
-	Logging::Write(logPrefix, 
+	Logging::Write(logPrefix,
 		"GamePreLoad function unhooking %s",
 		unhookResult ? "successful" : "failed"
 	);

@@ -12,6 +12,9 @@
 #include <memory>
 #include <stdexcept>
 #include <algorithm>
+#include <cstdint>
+#include <cstring>
+#include <limits>
 
 #define NMD_ASSEMBLY_IMPLEMENTATION
 #define NMD_ASSEMBLY_PRIVATE
@@ -27,7 +30,7 @@ namespace MemoryUtils
 {
 	static constexpr const char* logPrefix = "MemoryUtils";
 	static constexpr int maskBytes = 0xFFFF;
-	
+
 	struct HookInformation
 	{
 		std::vector<unsigned char> originalBytes = { 0 };
@@ -35,7 +38,82 @@ namespace MemoryUtils
 	};
 	static std::unordered_map<uintptr_t, HookInformation> InfoBufferForHookedAddresses;
 
-	// Disables or enables the memory protection in a given region. 
+	template<typename T>
+	static T ReadUnaligned(const uint8_t* data)
+	{
+		T value{};
+		std::memcpy(&value, data, sizeof(T));
+		return value;
+	}
+
+	template<typename T>
+	static void WriteUnaligned(uint8_t* data, T value)
+	{
+		std::memcpy(data, &value, sizeof(T));
+	}
+
+	static bool HasMemoryProtection(uintptr_t address, size_t size, DWORD allowedMask)
+	{
+		if (!address || size == 0)
+		{
+			return false;
+		}
+		if (address > (std::numeric_limits<uintptr_t>::max)() - size)
+		{
+			return false;
+		}
+
+		MEMORY_BASIC_INFORMATION mbi{};
+		if (VirtualQuery(reinterpret_cast<void*>(address), &mbi, sizeof(mbi)) != sizeof(mbi))
+		{
+			return false;
+		}
+
+		const uintptr_t regionStart = reinterpret_cast<uintptr_t>(mbi.BaseAddress);
+		const uintptr_t regionEnd = regionStart + static_cast<uintptr_t>(mbi.RegionSize);
+		const DWORD protection = mbi.Protect & 0xff;
+		return mbi.State == MEM_COMMIT
+			&& !(mbi.Protect & PAGE_GUARD)
+			&& !(mbi.Protect & PAGE_NOACCESS)
+			&& address >= regionStart
+			&& address + size <= regionEnd
+			&& (protection & allowedMask) != 0;
+	}
+
+	static bool IsReadableAddress(uintptr_t address, size_t size)
+	{
+		return HasMemoryProtection(
+			address,
+			size,
+			PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY
+			| PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY
+		);
+	}
+
+	static bool IsReadableAddress(const void* address, size_t size)
+	{
+		return IsReadableAddress(reinterpret_cast<uintptr_t>(address), size);
+	}
+
+	static bool IsWritableAddress(uintptr_t address, size_t size)
+	{
+		return HasMemoryProtection(
+			address,
+			size,
+			PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY
+		);
+	}
+
+	static bool IsExecutableAddress(uintptr_t address, size_t size)
+	{
+		return HasMemoryProtection(
+			address,
+			size,
+			PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY
+		);
+	}
+
+	// Disables or enables the memory protection in a given region.
 	// Remembers and restores the original memory protection type of the given addresses.
 	static void ToggleMemoryProtection(bool enableProtection, uintptr_t address, size_t size)
 	{
@@ -119,8 +197,8 @@ namespace MemoryUtils
 
 		static char dummyStaticVariableToGetModuleName = 'x';
 		GetModuleHandleExA(
-			GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, 
-			&dummyStaticVariableToGetModuleName, 
+			GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+			&dummyStaticVariableToGetModuleName,
 			&module);
 
 		char lpFilename[MAX_PATH];
@@ -227,145 +305,6 @@ namespace MemoryUtils
 		}
 	}
 
-	// Scans the memory of the main process module for the given signature.
-	static uintptr_t SigScan(
-		const std::string& patternStr,
-		DWORD protectionFlags
-		//int maxThreads = std::thread::hardware_concurrency()
-	) {
-		std::vector<uint16_t> pattern;
-		std::stringstream ss(patternStr);
-		std::string byte;
-		while (ss >> byte) {
-			if (byte == "?" || byte == "??") {
-				pattern.push_back(maskBytes);
-			}
-			else {
-				try {
-					uint16_t byteValue = static_cast<uint16_t>(std::stoul(byte, nullptr, 16));
-					pattern.push_back(byteValue);
-				}
-				catch (...) {
-					Logging::Write(logPrefix, "Error parsing pattern at: %s", byte.c_str());
-				}
-			}
-		}
-
-		//uintptr_t regionStart = GetProcessBaseAddress(GetCurrentProcessId());
-		uintptr_t regionStart = 0x000000000010000;
-		size_t numRegionsChecked = 0;
-		uintptr_t currentAddress = 0;
-		MEMORY_BASIC_INFORMATION memoryInfo;
-
-		while (VirtualQuery((void*)regionStart, &memoryInfo, sizeof(memoryInfo)) && regionStart < 0x7FFFFFFFFFFF) {
-			bool isReadable = (
-				memoryInfo.State == MEM_COMMIT &&
-				(memoryInfo.Protect & protectionFlags) &&
-				!(memoryInfo.Protect & PAGE_GUARD)
-			);
-
-			if (isReadable) {
-				uint8_t* region = reinterpret_cast<uint8_t*>(memoryInfo.BaseAddress);
-				size_t regionSize = memoryInfo.RegionSize;
-				Logging::Write(logPrefix, "Scanning: %p - %p", memoryInfo.BaseAddress,
-					(void*)((uintptr_t)memoryInfo.BaseAddress + memoryInfo.RegionSize));
-
-				uint8_t* regionStartPtr = reinterpret_cast<uint8_t*>(memoryInfo.BaseAddress);
-				uint8_t* regionEndPtr = regionStartPtr + memoryInfo.RegionSize;
-
-				auto it = std::search(
-					regionStartPtr,
-					regionEndPtr - pattern.size(),
-					pattern.begin(),
-					pattern.end(),
-					[](uint8_t memByte, uint16_t patByte) {
-						return patByte == maskBytes || memByte == static_cast<uint8_t>(patByte);
-					});
-
-				if (it != (regionEndPtr - pattern.size())) {
-					uintptr_t foundAddr = reinterpret_cast<uintptr_t>(it);
-					Logging::Write(logPrefix, "Found signature at: %p", (void*)foundAddr);
-					return foundAddr;
-				}
-			}
-			regionStart = reinterpret_cast<uintptr_t>(memoryInfo.BaseAddress) + memoryInfo.RegionSize;
-			numRegionsChecked++;
-		}
-
-		Logging::Write(logPrefix, "Signature not found after scanning %d regions.", numRegionsChecked);
-		ShowErrorPopup("Could not find signature!");
-		return 0;
-	}
-
-	static std::vector<uintptr_t> SigScanAllMatches(const std::string& patternStr) {
-		std::vector<uint16_t> pattern;
-		std::stringstream ss(patternStr);
-		std::string byte;
-		while (ss >> byte) {
-			if (byte == "?" || byte == "??") {
-				pattern.push_back(maskBytes);
-			}
-			else {
-				try {
-					uint16_t byteValue = static_cast<uint16_t>(std::stoul(byte, nullptr, 16));
-					pattern.push_back(byteValue);
-				}
-				catch (...) {
-					Logging::Write(logPrefix, "Error parsing pattern at: %s", byte.c_str());
-				}
-			}
-		}
-
-		std::vector<uintptr_t> matches;
-		//uintptr_t regionStart = GetProcessBaseAddress(GetCurrentProcessId());
-		uintptr_t regionStart = 0x000000000010000;
-		size_t numRegionsChecked = 0;
-		uintptr_t currentAddress = 0;
-		MEMORY_BASIC_INFORMATION memoryInfo;
-
-		while (VirtualQuery((void*)regionStart, &memoryInfo, sizeof(memoryInfo)) && regionStart < 0x7FFFFFFFFFFF) {
-			bool isReadable = (
-				memoryInfo.State == MEM_COMMIT &&
-				(memoryInfo.Protect & (PAGE_EXEC_ALL | PAGE_READ_ALL)) &&
-				!(memoryInfo.Protect & PAGE_GUARD)
-				);
-
-			if (isReadable) {
-				uint8_t* region = reinterpret_cast<uint8_t*>(memoryInfo.BaseAddress);
-				size_t regionSize = memoryInfo.RegionSize;
-				/*Logging::Write(logPrefix, "Scanning: %p - %p", memoryInfo.BaseAddress,
-					(void*)((uintptr_t)memoryInfo.BaseAddress + memoryInfo.RegionSize));*/
-
-				for (size_t offset = 0; offset < regionSize - pattern.size(); ++offset) {
-					bool matched = true;
-
-					for (size_t i = 0; i < pattern.size(); ++i) {
-						uint8_t byteToCheck = region[offset + i];
-						if (pattern[i] != maskBytes && byteToCheck != static_cast<uint8_t>(pattern[i])) {
-							matched = false;
-							break;
-						}
-					}
-
-					if (matched) {
-						uintptr_t addr = reinterpret_cast<uintptr_t>(region + offset);
-						Logging::Write(logPrefix, "Found signature at: %p", addr);
-						matches.push_back(addr);
-					}
-				}
-			}
-			regionStart = reinterpret_cast<uintptr_t>(memoryInfo.BaseAddress) + memoryInfo.RegionSize;
-			numRegionsChecked++;
-		}
-
-		if (matches.empty()) {
-			Logging::Write(logPrefix, "Signature not found after scanning %d regions.", numRegionsChecked);
-			ShowErrorPopup("Could not find signature!");
-		}
-
-		return matches;
-	}
-
 	static uintptr_t AllocateMemory(size_t numBytes)
 	{
 		uintptr_t memoryAddress = NULL;
@@ -420,8 +359,8 @@ namespace MemoryUtils
 
 		if (memoryAddress == NULL)
 		{
-			Logging::Write(logPrefix, 
-				"Failed to allocate %i bytes of memory. Origin: %p, lower: %p, higher: %p, attempts: %i", 
+			Logging::Write(logPrefix,
+				"Failed to allocate %i bytes of memory. Origin: %p, lower: %p, higher: %p, attempts: %i",
 				numBytes,
 				origin,
 				lowerBound,
@@ -552,7 +491,7 @@ namespace MemoryUtils
 		return -int32_t(relativeJumpAddress + 5 - destinationAddress);
 	}
 
-	// Places a 14-byte absolutely addressed jump from A to B. 
+	// Places a 14-byte absolutely addressed jump from A to B.
 	// Add extra clearance when the jump doesn't fit cleanly.
 	static void PlaceAbsoluteJump(uintptr_t address, uintptr_t destinationAddress, size_t clearance = 14)
 	{
@@ -563,7 +502,7 @@ namespace MemoryUtils
 		Logging::Write(logPrefix, "Created absolute jump from %p to %p with a clearance of %i", address, destinationAddress, clearance);
 	}
 
-	// Places a 5-byte relatively addressed jump from A to B. 
+	// Places a 5-byte relatively addressed jump from A to B.
 	// Add extra clearance when the jump doesn't fit cleanly.
 	static void PlaceRelativeJump(uintptr_t address, uintptr_t destinationAddress, size_t clearance = 5)
 	{
@@ -670,18 +609,18 @@ namespace MemoryUtils
 		PlaceRelativeJump(addressToHook, trampolineAddress, clearance);
 	}
 
-	static void Unhook(uintptr_t hookedAddress) 
+	static void Unhook(uintptr_t hookedAddress)
 	{
 		auto search = InfoBufferForHookedAddresses.find(hookedAddress);
 		if (search != InfoBufferForHookedAddresses.end())
 		{
 			MemSet(
-				InfoBufferForHookedAddresses[hookedAddress].trampolineInstructionsAddress, 
-				0x90, 
+				InfoBufferForHookedAddresses[hookedAddress].trampolineInstructionsAddress,
+				0x90,
 				InfoBufferForHookedAddresses[hookedAddress].originalBytes.size());
 			MemCopy(
-				hookedAddress, 
-				(uintptr_t)&InfoBufferForHookedAddresses[hookedAddress].originalBytes[0], 
+				hookedAddress,
+				(uintptr_t)&InfoBufferForHookedAddresses[hookedAddress].originalBytes[0],
 				InfoBufferForHookedAddresses[hookedAddress].originalBytes.size());
 			Logging::Write(logPrefix, "Removed hook from %p", hookedAddress);
 		}

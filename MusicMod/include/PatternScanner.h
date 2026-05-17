@@ -322,8 +322,8 @@ public:
 				auto pattern = ParsePattern(ScanTarget<T>::GetSignature(target));
 				auto gpSignature = ScanTarget<T>::GetSignatureGP(target);
 				auto patternGP = gpSignature ? ParsePattern(gpSignature) : std::vector<uint16_t>{};
-				maxPatternSize = std::max(maxPatternSize, pattern.size());
-				maxPatternSize = std::max(maxPatternSize, patternGP.size());
+				maxPatternSize = (std::max)(maxPatternSize, pattern.size());
+				maxPatternSize = (std::max)(maxPatternSize, patternGP.size());
 				parsedPatternsGP[name] = std::move(patternGP);
 				parsedPatterns[name] = std::move(pattern);
 				foundFlags[name] = false;
@@ -514,7 +514,7 @@ public:
 			size_t maxPatternSize = 0;
 			for (const auto& [name, target] : scanTargets) {
 				auto pattern = ParsePattern(ScanTarget<T>::GetSignature(*target));
-				maxPatternSize = std::max(maxPatternSize, pattern.size());
+				maxPatternSize = (std::max)(maxPatternSize, pattern.size());
 				parsedPatterns[name] = std::move(pattern);
 				foundFlags[name] = false;
 			}
