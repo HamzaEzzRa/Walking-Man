@@ -45,6 +45,7 @@ void MusicPlayer::CancelPendingAreaMusicTransition(const char* reason)
 	pendingMusicOverridePrepared = false;
 	currentMusicPlayTime.store(0);
 	currentMusicMaxLength.store(0);
+	currentMusicSourceStartOffsetMs.store(0);
 	if (ModManager* instance = ModManager::GetInstance())
 	{
 		instance->DispatchEvent(ModEvent{ ModEventType::AreaMusicUnsetRequested, nullptr, nullptr });
@@ -188,7 +189,7 @@ void MusicPlayer::OnScanDone()
 	else
 	{
 		Logging::Write(logPrefix,
-			"Base area track \"%s\" not found in song database; custom area tracks will not be bound",
+			"Base area track \"%s\" not found in song database; area override tracks will not be bound",
 			AreaMusic::OverrideTarget.songName
 		);
 	}
@@ -278,8 +279,12 @@ void MusicPlayer::OnScanDone()
 					newData->name = _strdup(poolMusicName.c_str());
 					newData->artist = "";
 					newData->signature = "";
+					newData->exclusiveDC = false;
 					newData->address = currentAddress;
 					newData->active = true;
+					newData->customAreaTrack = false;
+					newData->customWemPath = nullptr;
+					newData->internalWwiseAreaTrack = {};
 
 					poolMusicDataList.push_back(newData);
 
@@ -335,6 +340,7 @@ void MusicPlayer::OnRender()
 				currentMusicIsPlaying.store(false);
 				currentMusicPlayTime.store(0);
 				currentMusicMaxLength.store(0);
+				currentMusicSourceStartOffsetMs.store(0);
 				currentMusicPausedByBlocker.store(false);
 				return;
 			}
@@ -373,6 +379,7 @@ void MusicPlayer::OnRender()
 		{
 			Logging::Write(logPrefix, "Current music playback time exceeded its max duration");
 			currentMusicPlayTime.store(0);
+			currentMusicSourceStartOffsetMs.store(0);
 			currentMusicIsPlaying.store(false);
 			maxLengthReached = true;
 		}
@@ -458,25 +465,22 @@ void MusicPlayer::OnRender()
 	}
 
 	// Handle Song Description
+	if (pendingMusicDescriptionData)
+	{
+		const MusicData* pendingDescription = pendingMusicDescriptionData;
+		pendingMusicDescriptionData = nullptr;
+		ShowMusicDescriptionNow(pendingDescription);
+	}
+
 	if (descriptionDisplayed)
 	{
 		auto now = std::chrono::steady_clock::now();
 		if (now - lastDisplayTime >= std::chrono::milliseconds(displayDuration))
 		{
 			Logging::Write(logPrefix, "Hiding song description after %d ms", displayDuration);
-			const FunctionData* functionData = ModManager::GetFunctionData("ShowMusicDescription");
-			if (!functionData || !functionData->address)
-			{
-				Logging::Write(logPrefix, "Show description function not found, cannot hide description");
-			}
-			else
-			{
-				descriptionDisplayed = false;
-				GenericFunction_t showMusicDescriptionFunc = reinterpret_cast<GenericFunction_t>(
-					functionData->address
-				);
-				showMusicDescriptionFunc(nullptr, nullptr, nullptr, nullptr);
-			}
+			descriptionDisplayed = false;
+			pendingMusicDescriptionData = nullptr;
+			ClearMusicDescription();
 		}
 	}
 }
@@ -485,9 +489,11 @@ void MusicPlayer::OnPreExit()
 {
 	currentMusicPausedByBlocker.store(false);
 	CancelPendingAreaMusicTransition("pre-exit");
+	pendingMusicDescriptionData = nullptr;
 	currentMusicData = nullptr;
 	currentMusicIsPlaying.store(false);
 	currentMusicMaxLength.store(0);
+	currentMusicSourceStartOffsetMs.store(0);
 	btTerritoryBlocksMusic.store(false);
 	muleTerritoryBlocksMusic.store(false);
 	facilityTerritoryBlocksMusic.store(false);
@@ -680,6 +686,7 @@ void MusicPlayer::PlayMusicHook(void* arg1, void* arg2, void* arg3, void* arg4)
 		currentMusicIsPlaying.store(false);
 		currentMusicPlayTime.store(0);
 		currentMusicMaxLength.store(0);
+		currentMusicSourceStartOffsetMs.store(0);
 
 		if (ModManager* instance = ModManager::GetInstance())
 		{
@@ -756,6 +763,11 @@ void MusicPlayer::ShowMusicDescriptionCoreHook(void* arg1, void* arg2, void* arg
 {
 	constexpr const char* logPrefix = "Show Music Description Core Hook";
 
+	if (arg1)
+	{
+		musicDescriptionManager = arg1;
+	}
+
 	const FunctionData* showMusicDescriptionCoreFuncData = ModManager::GetFunctionData("ShowMusicDescriptionCore");
 	if (!showMusicDescriptionCoreFuncData || !showMusicDescriptionCoreFuncData->originalFunction)
 	{
@@ -770,6 +782,21 @@ void MusicPlayer::ShowMusicDescriptionCoreHook(void* arg1, void* arg2, void* arg
 	}
 
 	reinterpret_cast<GenericFunction_t>(showMusicDescriptionCoreFuncData->originalFunction)(arg1, arg2, arg3, arg4);
+}
+
+bool MusicPlayer::ClearMusicDescription()
+{
+	const FunctionData* functionData = ModManager::GetFunctionData("ClearMusicDescriptionByType");
+	if (!musicDescriptionManager || !functionData || !functionData->address)
+	{
+		return false;
+	}
+
+	using ClearMusicDescriptionByType_t = void (*)(void*, uint32_t, bool);
+	ClearMusicDescriptionByType_t clearMusicDescriptionByType =
+		reinterpret_cast<ClearMusicDescriptionByType_t>(functionData->address);
+	clearMusicDescriptionByType(musicDescriptionManager, 3, true);
+	return true;
 }
 
 bool MusicPlayer::HasActiveMusicBlocker()
@@ -812,6 +839,7 @@ void MusicPlayer::HandleMusicBlockerChange(
 			currentMusicPausedByBlocker.store(false);
 			currentMusicPlayTime.store(0);
 			currentMusicMaxLength.store(0);
+			currentMusicSourceStartOffsetMs.store(0);
 
 			if (ModManager* instance = ModManager::GetInstance())
 			{
@@ -957,9 +985,12 @@ bool MusicPlayer::RestartCurrentMusicFromSavedPosition(const char* reason)
 		return false;
 	}
 
-	const long long savedResumeMs = (std::max)(0LL, currentMusicPlayTime.load());
-	const long long resumeMs = savedResumeMs > 0 ? savedResumeMs + resumeCompensationMs : 0;
 	const bool usesAreaOverride = AreaMusic::UsesOverride(data);
+	const long long currentElapsedMs = (std::max)(0LL, currentMusicPlayTime.load());
+	const long long savedResumeMs = usesAreaOverride
+		? (std::max)(0LL, currentMusicSourceStartOffsetMs.load()) + currentElapsedMs
+		: currentElapsedMs;
+	const long long resumeMs = savedResumeMs > 0 ? savedResumeMs + resumeCompensationMs : 0;
 	const AreaMusic::AreaMusicChain* nativeChain =
 		(!usesAreaOverride && resumeMs > 0)
 			? AreaMusic::LookupChainForSong(data->name)
@@ -988,6 +1019,7 @@ bool MusicPlayer::RestartCurrentMusicFromSavedPosition(const char* reason)
 		currentMusicData = data;
 		currentMusicPausedByBlocker.store(false);
 		currentMusicIsPlaying.store(false);
+		currentMusicSourceStartOffsetMs.store(0);
 		Logging::Write(logPrefix,
 			"Could not restart area music \"%s\" after blocker cleared",
 			data->name ? data->name : ""
@@ -995,7 +1027,7 @@ bool MusicPlayer::RestartCurrentMusicFromSavedPosition(const char* reason)
 		return false;
 	}
 
-	if ((usesAreaOverride || nativeChain) && resumeMs > 0)
+	if (nativeChain && resumeMs > 0)
 	{
 		currentMusicPlayTime.store(resumeMs);
 		currentMusicStartTime = std::chrono::steady_clock::now()
@@ -1084,6 +1116,7 @@ bool MusicPlayer::QueueAreaMusicTransition(const MusicData* data, bool displayDe
 	currentMusicIsPlaying.store(false);
 	currentMusicPlayTime.store(0);
 	currentMusicMaxLength.store(0);
+	currentMusicSourceStartOffsetMs.store(0);
 	currentMusicPausedByBlocker.store(false);
 	pendingMusicData = data;
 	pendingMusicDisplayDescription = displayDescription;
@@ -1093,6 +1126,25 @@ bool MusicPlayer::QueueAreaMusicTransition(const MusicData* data, bool displayDe
 }
 
 bool MusicPlayer::ShowMusicDescription(const MusicData* data)
+{
+	if (!data || data->type != MusicType::SONG)
+	{
+		return false;
+	}
+
+	if (descriptionDisplayed || pendingMusicDescriptionData)
+	{
+		descriptionDisplayed = false;
+		ClearMusicDescription();
+		pendingMusicDescriptionData = data;
+		Logging::Write(logPrefix, "Deferring song description until next frame: %s", data->name ? data->name : "");
+		return true;
+	}
+
+	return ShowMusicDescriptionNow(data);
+}
+
+bool MusicPlayer::ShowMusicDescriptionNow(const MusicData* data)
 {
 	if (!data || data->type != MusicType::SONG)
 	{
@@ -1109,12 +1161,6 @@ bool MusicPlayer::ShowMusicDescription(const MusicData* data)
 	GenericFunction_t showMusicDescriptionFunc = reinterpret_cast<GenericFunction_t>(
 		showMusicDescriptionFuncData->address
 	);
-
-	if (descriptionDisplayed)
-	{
-		descriptionDisplayed = false;
-		showMusicDescriptionFunc(nullptr, nullptr, nullptr, nullptr); // clear
-	}
 
 	if (data->descriptionID)
 	{
@@ -1273,6 +1319,7 @@ void MusicPlayer::PlayMusic(const MusicData* data, bool displayDescription, long
 	Logging::Write(logPrefix, "Third argument read successfully: %p", arg3);
 
 	long long playbackMaxLength = data->maxLength;
+	long long playbackSourceStartMs = 0;
 	if (usesAreaOverride)
 	{
 		AreaMusic::RegisterRequest registration{};
@@ -1303,16 +1350,18 @@ void MusicPlayer::PlayMusic(const MusicData* data, bool displayDescription, long
 			currentMusicIsPlaying.store(false);
 			currentMusicPlayTime.store(0);
 			currentMusicMaxLength.store(0);
+			currentMusicSourceStartOffsetMs.store(0);
 			currentMusicPausedByBlocker.store(false);
 			return;
 		}
 		playbackMaxLength = registration.effectiveDurationMs > 0
 			? registration.effectiveDurationMs
 			: data->maxLength;
+		playbackSourceStartMs = registration.effectiveSourceStartMs;
 		Logging::Write(logPrefix,
 			registration.metadataPatched
-			? "Using patched Wwise media metadata for custom area track \"%s\"; runtime duration guard is %lld ms"
-			: "Wwise media metadata was not patched for custom area track \"%s\"; runtime duration guard is %lld ms",
+			? "Using patched Wwise media metadata for area override track \"%s\"; runtime duration guard is %lld ms"
+			: "Wwise media metadata was not patched for area override track \"%s\"; runtime duration guard is %lld ms",
 			data->name ? data->name : "",
 			playbackMaxLength
 		);
@@ -1343,6 +1392,7 @@ void MusicPlayer::PlayMusic(const MusicData* data, bool displayDescription, long
 
 	currentMusicPlayTime.store(0);
 	currentMusicMaxLength.store(playbackMaxLength);
+	currentMusicSourceStartOffsetMs.store(playbackSourceStartMs);
 	currentMusicPausedByBlocker.store(false);
 	currentMusicStartTime = std::chrono::steady_clock::now();
 	reinterpret_cast<GenericFunction_t>(playMusicFuncData->originalFunction)(arg1, arg2, arg3, 0);
@@ -1454,6 +1504,7 @@ void MusicPlayer::PlayByName(const std::string& name)
 void MusicPlayer::StopMusic()
 {
 	currentMusicPausedByBlocker.store(false);
+	pendingMusicDescriptionData = nullptr;
 
 	CancelPendingAreaMusicTransition("stop requested");
 
@@ -1475,6 +1526,7 @@ void MusicPlayer::StopMusic()
 	currentMusicIsPlaying.store(false);
 	currentMusicPausedByBlocker.store(false);
 	currentMusicMaxLength.store(0);
+	currentMusicSourceStartOffsetMs.store(0);
 }
 
 void MusicPlayer::PlayNextInPool()

@@ -192,7 +192,8 @@ COPY "$(SolutionDir)x64\Release\dxgi.dll" "C:\Program Files\Epic Games\DeathStra
 COPY "$(SolutionDir)walkingman.local.ini" "C:\Program Files\Epic Games\DeathStrandingDC\walkingman.ini"
 COPY "$(SolutionDir)x64\Release\dxgi.dll" "C:\Program Files (x86)\Steam\steamapps\common\DEATH STRANDING DIRECTORS CUT\dxgi.dll"
 COPY "$(SolutionDir)walkingman.local.ini" "C:\Program Files (x86)\Steam\steamapps\common\DEATH STRANDING DIRECTORS CUT\walkingman.ini"
-COPY "$(SolutionDir)x64\Release\dxgi.dll" "C:\XboxGames\DSDC\Content\dxgi.dll"
+IF EXIST "C:\XboxGames\DSDC\Content\dxgi.dll" DEL /Q "C:\XboxGames\DSDC\Content\dxgi.dll"
+COPY "$(SolutionDir)x64\Release\dxgi.dll" "C:\XboxGames\DSDC\Content\winhttp.dll"
 COPY "$(SolutionDir)walkingman.local.ini" "C:\XboxGames\DSDC\Content\walkingman.ini"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
@@ -208,6 +209,7 @@ COPY "$(SolutionDir)walkingman.local.ini" "C:\XboxGames\DSDC\Content\walkingman.
     <ClInclude Include="..\MusicMod\include\AreaMusicData.h" />
     <ClInclude Include="..\MusicMod\include\AreaMusicManager.h" />
     <ClInclude Include="..\MusicMod\include\AudioDecoder.h" />
+    <ClInclude Include="..\MusicMod\include\DecimaArchiveReader.h" />
     <ClInclude Include="..\MusicMod\include\FunctionHook.h" />
     <ClInclude Include="..\MusicMod\include\GameData.h" />
     <ClInclude Include="..\MusicMod\include\GameStateManager.h" />
@@ -243,6 +245,7 @@ COPY "$(SolutionDir)walkingman.local.ini" "C:\XboxGames\DSDC\Content\walkingman.
     <ClCompile Include="..\MinHook\src\trampoline.c" />
     <ClCompile Include="..\MusicMod\src\AreaMusicManager.cpp" />
     <ClCompile Include="..\MusicMod\src\AudioDecoder.cpp" />
+    <ClCompile Include="..\MusicMod\src\DecimaArchiveReader.cpp" />
     <ClCompile Include="..\MusicMod\src\GameStateManager.cpp" />
     <ClCompile Include="..\MusicMod\src\InputTracker.cpp" />
     <ClCompile Include="..\MusicMod\src\BreakpointWatcher.cpp" />

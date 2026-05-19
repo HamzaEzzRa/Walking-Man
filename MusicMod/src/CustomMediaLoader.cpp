@@ -1,5 +1,7 @@
 #include "CustomMediaLoader.h"
 
+#include "AreaMusicData.h"
+
 namespace CustomMediaLoader
 {
 	std::vector<std::unique_ptr<std::string>> customSongStringStorage;
@@ -200,7 +202,7 @@ namespace CustomMediaLoader
 		if (!baseTrack.address)
 		{
 			Logging::Write(logPrefix,
-				"Cannot bind custom songs because base area track \"%s\" has no scanned address",
+				"Cannot bind area override songs because base area track \"%s\" has no scanned address",
 				baseTrack.name
 			);
 			return;
@@ -218,6 +220,37 @@ namespace CustomMediaLoader
 				baseTrack.name,
 				reinterpret_cast<void*>(data.address)
 			);*/
+		}
+
+		for (auto& [name, data] : ModConfiguration::Databases::songDatabase)
+		{
+			if (!AreaMusic::UsesInternalWwiseOverride(&data))
+			{
+				continue;
+			}
+
+			if (!data.address)
+			{
+				Logging::Write(logPrefix,
+					"Cannot bind internal Wwise area override \"%s\" because its native music-player track was not found",
+					name.c_str()
+				);
+				continue;
+			}
+
+			const uintptr_t nativeMusicPlayerAddress = data.address;
+			data.address = baseTrack.address;
+			data.signature = baseTrack.signature;
+			Logging::Write(logPrefix,
+				"Bound internal Wwise area override \"%s\" to area track \"%s\" at %p "
+				"(native music-player track %p, graph key %u, source %u)",
+				name.c_str(),
+				baseTrack.name,
+				reinterpret_cast<void*>(data.address),
+				reinterpret_cast<void*>(nativeMusicPlayerAddress),
+				data.internalWwiseAreaTrack.graphKey,
+				data.internalWwiseAreaTrack.sourceId
+			);
 		}
 	}
 }

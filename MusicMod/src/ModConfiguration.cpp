@@ -21,6 +21,32 @@
 #include "MemoryUtils.h"
 #include "Utils.h"
 
+namespace
+{
+	MusicData MakeInternalWwiseAreaTrack(
+		uint16_t descriptionID,
+		long long durationMs,
+		const char* name,
+		const char* artist,
+		const char* signature,
+		InternalWwiseAreaTrackData internalWwiseAreaTrack,
+		bool exclusiveDC = false
+	)
+	{
+		MusicData data{};
+		data.descriptionID = descriptionID;
+		data.type = MusicType::SONG;
+		data.maxLength = durationMs;
+		data.name = name;
+		data.artist = artist;
+		data.signature = signature;
+		data.exclusiveDC = exclusiveDC;
+		data.customAreaTrack = true;
+		data.internalWwiseAreaTrack = internalWwiseAreaTrack;
+		return data;
+	}
+}
+
 namespace ModConfiguration
 {
 	const std::string modPublicName = "Walking Man";
@@ -254,7 +280,8 @@ namespace ModConfiguration
 				// gp version
 				"48 8B C4 57 48 81 EC ?? ?? ?? ?? C5 F8 29 78 C8 "
 				"C5 78 29 40 B8 48 8B 05 ?? ?? ?? ?? 48 33 C4 "
-				"48 89 84 24 20 01 00 00 48 8B 3D ?? ?? ?? ?? C5 F8 28 F9"}
+				"48 89 84 24 20 01 00 00 48 8B 3D ?? ?? ?? ?? C5 F8 28 F9",
+				true}
 			},
 
 			// In-game UI functions
@@ -404,6 +431,13 @@ namespace ModConfiguration
 				// gp version
 				"4C 8B DC 55 49 8D AB ?? ?? ?? ?? 48 81 EC ?? ?? ?? ?? 48 8B 05 "
 				"?? ?? ?? ?? 48 33 C4 48 89 85 ?? ?? ?? ?? 49 89 5B 18 33 DB"}
+			},
+			{
+				"ClearMusicDescriptionByType",
+				{"ClearMusicDescriptionByType",
+				"83 FA ?? 0F 87 ?? ?? ?? ?? 48 89 5C 24 18 56 48 83 EC ?? 48 63 C2 48 8B D9",
+				// gp version
+				"83 FA ?? 0F 87 ?? ?? ?? ?? 57 48 83 EC ?? 48 63 C2 41 0F B6 F8"}
 			}
 		};
 
@@ -425,18 +459,8 @@ namespace ModConfiguration
 			}
 		};
 
-		// Missing songs:
-		// - "I'll Keep Coming" - Low Roar - 12
-		// - "Yellow Box" - The Neighbourhood - 40
-		// - "Ghost" - Alan Walker & Au/Ra - 41
-		// - "Trigger" - Khalid & Major Lazer - 42
-		// - "Meanwhile... In Genova" - The S.L.P. - 43
-		// - "Ludens" - Bring Me The Horizon - 44
-		// - "Pop Virus" - Gen Hoshino - 50
-		// - "Alone" - Biting Elbows - 101
-		// - "Path" - Apocalyptica - 106
-		// - "Path Vol. 2" - Apocalyptica & Sandra Nasic - 107
-		// - "Death Stranding" - CHVRCHES ?? (not sure if it exists in-game)
+		// Music-player-only songs use the Area00 override target at runtime.
+		// Their Wwise ids/durations come from DSMusicPlayerTrackResource -> DSRaceMissionBGMResource.
 		std::unordered_map<std::string, MusicData> songDatabase =
 		{
 			{
@@ -544,11 +568,17 @@ namespace ModConfiguration
 				{16, MusicType::SONG, 0, "Please Don't Stop (Chapter 2)", "Low Roar",
 				"?? ?? ?? ?? ?? 7F 00 00 08 E1 2B 67 43 59 42 C7 93 DF 5A 7E 98 AF 0B DA"}
 			},
-			/*{
+			{
 				"I'll Keep Coming",
-				{12, MusicType::SONG, 0, "I'll Keep Coming", "Low Roar",
-				"?? ?? ?? ?? ?? 7F 00 00 14 D0 B6 9E C7 40 4C 0E A0 9C FB 04 D1 7C 3B B1"}
-			},*/
+				MakeInternalWwiseAreaTrack(
+					12,
+					352213,
+					"I'll Keep Coming",
+					"Low Roar",
+					"?? ?? ?? ?? ?? 7F 00 00 14 D0 B6 9E C7 40 4C 0E A0 9C FB 04 D1 7C 3B B1",
+					{1305110817u, 1055644723u, 650923206u, 382608620u, 439722904u, 5352569u, 0x00040001u}
+				)
+			},
 			{
 				"Half Asleep",
 				{0, MusicType::SONG, 0, "Half Asleep", "Low Roar",
@@ -579,36 +609,168 @@ namespace ModConfiguration
 				{35, MusicType::SONG, 0, "BB's Theme", "Ludvig Forssell",
 				"?? ?? ?? ?? ?? 7F 00 00 F3 A0 F0 58 1A 9C 42 2F 8D 34 A7 E9 70 3A 45 23"}
 			},
-			/*{
+			{
 				"Yellow Box",
-				{40, MusicType::SONG, 0, "Yellow Box", "The Neighbourhood",
-				"?? ?? ?? ?? ?? 7F 00 00 FA 7F C9 EB 62 AB 43 86 BB F5 E8 A1 50 E3 18 E8"}
+				MakeInternalWwiseAreaTrack(
+					40,
+					181242,
+					"Yellow Box",
+					"The Neighbourhood",
+					"?? ?? ?? ?? ?? 7F 00 00 FA 7F C9 EB 62 AB 43 86 BB F5 E8 A1 50 E3 18 E8",
+					{2924515455u, 1012319143u, 671037301u, 487040596u, 547112959u, 2503595u, 0x00040001u}
+				)
 			},
 			{
 				"Ghost",
-				{41, MusicType::SONG, 0, "Ghost", "Alan Walker & Au/Ra",
-				"?? ?? ?? ?? ?? 7F 00 00 2C 4A DD D9 B8 95 42 64 87 33 F5 C1 B9 0E CC F9"}
+				MakeInternalWwiseAreaTrack(
+					41,
+					176797,
+					"Ghost",
+					"Alan Walker & Au/Ra",
+					"?? ?? ?? ?? ?? 7F 00 00 2C 4A DD D9 B8 95 42 64 87 33 F5 C1 B9 0E CC F9",
+					{598365015u, 1043875000u, 1047951530u, 829141283u, 898858101u, 2662798u, 0x00040001u}
+				)
 			},
 			{
 				"Trigger",
-				{42, MusicType::SONG, 0, "Trigger", "Khalid & Major Lazer",
-				"?? ?? ?? ?? ?? 7F 00 00 0F 7D 12 60 75 31 40 A0 8F A6 05 9A AA 2A 16 5C"}
+				MakeInternalWwiseAreaTrack(
+					42,
+					170982,
+					"Trigger",
+					"Khalid & Major Lazer",
+					"?? ?? ?? ?? ?? 7F 00 00 0F 7D 12 60 75 31 40 A0 8F A6 05 9A AA 2A 16 5C",
+					{1893238147u, 89519363u, 519029854u, 386911041u, 80774687u, 2611920u, 0x00040001u}
+				)
 			},
 			{
 				"Meanwhile... In Genova",
-				{43, MusicType::SONG, 0, "Meanwhile... In Genova", "The S.L.P.",
-				"?? ?? ?? ?? ?? 7F 00 00 FC 1E B7 F3 84 6A 4D A3 89 84 B7 EB 07 DC 1D 48"}
+				MakeInternalWwiseAreaTrack(
+					43,
+					205158,
+					"Meanwhile... In Genova",
+					"The S.L.P.",
+					"?? ?? ?? ?? ?? 7F 00 00 FC 1E B7 F3 84 6A 4D A3 89 84 B7 EB 07 DC 1D 48",
+					{3371207578u, 1016826391u, 147702751u, 470414990u, 144885500u, 2747688u, 0x00040001u}
+				)
 			},
 			{
 				"Ludens",
-				{44, MusicType::SONG, 0, "Ludens", "Bring Me The Horizon",
-				"?? ?? ?? ?? ?? 7F 00 00 CC 25 E3 36 66 05 42 88 84 92 14 CB FE B0 2C 8B"}
+				MakeInternalWwiseAreaTrack(
+					44,
+					276344,
+					"Ludens",
+					"Bring Me The Horizon",
+					"?? ?? ?? ?? ?? 7F 00 00 CC 25 E3 36 66 05 42 88 84 92 14 CB FE B0 2C 8B",
+					{856141473u, 237707466u, 1021953861u, 547593542u, 430772228u, 4393532u, 0x00040001u}
+				)
 			},
 			{
 				"Pop Virus",
-				{50, MusicType::SONG, 0, "Pop Virus", "Gen Hoshino",
-				"?? ?? ?? ?? ?? 7F 00 00 23 A9 DD 3C 14 F4 49 24 BA 14 B4 B0 51 ED C7 E7"}
-			},*/
+				MakeInternalWwiseAreaTrack(
+					50,
+					181533,
+					"Pop Virus",
+					"Gen Hoshino",
+					"?? ?? ?? ?? ?? 7F 00 00 23 A9 DD 3C 14 F4 49 24 BA 14 B4 B0 51 ED C7 E7",
+					{391919030u, 934080991u, 670119032u, 956497239u, 798253428u, 2457847u, 0x00040001u}
+				)
+			},
+			{
+				"Car Go Fast",
+				MakeInternalWwiseAreaTrack(
+					60,
+					325000,
+					"Car Go Fast",
+					"Ludvig Forssell",
+					"?? ?? ?? ?? ?? 7F 00 00 D0 67 2D F6 86 06 42 12 B4 ED E0 21 AE CB 62 1E",
+					{1284342117u, 53356964u, 215126431u, 267299658u, 251243249u, 10001440u, 0x00040001u},
+					true
+				)
+			},
+			{
+				"Over The Threshold",
+				MakeInternalWwiseAreaTrack(
+					61,
+					319000,
+					"Over The Threshold",
+					"Ludvig Forssell",
+					"?? ?? ?? ?? ?? 7F 00 00 6D CC 12 4F FC 65 47 1F 94 F1 B6 99 F7 3B 84 08",
+					{3913561973u, 1006104337u, 826687163u, 423182524u, 1008401873u, 6580285u, 0x00040001u},
+					true
+				)
+			},
+			{
+				"Truckin'",
+				MakeInternalWwiseAreaTrack(
+					62,
+					193000,
+					"Truckin'",
+					"Ludvig Forssell",
+					"?? ?? ?? ?? ?? 7F 00 00 8C 1A 5C 05 28 8A 40 A8 99 C3 3E 0B 9D 25 5F 2F",
+					{2233763949u, 830860311u, 282292946u, 542579712u, 198734754u, 4480029u, 0x00040001u},
+					true
+				)
+			},
+			{
+				"UCA Pacific Highway 46",
+				MakeInternalWwiseAreaTrack(
+					63,
+					247000,
+					"UCA Pacific Highway 46",
+					"Ludvig Forssell",
+					"?? ?? ?? ?? ?? 7F 00 00 75 49 E4 E7 F3 0E 46 5B BC B8 1A 0E 25 0D DF 44",
+					{3276989892u, 983148444u, 518357792u, 62764114u, 140915981u, 6009723u, 0x00040001u},
+					true
+				)
+			},
+			{
+				"Highways",
+				MakeInternalWwiseAreaTrack(
+					64,
+					164000,
+					"Highways",
+					"Ludvig Forssell",
+					"?? ?? ?? ?? ?? 7F 00 00 A8 E1 13 25 10 74 45 51 A5 2C D0 D7 92 2D C0 C5",
+					{2675753311u, 505072956u, 191416213u, 90472243u, 212867915u, 5245015u, 0x00040001u},
+					true
+				)
+			},
+			{
+				"Alone",
+				MakeInternalWwiseAreaTrack(
+					101,
+					180000,
+					"Alone",
+					"Biting Elbows",
+					"?? ?? ?? ?? ?? 7F 00 00 D8 C7 3D 56 06 D1 4A 0B 82 7E 41 9B 0E 35 72 1A",
+					{1540271023u, 78924567u, 27281959u, 953843384u, 646208726u, 2446760u, 0x00040001u},
+					true
+				)
+			},
+			{
+				"Path",
+				MakeInternalWwiseAreaTrack(
+					106,
+					186000,
+					"Path",
+					"Apocalyptica",
+					"?? ?? ?? ?? ?? 7F 00 00 44 4B D7 F2 70 CF 41 39 B4 58 72 03 78 90 C1 92",
+					{2079558722u, 408002769u, 991931525u, 345109632u, 23355226u, 2763179u, 0x00040001u},
+					true
+				)
+			},
+			{
+				"Path Vol. 2",
+				MakeInternalWwiseAreaTrack(
+					107,
+					204000,
+					"Path Vol. 2",
+					"Apocalyptica",
+					"?? ?? ?? ?? ?? 7F 00 00 36 12 05 30 2D 17 4D 80 9E E9 A5 02 48 7E 9E 9C",
+					{1669624497u, 215763671u, 711699113u, 1056922396u, 1007972598u, 3221381u, 0x00040001u},
+					true
+				)
+			},
 
 			// Director's cut exclusives
 			{

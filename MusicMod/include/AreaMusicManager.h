@@ -86,6 +86,8 @@ private:
 
 	static bool ResolveWwiseMediaFunctions();
 	static bool LoadAreaMusicManager(const char*);
+	static bool LoadInternalWwiseMedia(const MusicData*);
+	static bool LoadInternalWwiseMediaFromGameArchive(const MusicData*, AreaMusicManagerBuffer&);
 	static void Unset();
 	static void RetireBuffer();
 

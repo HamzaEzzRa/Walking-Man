@@ -49,7 +49,9 @@ private:
 	void InstallMusicAddressWatcher();
 	bool QueueAreaMusicTransition(const MusicData*, bool);
 	bool PlaySilenceForAreaMusicTransition();
+	static bool ClearMusicDescription();
 	bool ShowMusicDescription(const MusicData*);
+	bool ShowMusicDescriptionNow(const MusicData*);
 
 	void PlayNextInPool();
 	void PlayPreviousInPool();
@@ -81,6 +83,7 @@ private:
 	inline static bool gameCalledInterruptor = false;
 	inline static std::atomic<long long> currentMusicPlayTime = 0; // in ms, used to track current playback time
 	inline static std::atomic<long long> currentMusicMaxLength = 0; // in ms, runtime guard for current playback
+	inline static std::atomic<long long> currentMusicSourceStartOffsetMs = 0; // in ms, absolute source offset for resumed area overrides
 
 	inline static constexpr long long resumeCompensationMs = 500; // ms to add on resume to compensate for fade-out time
 
@@ -102,6 +105,7 @@ private:
 	uint16_t timeTillAutoplay = 1000; // in ms, time to wait before playing next song automatically
 
 	inline static uintptr_t playingLoopAddress = 0;
+	inline static void* musicDescriptionManager = nullptr;
 
 	// Tracks playing loop instruction that accesses currentMusicAddress (+0x08 to be exact), helps detect song end
 	std::unique_ptr<BreakpointWatcher> musicAddressWatcher;
@@ -110,6 +114,7 @@ private:
 	inline static uint32_t watcherPollingInterval = 10; // ms
 
 	bool descriptionDisplayed = false;
+	const MusicData* pendingMusicDescriptionData = nullptr;
 	uint16_t displayDuration = 6500; // in ms
 	std::chrono::time_point<std::chrono::steady_clock> lastDisplayTime;
 };

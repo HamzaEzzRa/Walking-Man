@@ -50,6 +50,17 @@ enum class TextLanguage: uint8_t
 	CHINESE_SIMPLIFIED = 21
 };
 
+struct InternalWwiseAreaTrackData
+{
+	uint32_t graphKey = 0;
+	uint32_t ranSeqId = 0;
+	uint32_t segmentId = 0;
+	uint32_t trackId = 0;
+	uint32_t sourceId = 0;
+	uint32_t streamMediaSize = 0;
+	uint32_t sourcePluginId = 0;
+};
+
 struct MusicData
 {
 	uint16_t descriptionID; // passed to the draw description function
@@ -63,6 +74,7 @@ struct MusicData
 	bool active = false;
 	bool customAreaTrack = false;
 	const char* customWemPath = nullptr;
+	InternalWwiseAreaTrackData internalWwiseAreaTrack{};
 };
 
 struct FunctionData

@@ -8,10 +8,10 @@
 #include <Windows.h>
 
 #include "AudioDecoder.h"
+#include "DecimaArchiveReader.h"
 #include "GameData.h"
 #include "Logger.h"
 #include "MemoryUtils.h"
-#include "MinHook.h"
 #include "ModConfiguration.h"
 #include "ModManager.h"
 
@@ -28,6 +28,7 @@ namespace
 	constexpr size_t liveTrackSourceObjectSize = 0x28;
 	constexpr size_t liveTrackTimingStride = 0x1c;
 	constexpr uint32_t wwiseTicksPerMillisecond = 48;
+	constexpr uint32_t maxInternalWwiseMediaSize = DecimaArchiveReader::maxExtractedFileSize;
 
 	uint32_t MillisecondsToWwiseTicks(long long milliseconds)
 	{
@@ -106,6 +107,17 @@ namespace
 		}
 	}
 
+	bool LooksLikeWwiseMediaBuffer(const uint8_t* bytes, size_t size)
+	{
+		if (!bytes || size < 12)
+		{
+			return false;
+		}
+		const bool riff =
+			std::memcmp(bytes, "RIFF", 4) == 0
+			|| std::memcmp(bytes, "RIFX", 4) == 0;
+		return riff && std::memcmp(bytes + 8, "WAVE", 4) == 0;
+	}
 }
 
 void AreaMusicManager::ReleaseWwiseObject(void* object)
@@ -184,6 +196,7 @@ void AreaMusicManager::OnEvent(const ModEvent& event)
 		case ModEventType::FrameRendered:
 		{
 			InstallWwiseObjectLookupHook();
+			ResolveWwiseMediaFunctions();
 			break;
 		}
 		case ModEventType::PreExitTriggered:
@@ -662,7 +675,7 @@ bool AreaMusicManager::PatchLiveAreaMusicMetadata(
 	long long requestedSourceStartMs
 )
 {
-	if (!data || !data->customAreaTrack)
+	if (!AreaMusic::UsesOverride(data))
 	{
 		return false;
 	}
@@ -695,6 +708,8 @@ bool AreaMusicManager::PatchLiveAreaMusicMetadata(
 	const uint32_t sourceDurationTicks = MillisecondsToWwiseTicks(sourceDurationMs);
 	const uint32_t effectiveDurationTicks = MillisecondsToWwiseTicks(effectiveDurationMs);
 	const uint32_t sourceStartTicks = sourceStartMs <= 0 ? 0 : MillisecondsToWwiseTicks(sourceStartMs);
+	const bool customMediaOverride = AreaMusic::UsesCustomMediaOverride(data);
+	const bool internalWwiseOverride = AreaMusic::UsesInternalWwiseOverride(data);
 	const uint32_t sourceId = AreaMusic::OverrideTarget.sourceId;
 	const uint32_t mediaSize = areaMusicOverrideBuffer
 		? static_cast<uint32_t>((std::min)(
@@ -705,6 +720,7 @@ bool AreaMusicManager::PatchLiveAreaMusicMetadata(
 	const uint32_t sourcePluginId = areaMusicOverrideBuffer
 		? areaMusicOverrideBuffer->sourcePluginId
 		: areaMusicOverrideSourcePluginId;
+	const bool patchSourceMediaMetadata = areaMusicOverrideBuffer && !areaMusicOverrideBuffer->bytes.empty();
 
 	void* segment = LookupWwiseObject(AreaMusic::OverrideTarget.segmentId);
 	void* track = LookupWwiseObject(AreaMusic::OverrideTarget.trackId);
@@ -872,11 +888,14 @@ bool AreaMusicManager::PatchLiveAreaMusicMetadata(
 				backup.sourceObjectBackups.push_back(std::move(objectBackup));
 				MemoryUtils::WriteUnaligned<uint32_t>(sourceObjectBytes, sourceId);
 				MemoryUtils::WriteUnaligned<uint32_t>(sourceObjectBytes + 0x04, sourceId);
-				if (mediaSize > 0)
+				if (patchSourceMediaMetadata && mediaSize > 0)
 				{
 					MemoryUtils::WriteUnaligned<uint32_t>(sourceObjectBytes + 0x08, mediaSize);
 				}
-				MemoryUtils::WriteUnaligned<uint32_t>(sourceObjectBytes + 0x18, sourcePluginId);
+				if (patchSourceMediaMetadata)
+				{
+					MemoryUtils::WriteUnaligned<uint32_t>(sourceObjectBytes + 0x18, sourcePluginId);
+				}
 			}
 
 			MemoryUtils::WriteUnaligned<uint32_t>(entry, sourceId);
@@ -1009,9 +1028,13 @@ bool AreaMusicManager::PatchLiveAreaMusicMetadata(
 	liveAreaMusicMetadataBackup = std::move(backup);
 	areaMusicOverrideMetadataPatched = true;
 	Logging::Write(logPrefix,
-		"Patched live Area00 Wwise music metadata for \"%s\" (media id %u, source %lld ms/%u ticks, effective %lld ms/%u ticks, source start %lld ms/%u ticks, neutral trim fields, sources %u/%u, markers %u/%u, timing entries %u/%u)",
+		"Patched live Area00 Wwise music metadata for \"%s\" "
+		"(%s source id %u, media size 0x%08x, source plugin 0x%08x, source %lld ms/%u ticks, effective %lld ms/%u ticks, source start %lld ms/%u ticks, neutral trim fields, sources %u/%u, markers %u/%u, timing entries %u/%u)",
 		data->name ? data->name : "",
+		customMediaOverride ? "custom media" : (internalWwiseOverride ? "internal Wwise cloned media" : "area override"),
 		sourceId,
+		mediaSize,
+		sourcePluginId,
 		sourceDurationMs,
 		sourceDurationTicks,
 		effectiveDurationMs,
@@ -1300,12 +1323,162 @@ bool AreaMusicManager::LoadAreaMusicManager(const char* overridePath)
 	return true;
 }
 
+bool AreaMusicManager::LoadInternalWwiseMediaFromGameArchive(
+	const MusicData* data,
+	AreaMusicManagerBuffer& output
+)
+{
+	if (!AreaMusic::UsesInternalWwiseOverride(data))
+	{
+		return false;
+	}
+
+	const InternalWwiseAreaTrackData& internalAreaTrack = data->internalWwiseAreaTrack;
+	if (
+		internalAreaTrack.sourceId == 0
+		|| internalAreaTrack.streamMediaSize < 16
+		|| internalAreaTrack.streamMediaSize > maxInternalWwiseMediaSize
+	)
+	{
+		return false;
+	}
+
+	const std::string streamPath = DecimaArchiveReader::BuildStreamedWemPath(internalAreaTrack.sourceId);
+	std::vector<uint8_t> mediaBytes;
+	const DecimaArchiveReader::ReadFileResult readResult =
+		DecimaArchiveReader::ReadInitialArchiveFile(
+			streamPath,
+			internalAreaTrack.streamMediaSize,
+			mediaBytes
+		);
+	if (!readResult.success)
+	{
+		Logging::Write(logPrefix,
+			"Failed to extract Decima stream \"%s\" for internal Wwise media \"%s\": %s",
+			streamPath.c_str(),
+			data->name ? data->name : "",
+			readResult.error.c_str()
+		);
+		output = {};
+		return false;
+	}
+
+	if (!LooksLikeWwiseMediaBuffer(mediaBytes.data(), mediaBytes.size()))
+	{
+		Logging::Write(logPrefix,
+			"Extracted Decima stream \"%s\" for \"%s\" is not valid Wwise media (%zu/%zu bytes)",
+			streamPath.c_str(),
+			data->name ? data->name : "",
+			readResult.copiedBytes,
+			mediaBytes.size()
+		);
+		output = {};
+		return false;
+	}
+
+	output = {};
+	output.path = "internal-wwise:" + std::to_string(internalAreaTrack.sourceId);
+	output.bytes = std::move(mediaBytes);
+	output.sourcePluginId = internalAreaTrack.sourcePluginId
+		? internalAreaTrack.sourcePluginId
+		: areaMusicOverrideSourcePluginId;
+	output.durationMs = data->maxLength;
+
+	Logging::Write(logPrefix,
+		"Extracted internal Wwise media for \"%s\" from Decima stream \"%s\" "
+		"(%zu bytes, source plugin 0x%08x, duration %lld ms)",
+		data->name ? data->name : "",
+		streamPath.c_str(),
+		output.bytes.size(),
+		output.sourcePluginId,
+		output.durationMs
+	);
+	return true;
+}
+
+bool AreaMusicManager::LoadInternalWwiseMedia(const MusicData* data)
+{
+	if (!AreaMusic::UsesInternalWwiseOverride(data))
+	{
+		return false;
+	}
+
+	const InternalWwiseAreaTrackData& internalAreaTrack = data->internalWwiseAreaTrack;
+	const std::string path = "internal-wwise:" + std::to_string(internalAreaTrack.sourceId);
+	if (
+		areaMusicOverrideBuffer
+		&& !areaMusicOverrideBuffer->bytes.empty()
+		&& areaMusicOverrideBuffer->path == path
+	)
+	{
+		return true;
+	}
+
+	if (areaMusicOverrideRegistered)
+	{
+		Unset();
+	}
+	RetireBuffer();
+
+	auto retiredIt = std::find_if(
+		retiredAreaMusicManagerBuffers.begin(),
+		retiredAreaMusicManagerBuffers.end(),
+		[&path](const std::unique_ptr<AreaMusicManagerBuffer>& buffer)
+		{
+			return buffer
+				&& !buffer->bytes.empty()
+				&& buffer->path == path;
+		}
+	);
+	if (retiredIt != retiredAreaMusicManagerBuffers.end())
+	{
+		areaMusicOverrideBuffer = std::move(*retiredIt);
+		retiredAreaMusicManagerBuffers.erase(retiredIt);
+		Logging::Write(logPrefix,
+			"Reusing cloned internal Wwise area override for \"%s\" (%zu bytes, source plugin 0x%08x, duration %lld ms)",
+			data->name ? data->name : "",
+			areaMusicOverrideBuffer->bytes.size(),
+			areaMusicOverrideBuffer->sourcePluginId,
+			areaMusicOverrideBuffer->durationMs
+		);
+		return true;
+	}
+
+	AreaMusicManagerBuffer extractedBuffer{};
+	if (!LoadInternalWwiseMediaFromGameArchive(data, extractedBuffer))
+	{
+		Logging::Write(logPrefix,
+			"Cannot register Area00 override buffer for internal Wwise media \"%s\" "
+			"(graph key %u, internal source %u, expected stream size %u bytes)",
+			data->name ? data->name : "",
+			internalAreaTrack.graphKey,
+			internalAreaTrack.sourceId,
+			internalAreaTrack.streamMediaSize
+		);
+		return false;
+	}
+
+	areaMusicOverrideBuffer = std::make_unique<AreaMusicManagerBuffer>(std::move(extractedBuffer));
+	Logging::Write(logPrefix,
+		"Loaded internal Wwise media for \"%s\" from source %u into Area00 target override buffer "
+		"(%zu bytes, target source %u, source plugin 0x%08x, duration %lld ms)",
+		data->name ? data->name : "",
+		internalAreaTrack.sourceId,
+		areaMusicOverrideBuffer->bytes.size(),
+		AreaMusic::OverrideTarget.sourceId,
+		areaMusicOverrideBuffer->sourcePluginId,
+		areaMusicOverrideBuffer->durationMs
+	);
+	return true;
+}
+
 void AreaMusicManager::HandleRegisterRequest(AreaMusic::RegisterRequest& request)
 {
 	request.handled = true;
 	request.success = false;
 	request.metadataPatched = false;
 	request.effectiveDurationMs = request.data ? request.data->maxLength : 0;
+	request.effectiveSourceStartMs = 0;
 
 	const MusicData* data = request.data;
 	if (!AreaMusic::UsesOverride(data))
@@ -1314,13 +1487,54 @@ void AreaMusicManager::HandleRegisterRequest(AreaMusic::RegisterRequest& request
 		return;
 	}
 
-	const char* overridePath = data ? data->customWemPath : nullptr;
-	const uint32_t sourceId = AreaMusic::OverrideTarget.sourceId;
-	if (!ResolveWwiseMediaFunctions() || !LoadAreaMusicManager(overridePath))
+	const bool internalWwiseOverride = AreaMusic::UsesInternalWwiseOverride(data);
+	const bool customMediaOverride = AreaMusic::UsesCustomMediaOverride(data);
+	if (internalWwiseOverride)
+	{
+		const InternalWwiseAreaTrackData& internalAreaTrack = data->internalWwiseAreaTrack;
+		void* ranSeqObject = LookupWwiseObject(internalAreaTrack.ranSeqId);
+		void* segmentObject = LookupWwiseObject(internalAreaTrack.segmentId);
+		void* trackObject = LookupWwiseObject(internalAreaTrack.trackId);
+		Logging::Write(logPrefix,
+			"Preparing internal Wwise area override for \"%s\" "
+			"(graph key %u, ranseq %u=%p, segment %u=%p, track %u=%p, internal source %u, "
+			"stream size %u, target source %u, source plugin 0x%08x)",
+			data->name ? data->name : "",
+			internalAreaTrack.graphKey,
+			internalAreaTrack.ranSeqId,
+			ranSeqObject,
+			internalAreaTrack.segmentId,
+			segmentObject,
+			internalAreaTrack.trackId,
+			trackObject,
+			internalAreaTrack.sourceId,
+			internalAreaTrack.streamMediaSize,
+			AreaMusic::OverrideTarget.sourceId,
+			internalAreaTrack.sourcePluginId
+		);
+		ReleaseWwiseObject(ranSeqObject);
+		ReleaseWwiseObject(segmentObject);
+		ReleaseWwiseObject(trackObject);
+
+		if (!ResolveWwiseMediaFunctions() || !LoadInternalWwiseMedia(data))
+		{
+			return;
+		}
+	}
+	else if (customMediaOverride)
+	{
+		const char* overridePath = data ? data->customWemPath : nullptr;
+		if (!ResolveWwiseMediaFunctions() || !LoadAreaMusicManager(overridePath))
+		{
+			return;
+		}
+	}
+	else
 	{
 		return;
 	}
 
+	const uint32_t sourceId = AreaMusic::OverrideTarget.sourceId;
 	if (!areaMusicOverrideBuffer || areaMusicOverrideBuffer->bytes.empty())
 	{
 		return;
@@ -1333,9 +1547,6 @@ void AreaMusicManager::HandleRegisterRequest(AreaMusic::RegisterRequest& request
 		request.sourceStartMs,
 		sourceDurationMs
 	);
-	request.effectiveDurationMs = sourceDurationMs > 0
-		? (std::max)(1LL, sourceDurationMs - sourceStartMs)
-		: (data->maxLength > 0 ? data->maxLength : 0);
 
 	if (sourceDurationMs > 0)
 	{
@@ -1344,9 +1555,19 @@ void AreaMusicManager::HandleRegisterRequest(AreaMusic::RegisterRequest& request
 			sourceDurationMs,
 			sourceStartMs
 		);
+		if (areaMusicOverrideMetadataPatched)
+		{
+			request.effectiveSourceStartMs = sourceStartMs;
+			request.effectiveDurationMs = (std::max)(1LL, sourceDurationMs - sourceStartMs);
+		}
+		else
+		{
+			request.effectiveDurationMs = sourceDurationMs;
+		}
 	}
 	else
 	{
+		request.effectiveDurationMs = data->maxLength > 0 ? data->maxLength : 0;
 		RestoreLiveAreaMusicMetadata();
 	}
 	request.metadataPatched = areaMusicOverrideMetadataPatched;

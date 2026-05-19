@@ -60,6 +60,9 @@
     <ClInclude Include="..\MusicMod\include\AudioDecoder.h">
       <Filter>Header Files\Music Mod</Filter>
     </ClInclude>
+    <ClInclude Include="..\MusicMod\include\DecimaArchiveReader.h">
+      <Filter>Header Files\Music Mod</Filter>
+    </ClInclude>
     <ClInclude Include="..\MusicMod\include\PatternScanner.h">
       <Filter>Header Files\Music Mod</Filter>
     </ClInclude>
@@ -165,6 +168,9 @@
       <Filter>Source Files\Music Mod</Filter>
     </ClCompile>
     <ClCompile Include="..\MusicMod\src\AudioDecoder.cpp">
+      <Filter>Source Files\Music Mod</Filter>
+    </ClCompile>
+    <ClCompile Include="..\MusicMod\src\DecimaArchiveReader.cpp">
       <Filter>Source Files\Music Mod</Filter>
     </ClCompile>
     <ClCompile Include="..\MinHook\src\buffer.c">

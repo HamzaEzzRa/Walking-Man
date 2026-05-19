@@ -30,12 +30,24 @@ void OpenDevTerminal()
 	}
 }
 
-bool IsStandalone(HMODULE hModule)
+const wchar_t* GetModuleFilename(HMODULE hModule)
 {
-	wchar_t path[MAX_PATH];
+	static wchar_t path[MAX_PATH];
 	GetModuleFileNameW(hModule, path, MAX_PATH);
 	wchar_t* filename = wcsrchr(path, L'\\');
-	return filename && _wcsicmp(filename + 1, L"dxgi.dll") == 0;
+	return filename ? filename + 1 : path;
+}
+
+bool IsProxyModule(HMODULE hModule)
+{
+	const wchar_t* filename = GetModuleFilename(hModule);
+	return _wcsicmp(filename, L"dxgi.dll") == 0 || _wcsicmp(filename, L"winhttp.dll") == 0;
+}
+
+bool StartsFromDllMain(HMODULE hModule)
+{
+	const wchar_t* filename = GetModuleFilename(hModule);
+	return _wcsicmp(filename, L"dxgi.dll") != 0;
 }
 
 bool IsValidProcess()
@@ -45,13 +57,18 @@ bool IsValidProcess()
 	wchar_t* filename = wcsrchr(path, L'\\');
 	if (!filename) return false;
 
-	static const wchar_t* validProcesses[] = { L"ds.exe", L"DeathStranding.exe" };
+	static const wchar_t* validProcesses[] = {
+		L"ds.exe",
+		L"DeathStranding.exe",
+	};
 	for (auto& proc : validProcesses)
 	{
 		if (_wcsicmp(filename + 1, proc) == 0) return true;
 	}
 	return false;
 }
+
+static HMODULE gProxyModule = nullptr;
 
 DWORD WINAPI HookThread(LPVOID lpParam)
 {
@@ -80,26 +97,92 @@ DWORD WINAPI HookThread(LPVOID lpParam)
 
 static HMODULE gRealDxgi = nullptr;
 typedef HRESULT(WINAPI* PFN_CreateDXGIFactory1)(REFIID, void**);
+typedef HRESULT(WINAPI* PFN_CreateDXGIFactory2)(UINT, REFIID, void**);
 static PFN_CreateDXGIFactory1 real_CreateDXGIFactory1 = nullptr;
+static PFN_CreateDXGIFactory2 real_CreateDXGIFactory2 = nullptr;
+static volatile LONG gHookThreadStarted = 0;
+static HANDLE gHookThreadMutex = nullptr;
 
-extern "C" __declspec(dllexport)
-HRESULT WINAPI CreateDXGIFactory1Hook(REFIID riid, void** ppFactory)
+static HMODULE LoadRealDxgi()
 {
-	if (!gRealDxgi) {
+	if (!gRealDxgi)
+	{
 		wchar_t path[MAX_PATH];
 		GetSystemDirectoryW(path, MAX_PATH);
 		wcscat_s(path, L"\\dxgi.dll");
 
 		gRealDxgi = LoadLibraryW(path);
-		if (!gRealDxgi) {
+		if (!gRealDxgi)
+		{
 			MessageBoxW(nullptr, L"Failed to load original dxgi.dll", L"dxgi proxy", MB_OK | MB_ICONERROR);
-			return E_FAIL;
 		}
 	}
 
-	if (!real_CreateDXGIFactory1) {
+	return gRealDxgi;
+}
+
+static void StartHookThreadOnce()
+{
+	if (!IsValidProcess())
+	{
+		return;
+	}
+
+	if (InterlockedCompareExchange(&gHookThreadStarted, 1, 0) == 0)
+	{
+		wchar_t mutexName[128] = {};
+		swprintf_s(
+			mutexName,
+			L"Local\\WalkingManHookThreadStarted_%lu",
+			GetCurrentProcessId()
+		);
+		gHookThreadMutex = CreateMutexW(nullptr, TRUE, mutexName);
+		if (!gHookThreadMutex || GetLastError() == ERROR_ALREADY_EXISTS)
+		{
+			if (gHookThreadMutex)
+			{
+				CloseHandle(gHookThreadMutex);
+				gHookThreadMutex = nullptr;
+			}
+			return;
+		}
+
+		CreateThread(nullptr, 0, HookThread, nullptr, 0, nullptr);
+	}
+}
+
+DWORD WINAPI DeferredHookThread(LPVOID lpParam)
+{
+	HMODULE module = reinterpret_cast<HMODULE>(lpParam);
+
+	const ULONGLONG deadline = GetTickCount64() + 60000;
+	while (GetTickCount64() < deadline)
+	{
+		if (GetModuleHandleW(L"dxgi.dll") || GetModuleHandleW(L"d3d12.dll"))
+		{
+			break;
+		}
+		Sleep(100);
+	}
+
+	Sleep(3000);
+	StartHookThreadOnce();
+	return 0;
+}
+
+extern "C" __declspec(dllexport)
+HRESULT WINAPI CreateDXGIFactory1Hook(REFIID riid, void** ppFactory)
+{
+	if (!LoadRealDxgi())
+	{
+		return E_FAIL;
+	}
+
+	if (!real_CreateDXGIFactory1)
+	{
 		real_CreateDXGIFactory1 = (PFN_CreateDXGIFactory1)GetProcAddress(gRealDxgi, "CreateDXGIFactory1");
-		if (!real_CreateDXGIFactory1) {
+		if (!real_CreateDXGIFactory1)
+		{
 			MessageBoxW(nullptr, L"Failed to find CreateDXGIFactory1", L"dxgi proxy", MB_OK | MB_ICONERROR);
 			return E_FAIL;
 		}
@@ -109,12 +192,35 @@ HRESULT WINAPI CreateDXGIFactory1Hook(REFIID riid, void** ppFactory)
 
 	if (SUCCEEDED(hr))
 	{
-		static bool initialized = false;
-		if (!initialized && IsValidProcess())
+		StartHookThreadOnce();
+	}
+
+	return hr;
+}
+
+extern "C" __declspec(dllexport)
+HRESULT WINAPI CreateDXGIFactory2Hook(UINT flags, REFIID riid, void** ppFactory)
+{
+	if (!LoadRealDxgi())
+	{
+		return E_FAIL;
+	}
+
+	if (!real_CreateDXGIFactory2)
+	{
+		real_CreateDXGIFactory2 = (PFN_CreateDXGIFactory2)GetProcAddress(gRealDxgi, "CreateDXGIFactory2");
+		if (!real_CreateDXGIFactory2)
 		{
-			initialized = true;
-			CreateThread(nullptr, 0, HookThread, nullptr, 0, nullptr);
+			MessageBoxW(nullptr, L"Failed to find CreateDXGIFactory2", L"dxgi proxy", MB_OK | MB_ICONERROR);
+			return E_FAIL;
 		}
+	}
+
+	HRESULT hr = real_CreateDXGIFactory2(flags, riid, ppFactory);
+
+	if (SUCCEEDED(hr))
+	{
+		StartHookThreadOnce();
 	}
 
 	return hr;
@@ -124,8 +230,10 @@ BOOL WINAPI DllMain(HMODULE module, DWORD reason, LPVOID)
 {
 	if (reason == DLL_PROCESS_ATTACH)
 	{
-		const bool standalone = IsStandalone(module);
-		if (standalone)
+		gProxyModule = module;
+
+		const bool proxyModule = IsProxyModule(module);
+		if (proxyModule)
 		{
 			UPD::MuteLogging();
 			UPD::CreateProxy(module);
@@ -139,15 +247,24 @@ BOOL WINAPI DllMain(HMODULE module, DWORD reason, LPVOID)
 		OpenDevTerminal();
 		MH_Initialize();
 
-		if (!standalone)
+		if (!proxyModule)
 		{
-			CreateThread(nullptr, 0, HookThread, nullptr, 0, nullptr);
+			StartHookThreadOnce();
+		}
+		else if (StartsFromDllMain(module))
+		{
+			CreateThread(nullptr, 0, DeferredHookThread, module, 0, nullptr);
 		}
 	}
 	else if (reason == DLL_PROCESS_DETACH)
 	{
 		MH_RemoveHook(MH_ALL_HOOKS);
 		MH_Uninitialize();
+		if (gHookThreadMutex)
+		{
+			CloseHandle(gHookThreadMutex);
+			gHookThreadMutex = nullptr;
+		}
 	}
 
 	return 1;

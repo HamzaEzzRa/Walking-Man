@@ -24,6 +24,7 @@ namespace AreaMusic
 		bool success = false;
 		bool metadataPatched = false;
 		long long effectiveDurationMs = 0;
+		long long effectiveSourceStartMs = 0;
 	};
 
 	struct PatchNativeOffsetRequest
@@ -82,9 +83,22 @@ namespace AreaMusic
 		{"Almost Nothing (Instrumental)",    361567052,  828378002,   424219496,   303176799},
 	};
 
-	inline bool UsesOverride(const MusicData* data)
+	inline bool UsesCustomMediaOverride(const MusicData* data)
 	{
 		return data && data->customAreaTrack && data->customWemPath;
+	}
+
+	inline bool UsesInternalWwiseOverride(const MusicData* data)
+	{
+		return data
+			&& data->customAreaTrack
+			&& !data->customWemPath
+			&& data->internalWwiseAreaTrack.sourceId != 0;
+	}
+
+	inline bool UsesOverride(const MusicData* data)
+	{
+		return UsesCustomMediaOverride(data) || UsesInternalWwiseOverride(data);
 	}
 
 	inline bool IsTemplateTrack(const MusicData* data)

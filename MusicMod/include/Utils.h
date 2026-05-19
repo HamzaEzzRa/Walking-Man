@@ -5,10 +5,12 @@
 #include <cstdint>
 #include <iomanip>
 #include <filesystem>
+#include <limits>
 
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <Windows.h>
 
@@ -61,6 +63,41 @@ namespace Utils {
 			return false;
 		}
 
+		return true;
+	}
+
+	static bool ReadFileBytesAt(HANDLE file, uint64_t offset, void* bytes, size_t size)
+	{
+		if (!file || file == INVALID_HANDLE_VALUE || (!bytes && size != 0))
+		{
+			return false;
+		}
+		if (offset > static_cast<uint64_t>((std::numeric_limits<LONGLONG>::max)()))
+		{
+			return false;
+		}
+
+		LARGE_INTEGER position{};
+		position.QuadPart = static_cast<LONGLONG>(offset);
+		if (!SetFilePointerEx(file, position, nullptr, FILE_BEGIN))
+		{
+			return false;
+		}
+
+		uint8_t* out = static_cast<uint8_t*>(bytes);
+		size_t totalRead = 0;
+		while (totalRead < size)
+		{
+			const DWORD request = static_cast<DWORD>(
+				(std::min)(size - totalRead, static_cast<size_t>((std::numeric_limits<DWORD>::max)()))
+			);
+			DWORD read = 0;
+			if (!ReadFile(file, out + totalRead, request, &read, nullptr) || read == 0)
+			{
+				return false;
+			}
+			totalRead += read;
+		}
 		return true;
 	}
 
@@ -595,6 +632,46 @@ namespace Utils {
 		return std::wstring(path.begin(), path.end());
 	}
 
+	static uint16_t ReadLe16(const uint8_t* bytes)
+	{
+		return static_cast<uint16_t>(bytes[0])
+			| (static_cast<uint16_t>(bytes[1]) << 8);
+	}
+
+	static uint32_t ReadLe32(const uint8_t* bytes)
+	{
+		return static_cast<uint32_t>(bytes[0])
+			| (static_cast<uint32_t>(bytes[1]) << 8)
+			| (static_cast<uint32_t>(bytes[2]) << 16)
+			| (static_cast<uint32_t>(bytes[3]) << 24);
+	}
+
+	static uint64_t ReadLe64(const uint8_t* bytes)
+	{
+		return static_cast<uint64_t>(ReadLe32(bytes))
+			| (static_cast<uint64_t>(ReadLe32(bytes + 4)) << 32);
+	}
+
+	static void WriteLe16(uint8_t* bytes, uint16_t value)
+	{
+		bytes[0] = static_cast<uint8_t>(value);
+		bytes[1] = static_cast<uint8_t>(value >> 8);
+	}
+
+	static void WriteLe32(uint8_t* bytes, uint32_t value)
+	{
+		bytes[0] = static_cast<uint8_t>(value);
+		bytes[1] = static_cast<uint8_t>(value >> 8);
+		bytes[2] = static_cast<uint8_t>(value >> 16);
+		bytes[3] = static_cast<uint8_t>(value >> 24);
+	}
+
+	static void WriteLe64(uint8_t* bytes, uint64_t value)
+	{
+		WriteLe32(bytes, static_cast<uint32_t>(value));
+		WriteLe32(bytes + 4, static_cast<uint32_t>(value >> 32));
+	}
+
 	static uint16_t ReadLe16FromBytes(const std::vector<uint8_t>& bytes, size_t offset)
 	{
 		if (offset + sizeof(uint16_t) > bytes.size())
@@ -602,8 +679,7 @@ namespace Utils {
 			return 0;
 		}
 
-		return static_cast<uint16_t>(bytes[offset])
-			| static_cast<uint16_t>(bytes[offset + 1] << 8);
+		return ReadLe16(bytes.data() + offset);
 	}
 
 	static uint32_t ReadLe32FromBytes(const std::vector<uint8_t>& bytes, size_t offset)
@@ -613,10 +689,7 @@ namespace Utils {
 			return 0;
 		}
 
-		return static_cast<uint32_t>(bytes[offset])
-			| (static_cast<uint32_t>(bytes[offset + 1]) << 8)
-			| (static_cast<uint32_t>(bytes[offset + 2]) << 16)
-			| (static_cast<uint32_t>(bytes[offset + 3]) << 24);
+		return ReadLe32(bytes.data() + offset);
 	}
 
 	static void AppendLe16(std::vector<uint8_t>& bytes, uint16_t value)

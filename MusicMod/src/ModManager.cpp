@@ -58,8 +58,8 @@ bool ModManager::TryHookFunction(const std::string& name, void* hookFunction)
 		if (created != MH_OK)
 		{
 			Logging::Write(logPrefix,
-				"Failed to create hook for function \"%s\" at address %p",
-				name.c_str(), funcData.address
+				"Failed to create hook for function \"%s\" at address %p: %s",
+				name.c_str(), funcData.address, MH_StatusToString(created)
 			);
 			return false;
 		}
@@ -68,8 +68,8 @@ bool ModManager::TryHookFunction(const std::string& name, void* hookFunction)
 		if (enabled != MH_OK)
 		{
 			Logging::Write(logPrefix,
-				"Failed to enable hook for function \"%s\" at address %p",
-				name.c_str(), funcData.address
+				"Failed to enable hook for function \"%s\" at address %p: %s",
+				name.c_str(), funcData.address, MH_StatusToString(enabled)
 			);
 			return false;
 		}
@@ -312,6 +312,12 @@ void ModManager::DispatchEvent(const ModEvent& event)
 
 GameProvider ModManager::DetectProvider()
 {
+	if (MemoryUtils::IsFileNextToExecutable(L"MicrosoftGame.Config")
+		|| MemoryUtils::IsFileNextToExecutable(L"appxmanifest.xml"))
+	{
+		return GameProvider::XBOX_GAMEPASS;
+	}
+
 	const std::vector<const char*> gamePassModules = {
 		"xgameruntime.dll",
 		"Microsoft.Xbox.Services.dll",
