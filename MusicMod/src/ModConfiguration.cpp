@@ -70,6 +70,8 @@ namespace ModConfiguration
 	bool showNotificationMessage = true;
 	bool connectToChiralNetwork = true;
 
+	bool stopInFacility = true;
+
 	bool customSongsEnabled = true;
 	std::string customSongsFolderPath = "";
 
@@ -99,11 +101,14 @@ namespace ModConfiguration
 		{"connectToChiralNetwork",
 		[](const std::string& val) { connectToChiralNetwork = (val == "true" || val == "1"); }},
 
-		{"customSongsFolderPath",
-		[](const std::string& val) { customSongsFolderPath = val; }},
+		{"stopInFacility",
+		[](const std::string& val) { stopInFacility = (val == "true" || val == "1"); }},
 
 		{"customSongsEnabled",
 		[](const std::string& val) { customSongsEnabled = (val == "true" || val == "1"); }},
+
+		{"customSongsFolderPath",
+		[](const std::string& val) { customSongsFolderPath = val; }},
 
 		{"allowScriptedSongs",
 		[](const std::string& val) { allowScriptedSongs = (val == "true" || val == "1"); }},
@@ -459,7 +464,7 @@ namespace ModConfiguration
 			}
 		};
 
-		// Music-player-only songs use the Area00 override target at runtime.
+		// Music-player-only songs use the override target at runtime.
 		// Their Wwise ids/durations come from DSMusicPlayerTrackResource -> DSRaceMissionBGMResource.
 		std::unordered_map<std::string, MusicData> songDatabase =
 		{

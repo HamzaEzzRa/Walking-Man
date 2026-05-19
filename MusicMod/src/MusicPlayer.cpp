@@ -105,18 +105,21 @@ void MusicPlayer::OnEvent(const ModEvent& event)
 		}
 		case ModEventType::FacilityTerritoryStateChanged:
 		{
-			auto* facilityFlagState = std::any_cast<FlagState<FacilityFlag>*>(event.data);
-			const bool wasBlocked = HasActiveMusicBlocker();
-			facilityTerritoryBlocksMusic.store(facilityFlagState->current == FacilityFlag::INSIDE);
-			const bool isBlocked = HasActiveMusicBlocker();
+			if (ModConfiguration::stopInFacility)
+			{
+				auto* facilityFlagState = std::any_cast<FlagState<FacilityFlag>*>(event.data);
+				const bool wasBlocked = HasActiveMusicBlocker();
+				facilityTerritoryBlocksMusic.store(facilityFlagState->current == FacilityFlag::INSIDE);
+				const bool isBlocked = HasActiveMusicBlocker();
 
-			HandleMusicBlockerChange(
-				wasBlocked,
-				isBlocked,
-				"in facility",
-				"facility territory cleared",
-				"facility territory interruption"
-			);
+				HandleMusicBlockerChange(
+					wasBlocked,
+					isBlocked,
+					"in facility",
+					"facility territory cleared",
+					"facility territory interruption"
+				);
+			}
 			break;
 		}
 		case ModEventType::ChiralNetworkStateChanged:
@@ -579,6 +582,7 @@ void MusicPlayer::PlayMusicHook(void* arg1, void* arg2, void* arg3, void* arg4)
 {
 	constexpr const char* logPrefix = "Play Music Hook";
 	const bool blockerPausedByActiveBlocker = currentMusicPausedByBlocker.load() && HasActiveMusicBlocker();
+	Logging::Write(logPrefix, "PlayMusic called with args: %p, %p, %p, %p", arg1, arg2, arg3, arg4);
 
 	if (!playMusicFuncRCXAddress)
 	{

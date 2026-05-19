@@ -3,7 +3,7 @@ name: Publish Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 permissions:
   contents: write
@@ -13,18 +13,30 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v6
 
-    - name: Add msbuild to PATH
-      uses: microsoft/setup-msbuild@v1.1
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v3
+        with:
+          msbuild-architecture: x64
 
-    - name: Build
-      run: msbuild DllWrapper.sln /p:Configuration=Release /p:Platform=x64 /p:PostBuildEventUseInBuild=false
+      - name: Build
+        run: msbuild DllWrapper.sln /m /p:Configuration=Release /p:Platform=x64 /p:PostBuildEventUseInBuild=false
 
-    - name: Create ZIP Archive
-      run: Compress-Archive -Path x64\Release\dxgi.dll, walkingman.ini -DestinationPath walkingman_${{ github.ref_name }}.zip
+      - name: Stage Release Files
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist | Out-Null
+          Copy-Item x64\Release\dxgi.dll dist\dxgi.dll
+          Copy-Item extended_wardrobe.ini dist\extended_wardrobe.ini
 
-    - name: Create GitHub Release
-      uses: softprops/action-gh-release@v2
-      with:
-        files: walkingman_${{ github.ref_name }}.zip
+      - name: Create ZIP Archive
+        shell: pwsh
+        run: Compress-Archive -Path dist\* -DestinationPath walkingman_${{ github.ref_name }}.zip
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: walkingman_${{ github.ref_name }}.zip
+          fail_on_unmatched_files: true

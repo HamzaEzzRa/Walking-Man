@@ -60,10 +60,13 @@ void UIManager::OnEvent(const ModEvent& event)
 		}
 		case ModEventType::FacilityTerritoryStateChanged:
 		{
-			auto* facilityFlagState = std::any_cast<FlagState<FacilityFlag>*>(event.data);
-			UpdateMusicPlayerUIBlockers(
-				MusicPlayerUIBlocker::FACILITY_BLOCK, facilityFlagState->current == FacilityFlag::INSIDE
-			);
+			if (ModConfiguration::stopInFacility)
+			{
+				auto* facilityFlagState = std::any_cast<FlagState<FacilityFlag>*>(event.data);
+				UpdateMusicPlayerUIBlockers(
+					MusicPlayerUIBlocker::FACILITY_BLOCK, facilityFlagState->current == FacilityFlag::INSIDE
+				);
+			}
 			break;
 		}
 		case ModEventType::ChiralNetworkStateChanged:

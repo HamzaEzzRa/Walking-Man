@@ -34,6 +34,8 @@ namespace ModConfiguration
 	extern bool showNotificationMessage;
 	extern bool connectToChiralNetwork;
 
+	extern bool stopInFacility;
+
 	extern bool customSongsEnabled;
 	extern std::string customSongsFolderPath;
 
