@@ -94,6 +94,11 @@ public:
 		return dataSize == 0;
 	}
 
+	size_t Size() const
+	{
+		return dataSize;
+	}
+
 private:
 	void GeneratePlaybackOrder(bool shuffle)
 	{

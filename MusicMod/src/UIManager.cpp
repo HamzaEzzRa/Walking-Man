@@ -58,17 +58,17 @@ void UIManager::OnEvent(const ModEvent& event)
 			);
 			break;
 		}
-		case ModEventType::FacilityTerritoryStateChanged:
+		case ModEventType::FacilityBlockStateChanged:
 		{
-			if (ModConfiguration::stopInFacility)
-			{
-				auto* facilityFlagState = std::any_cast<FlagState<FacilityFlag>*>(event.data);
-				UpdateMusicPlayerUIBlockers(
-					MusicPlayerUIBlocker::FACILITY_BLOCK, facilityFlagState->current == FacilityFlag::INSIDE
+		    if (ModConfiguration::stopInFacility)
+		    {
+			    auto* areaFlagState = std::any_cast<FlagState<AreaFlag>*>(event.data);
+			    UpdateMusicPlayerUIBlockers(
+					MusicPlayerUIBlocker::FACILITY_BLOCK, areaFlagState->current == AreaFlag::INSIDE
 				);
-			}
-			break;
-		}
+		    }
+		    break;
+	    }
 		case ModEventType::ChiralNetworkStateChanged:
 		{
 			if (ModConfiguration::connectToChiralNetwork)
@@ -575,8 +575,11 @@ void UIManager::PostMenuExitHook(void* arg1, void* arg2, void* arg3, void* arg4)
 {
 	constexpr const char* logPrefix = "UI Manager";
 
+	if (currentCompassState == OPEN)
+	{
+		Logging::Write(logPrefix, "Resetting compass state to CLOSED on menu exit.");
+	}
 	ResetModCompassState();
-	Logging::Write(logPrefix, "Compass state reset to CLOSED on menu exit.");
 
 	const FunctionData* postMenuExitFuncData = ModManager::GetFunctionData("PostMenuExit");
 	if (!postMenuExitFuncData || !postMenuExitFuncData->originalFunction)

@@ -52,11 +52,11 @@ void GameStateManager::OnScanDone()
 	);
 
 	result = ModManager::TryHookFunction(
-		"FacilityManagerUpdate",
-		reinterpret_cast<void*>(&GameStateManager::FacilityManagerUpdateHook)
+		"InGameAreaUpdate",
+		reinterpret_cast<void*>(&GameStateManager::InGameAreaUpdateHook)
 	);
 	Logging::Write(logPrefix,
-		"FacilityManagerUpdate function hook %s",
+		"InGameAreaUpdate function hook %s",
 		result ? "installed successfully" : "failed"
 	);
 }
@@ -65,7 +65,25 @@ void GameStateManager::OnRender()
 {
 	OnFlagStateChanged(btTerritoryState);
 	OnFlagStateChanged(muleTerritoryState);
-	OnFlagStateChanged(facilityTerritoryState);
+
+	if (facilityAreaState.flagWatcher || privateRoomAreaState.flagWatcher)
+	{
+		facilityBlockState.current = (facilityAreaState.current == AreaFlag::INSIDE
+			|| privateRoomAreaState.current == AreaFlag::INSIDE) ? AreaFlag::INSIDE : AreaFlag::OUTSIDE;
+
+		if (facilityBlockState.current != facilityBlockState.previous)
+		{
+			if (ModManager* instance = ModManager::GetInstance())
+			{
+				instance->DispatchEvent(ModEvent{
+					ModEventType::FacilityBlockStateChanged,
+					this, &facilityBlockState
+				});
+			}
+			facilityBlockState.previous = facilityBlockState.current;
+		}
+	}
+	
 	OnFlagStateChanged(chiralNetworkState);
 }
 
@@ -81,11 +99,18 @@ void GameStateManager::OnPreExit()
 		muleTerritoryState.flagWatcher->Uninstall();
 		muleTerritoryState.flagWatcher.reset();
 	}
-	if (facilityTerritoryState.flagWatcher)
+
+	if (privateRoomAreaState.flagWatcher)
 	{
-		facilityTerritoryState.flagWatcher->Uninstall();
-		facilityTerritoryState.flagWatcher.reset();
+		privateRoomAreaState.flagWatcher->Uninstall();
+		privateRoomAreaState.flagWatcher.reset();
 	}
+	if (facilityAreaState.flagWatcher)
+	{
+		facilityAreaState.flagWatcher->Uninstall();
+		facilityAreaState.flagWatcher.reset();
+	}
+
 	if (chiralNetworkState.flagWatcher)
 	{
 		chiralNetworkState.flagWatcher->Uninstall();
@@ -137,6 +162,20 @@ void GameStateManager::InGameFlagUpdateHook(void* arg1, void* arg2, void* arg3, 
 		);
 		muleTerritoryState.flagWatcher->Install((void*)(muleFlagAddress), sizeof(uint8_t));
 
+		uintptr_t privateRoomFlagAddress = flagPoolAddress + privateRoomAreaState.GetFlagOffset(useDCOffset);
+		auto privateRoomFlag = *reinterpret_cast<const uint8_t*>(privateRoomFlagAddress);
+		privateRoomAreaState.current = (privateRoomFlag != 0) ? AreaFlag::INSIDE : AreaFlag::OUTSIDE;
+
+		auto& privateRoomStateRef = privateRoomAreaState;
+		privateRoomAreaState.flagWatcher = std::make_unique<MemoryWatcher>(
+		    [&privateRoomStateRef](const void* newValue)
+		    {
+			    auto privateRoomFlag = *reinterpret_cast<const uint8_t*>(newValue);
+			    privateRoomStateRef.current = (privateRoomFlag != 0) ? AreaFlag::INSIDE : AreaFlag::OUTSIDE;
+		    },
+		    privateRoomAreaState.pollingInterval);
+		privateRoomAreaState.flagWatcher->Install((void*)privateRoomFlagAddress, sizeof(uint8_t));
+
 		uintptr_t chiralNetworkFlagAddress = flagPoolAddress + chiralNetworkState.GetFlagOffset(useDCOffset);
 		auto chiralFlag = *reinterpret_cast<const uint8_t*>(chiralNetworkFlagAddress);
 		chiralNetworkState.current = (chiralFlag != 0) ? ChiralNetworkFlag::ON : ChiralNetworkFlag::OFF;
@@ -165,9 +204,9 @@ void GameStateManager::InGameFlagUpdateHook(void* arg1, void* arg2, void* arg3, 
 	}
 }
 
-void GameStateManager::FacilityManagerUpdateHook(void* manager)
+void GameStateManager::InGameAreaUpdateHook(void* manager)
 {
-	const FunctionData* functionData = ModManager::GetFunctionData("FacilityManagerUpdate");
+	const FunctionData* functionData = ModManager::GetFunctionData("InGameAreaUpdate");
 	if (!functionData || !functionData->address)
 	{
 		return;
@@ -194,33 +233,29 @@ void GameStateManager::FacilityManagerUpdateHook(void* manager)
 		return;
 	}
 
-	size_t facilityFlagOffset = facilityTerritoryState.GetFlagOffset(ModConfiguration::gameVersion == GameVersion::DC);
+	size_t facilityFlagOffset = facilityAreaState.GetFlagOffset(ModConfiguration::gameVersion == GameVersion::DC);
 	uintptr_t facilityFlagAddress = managerAddress + facilityFlagOffset;
 	auto facilityFlag = *reinterpret_cast<const uint8_t*>(facilityFlagAddress);
-	facilityTerritoryState.current = (facilityFlag != 0) ? FacilityFlag::INSIDE : FacilityFlag::OUTSIDE;
+	facilityAreaState.current = (facilityFlag != 0) ? AreaFlag::INSIDE : AreaFlag::OUTSIDE;
 
-	auto& facilityStateRef = facilityTerritoryState;
-	facilityTerritoryState.flagWatcher = std::make_unique<MemoryWatcher>(
+	auto& facilityStateRef = facilityAreaState;
+	facilityAreaState.flagWatcher = std::make_unique<MemoryWatcher>(
 		[&facilityStateRef](const void* newValue) {
 			auto facilityFlag = *reinterpret_cast<const uint8_t*>(newValue);
-			facilityStateRef.current = (facilityFlag != 0) ? FacilityFlag::INSIDE : FacilityFlag::OUTSIDE;
+			facilityStateRef.current = (facilityFlag != 0) ? AreaFlag::INSIDE : AreaFlag::OUTSIDE;
 		},
-		facilityTerritoryState.pollingInterval
+		facilityAreaState.pollingInterval
 	);
-	facilityTerritoryState.flagWatcher->Install((void*)facilityFlagAddress, sizeof(uint8_t));
-	Logging::Write(logPrefix,
-		"Installed watcher on facility flag address: %p",
-		(void*)facilityFlagAddress
-	);
+	facilityAreaState.flagWatcher->Install((void*)facilityFlagAddress, sizeof(uint8_t));
 
 	if (!functionData->originalFunction)
 	{
-		Logging::Write(logPrefix, "FacilityManagerUpdate function not hooked, cannot unhook it");
+		Logging::Write(logPrefix, "InGameAreaUpdate function not hooked, cannot unhook it");
 		return;
 	}
 	bool result = ModManager::TryUnhookFunction(*functionData);
 	Logging::Write(logPrefix,
-		"FacilityManagerUpdate function unhook %s",
+		"InGameAreaUpdate function unhook %s",
 		result ? "successful" : "failed"
 	);
 }

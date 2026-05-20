@@ -32,9 +32,11 @@ namespace ModConfiguration
 
 	extern bool showSongDescription;
 	extern bool showNotificationMessage;
-	extern bool connectToChiralNetwork;
 
+	extern bool connectToChiralNetwork;
 	extern bool stopInFacility;
+
+	extern bool skipLockedSongs;
 
 	extern bool customSongsEnabled;
 	extern std::string customSongsFolderPath;
@@ -57,6 +59,8 @@ namespace ModConfiguration
 		extern std::unordered_map<std::string, MusicData> customSongDatabase;
 
 		extern std::unordered_map<std::string, MusicData> interruptorUIDatabase;
+
+		extern std::unordered_map<std::string, MusicUnlockFactData> musicUnlockFactDatabase;
 
 		extern std::unordered_map<std::string, LocalizedText> localizedTextDatabase;
 	}

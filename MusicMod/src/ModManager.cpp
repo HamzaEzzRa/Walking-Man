@@ -163,6 +163,11 @@ void ModManager::Initialize()
 			Logging::Write(logPrefix, "Function signature scanning complete.");
 			scanInProgress.store(false);
 
+			if (instance)
+			{
+				instance->DispatchEvent(ModEvent{ ModEventType::FunctionScanCompleted, nullptr, nullptr });
+			}
+
 			bool hookResult = TryHookFunction("GamePreExit", &GamePreExitHook);
 			Logging::Write(logPrefix,
 				"GamePreExit function hook %s",

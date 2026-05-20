@@ -32,6 +32,8 @@ public:
 	void OnInputPress(const InputCode&);
 
 private:
+	void OnFunctionScanDone();
+
 	void PlayMusic(const MusicData*, bool = true, long long = 0);
 
 	void PlayCurrentSong();
@@ -52,6 +54,8 @@ private:
 	static bool ClearMusicDescription();
 	bool ShowMusicDescription(const MusicData*);
 	bool ShowMusicDescriptionNow(const MusicData*);
+	static bool IsTrackUnlocked(const MusicData*);
+	static void CacheUnlockFacts(void*);
 
 	void PlayNextInPool();
 	void PlayPreviousInPool();
@@ -59,6 +63,7 @@ private:
 	static void PlayMusicHook(void*, void*, void*, void*);
 	static void PlayUISoundHook(void*, void*, void*, void*);
 	static void ShowMusicDescriptionCoreHook(void*, void*, void*, void*);
+	static void DSCollectorsItemSystemLoadHook(void*, void*, void*, void*);
 
 	enum LoopMode
 	{

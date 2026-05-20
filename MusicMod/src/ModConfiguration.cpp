@@ -68,9 +68,11 @@ namespace ModConfiguration
 	// Mod configuration defaults
 	bool showSongDescription = true;
 	bool showNotificationMessage = true;
-	bool connectToChiralNetwork = true;
 
+	bool connectToChiralNetwork = true;
 	bool stopInFacility = true;
+
+	bool skipLockedSongs = true;
 
 	bool customSongsEnabled = true;
 	std::string customSongsFolderPath = "";
@@ -103,6 +105,9 @@ namespace ModConfiguration
 
 		{"stopInFacility",
 		[](const std::string& val) { stopInFacility = (val == "true" || val == "1"); }},
+
+		{"skipLockedSongs",
+		[](const std::string& val) { skipLockedSongs = (val == "true" || val == "1"); }},
 
 		{"customSongsEnabled",
 		[](const std::string& val) { customSongsEnabled = (val == "true" || val == "1"); }},
@@ -278,15 +283,31 @@ namespace ModConfiguration
 				"00 00 E8 ?? ?? ?? ?? 48 29 C4 44 0F 29 9C 24"}
 			},
 			{
-				"FacilityManagerUpdate",
-				{"FacilityManagerUpdate",
+				"InGameAreaUpdate",
+				{"InGameAreaUpdate",
 				"48 8B C4 48 89 58 20 56 57 41 ?? 41 56 41 57 "
 				"48 81 EC ?? ?? ?? ?? C5 78 29 48",
 				// gp version
-				"48 8B C4 57 48 81 EC ?? ?? ?? ?? C5 F8 29 78 C8 "
-				"C5 78 29 40 B8 48 8B 05 ?? ?? ?? ?? 48 33 C4 "
-				"48 89 84 24 20 01 00 00 48 8B 3D ?? ?? ?? ?? C5 F8 28 F9",
+				"48 8B C4 57 48 81 EC ?? ?? ?? ?? C5 F8 29 78 C8",
 				true}
+			},
+			{
+				"GetBooleanFact",
+				{"GetBooleanFact",
+				"48 83 EC ?? 48 8B 05 ?? ?? ?? ?? 48 33 C4 48 89 44 24 30 48 85 D2 74 ?? C5 F8 10 05 "
+				"?? ?? ?? ?? C5 F8 11 44 24 20 48 85 C9 74 ?? C5 F8 10 41 08 C5 F8 11 44 24 20 48 83 "
+				"7C 24 20 00 75 08 48 83 7C 24 28 00 74 26 48 8B 0D ?? ?? ?? ?? 4C 8B C2 48 8D 54 24 "
+				"20 E8 ?? ?? ?? ?? 48 8B 4C 24 30 48 33 CC E8 ?? ?? ?? ?? 48 83 C4 ?? C3 32 C0",
+				// gp version
+				"48 83 EC ?? 48 8B 05 ?? ?? ?? ?? 48 33 "
+				"C4 48 89 44 24 30 48 85 D2 75 ?? 32 C0"}
+			},
+			{
+				"DSCollectorsItemSystemLoad",
+				{"DSCollectorsItemSystemLoad",
+				"48 89 5C 24 18 56 57 41 54 41 56 41 57 48 83 EC ?? 48 8B F1",
+				// gp version
+				"48 89 5C 24 18 55 56 57 41 54 41 55 48 8B EC"}
 			},
 
 			// In-game UI functions
@@ -898,6 +919,50 @@ namespace ModConfiguration
 				"?? ?? ?? ?? ?? 7F 00 00 F9 11 18 09 E1 ED 40 BF 89 71 17 49 FC 70 D8 15"}
 			},
 		};
+
+		std::unordered_map<std::string, MusicUnlockFactData> musicUnlockFactDatabase =
+		{
+			{"Ghost", {"AA 64 2A 13 75 37 4E EC 96 11 F0 D4 C7 CE 85 7A", false}},
+			{"Pop Virus", {"03 97 B1 D8 C5 7F 41 C6 92 D8 39 70 21 BB 28 8B", false}},
+			{"Bones", {"4B BA 20 86 CD DB 4F AB A5 AD A9 BB 6D 5D 8A E1", false}},
+			{"Goliath", {"8E 2A 8D E6 30 E4 45 9A A8 C4 97 D6 79 8C 56 2C", true}},
+			{"Alone", {"E6 3E 18 F2 B3 18 42 96 96 9A C1 49 22 84 15 3A", true}},
+			{"Yellow Box", {"22 48 09 F5 B4 16 4D E6 BB D1 60 6A D0 48 FE D8", false}},
+			{"Asylums For The Feeling", {"C3 F0 20 00 F0 DC 4B F6 A1 AD 9D 2F D1 38 6B D0", false}},
+			{"Without You", {"58 44 7C 78 20 2C 41 91 90 77 80 97 CD 8D 2B 52", false}},
+			{"Ludens", {"3C 49 A1 FC 6D 03 4E AB BC AC 21 4E E2 33 16 B1", false}},
+			{"I'm Leaving", {"43 34 AD DD 6F 73 47 D1 A6 A1 88 88 3A 33 D1 5C", false}},
+			{"Patience", {"2A A7 1E AE E5 EA 44 07 95 C7 07 4A 38 AE E4 78", false}},
+			{"Please Don't Stop (Chapter 2)", {"A9 8D 85 16 BA F1 49 DB A7 27 60 BB 70 D6 D3 77", false}},
+			{"Breathe In", {"12 E5 9D F8 33 9F 42 7C B5 F1 15 D0 63 A8 3C A8", false}},
+			{"The Machine", {"BD CD CD 65 14 58 4B B1 B4 A6 39 5E 92 C3 24 A9", false}},
+			{"Because We Have To", {"0E 74 8B 24 AD C2 49 EF B1 DB F8 C9 3B B3 B3 85", false}},
+			{"Gosia", {"89 EE 71 32 33 B5 41 24 93 4A D4 A7 B9 BC 11 5B", false}},
+			{"Don't Be So Serious", {"51 2A 2F B0 4A B8 42 B2 AC CC 27 A4 81 DF 2D E7", false}},
+			{"St. Eriksplan", {"B4 E0 F5 9E 0F 7B 4B 7F 88 DD E3 DD FF EB 7F BC", false}},
+			{"Once in a Long, Long While...", {"C9 DA 96 1F 3C 21 49 24 B4 9A 45 0A 20 0C 29 AA", false}},
+			{"Waiting (10 Years)", {"D9 F6 7A 9C D8 AC 4A 0A AB 04 39 D8 5D 4D C3 F6", false}},
+			{"Not Around", {"3A 64 99 79 1B 6D 4E 41 BB 31 34 2D 9D F3 9C D4", false}},
+			{"Give Up", {"CC 7C 0A CA 58 F6 48 41 93 9C 6D 41 6E 20 64 E0", false}},
+			{"Control", {"D6 57 3F CA 3A 13 4C 9F 81 D9 06 77 CC 54 84 44", true}},
+			{"Please Don't Stop (Chapter 1)", {"65 F0 E7 DD CD 5D 49 1E 9C AA A3 4F 36 26 54 CD", false}},
+			{"Trigger", {"A3 FE B4 41 FF 55 41 06 84 D3 2B 4D 5C 88 75 A7", false}},
+			{"BB's Theme", {"60 44 50 AA DD DF 44 44 8F 7F FE 3E F1 9B 79 1C", false}},
+			{"Path", {"26 01 39 E9 1F 67 47 2E B1 8B FF 6B FE 89 94 11", true}},
+			{"Poznan", {"90 10 BD 04 FE ED 4A 60 A8 4A 01 EB 3F E5 B2 38", false}},
+			{"Path Vol. 2", {"FC 4D 2F 10 19 A0 43 1D 9F C2 DC 57 55 36 7D 16", true}},
+			{"Tonight, tonight, tonight", {"1C 5A BA 7E 56 20 46 E8 95 61 62 1D 8E 53 38 3C", false}},
+			{"Rolling Over", {"66 8A 0F CD 48 3C 4D 61 A5 20 7C 3D 50 75 74 BD", false}},
+			{"Pale Yellow", {"39 52 16 29 44 2B 4B B6 8D 5F 48 DC 53 97 0E 81", true}},
+			{"Almost Nothing", {"85 DF 6C BC 5A 5B 43 F1 BB D4 80 E5 77 78 D5 DF", false}},
+			{"Fragile", {"85 AB 59 93 A9 35 4C E9 99 75 5E 1A 2F F9 83 E5", true}},
+			{"Anything You Need", {"92 D8 CD 0D 7F 78 42 BF 99 79 39 47 76 B1 F8 D4", false}},
+			{"Easy Way Out", {"74 56 70 68 77 02 44 F1 8C 50 21 F4 B7 D9 B3 27", false}},
+			{"Other Me", {"83 FD E6 CB 23 EF 46 97 8E AF 99 22 E8 4B 17 F0", true}},
+			{"I'll Keep Coming", {"09 82 18 14 43 DA 4F C7 9C EF FA CC 07 81 8F 3F", false}},
+			{"Meanwhile... In Genova", {"E9 8E E4 63 76 8B 49 C3 84 33 D1 2C F1 64 FC 7D", false}},
+		};
+
 		std::unordered_map<std::string, MusicData> customSongDatabase = {};
 
 		// Basically similar to interruptorDatabase, but these are UI sounds that indicate a music interruption

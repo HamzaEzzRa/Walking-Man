@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cstring>
 #include <string>
+#include <unordered_map>
 #include <vector>
 #include <Windows.h>
 
@@ -21,6 +22,19 @@
 #include "UIButton.h"
 
 #include "Utils.h"
+
+namespace
+{
+	constexpr size_t collectorsItemCountOffset = 0x10;
+	constexpr size_t collectorsItemDataOffset = 0x18;
+	constexpr size_t collectorsItemUnlockFactOffset = 0x68;
+	constexpr size_t booleanFactUuidOffset = 0x08;
+	constexpr int32_t maxCollectorsItems = 4096;
+
+	std::unordered_map<std::string, void*> musicUnlockFacts;
+	bool musicUnlockFactsCached = false;
+	uintptr_t gamePassCollectorsItemSystemGlobalAddress = 0;
+}
 
 MusicPlayer::MusicPlayer()
 {
@@ -56,6 +70,11 @@ void MusicPlayer::OnEvent(const ModEvent& event)
 {
 	switch (event.type)
 	{
+		case ModEventType::FunctionScanCompleted:
+		{
+			OnFunctionScanDone();
+			break;
+		}
 		case ModEventType::ScanCompleted:
 		{
 			OnScanDone();
@@ -103,13 +122,13 @@ void MusicPlayer::OnEvent(const ModEvent& event)
 			);
 			break;
 		}
-		case ModEventType::FacilityTerritoryStateChanged:
+		case ModEventType::FacilityBlockStateChanged:
 		{
 			if (ModConfiguration::stopInFacility)
 			{
-				auto* facilityFlagState = std::any_cast<FlagState<FacilityFlag>*>(event.data);
+				auto* facilityFlagState = std::any_cast<FlagState<AreaFlag>*>(event.data);
 				const bool wasBlocked = HasActiveMusicBlocker();
-				facilityTerritoryBlocksMusic.store(facilityFlagState->current == FacilityFlag::INSIDE);
+				facilityTerritoryBlocksMusic.store(facilityFlagState->current == AreaFlag::INSIDE);
 				const bool isBlocked = HasActiveMusicBlocker();
 
 				HandleMusicBlockerChange(
@@ -143,6 +162,38 @@ void MusicPlayer::OnEvent(const ModEvent& event)
 		}
 		default: break;
 	}
+}
+
+void MusicPlayer::OnFunctionScanDone()
+{
+	const FunctionData* functionData = ModManager::GetFunctionData("DSCollectorsItemSystemLoad");
+	if (
+		ModConfiguration::gameProvider == GameProvider::XBOX_GAMEPASS
+		&& functionData
+		&& MemoryUtils::IsReadableAddress(functionData->address, 32)
+	)
+	{
+		uint8_t* bytes = reinterpret_cast<uint8_t*>(functionData->address);
+		for (size_t i = 0; i + 7 <= 32; ++i)
+		{
+			if (bytes[i] == 0x48 && bytes[i + 1] == 0x8B && bytes[i + 2] == 0x3D)
+			{
+				int32_t displacement = 0;
+				std::memcpy(&displacement, bytes + i + 3, sizeof(displacement));
+				gamePassCollectorsItemSystemGlobalAddress = functionData->address + i + 7 + displacement;
+				break;
+			}
+		}
+	}
+
+	bool hookResult = ModManager::TryHookFunction(
+		"DSCollectorsItemSystemLoad",
+		reinterpret_cast<void*>(&MusicPlayer::DSCollectorsItemSystemLoadHook)
+	);
+	Logging::Write(logPrefix,
+		"DSCollectorsItemSystemLoad function hook %s",
+		hookResult ? "installed successfully" : "failed"
+	);
 }
 
 void MusicPlayer::OnScanDone()
@@ -364,15 +415,6 @@ void MusicPlayer::OnRender()
 	// Handle Playback
 	if (currentMusicData && !currentMusicPausedByBlocker.load())
 	{
-		if (currentMusicIsPlaying.load())
-		{
-			const std::chrono::milliseconds songDuration =
-				std::chrono::duration_cast<std::chrono::milliseconds>(
-					std::chrono::steady_clock::now() - currentMusicStartTime
-				);
-			currentMusicPlayTime.store(songDuration.count());
-		}
-
 		const long long maxLength = currentMusicMaxLength.load();
 		bool maxLengthReached = false;
 		if (
@@ -483,7 +525,19 @@ void MusicPlayer::OnRender()
 			Logging::Write(logPrefix, "Hiding song description after %d ms", displayDuration);
 			descriptionDisplayed = false;
 			pendingMusicDescriptionData = nullptr;
-			ClearMusicDescription();
+
+			// Call the game's function with nullptr to fade out the description,
+			// same way it does when a new description is queued
+			const FunctionData* showMusicDescriptionFuncData = ModManager::GetFunctionData("ShowMusicDescription");
+			if (showMusicDescriptionFuncData && showMusicDescriptionFuncData->address)
+			{
+				reinterpret_cast<GenericFunction_t>(showMusicDescriptionFuncData->address)(
+					nullptr,
+					nullptr,
+					nullptr,
+					nullptr
+				);
+			}
 		}
 	}
 }
@@ -582,7 +636,7 @@ void MusicPlayer::PlayMusicHook(void* arg1, void* arg2, void* arg3, void* arg4)
 {
 	constexpr const char* logPrefix = "Play Music Hook";
 	const bool blockerPausedByActiveBlocker = currentMusicPausedByBlocker.load() && HasActiveMusicBlocker();
-	Logging::Write(logPrefix, "PlayMusic called with args: %p, %p, %p, %p", arg1, arg2, arg3, arg4);
+	//Logging::Write(logPrefix, "PlayMusic called with args: %p, %p, %p, %p", arg1, arg2, arg3, arg4);
 
 	if (!playMusicFuncRCXAddress)
 	{
@@ -786,6 +840,132 @@ void MusicPlayer::ShowMusicDescriptionCoreHook(void* arg1, void* arg2, void* arg
 	}
 
 	reinterpret_cast<GenericFunction_t>(showMusicDescriptionCoreFuncData->originalFunction)(arg1, arg2, arg3, arg4);
+}
+
+void MusicPlayer::DSCollectorsItemSystemLoadHook(void* arg1, void* arg2, void* arg3, void* arg4)
+{
+	const FunctionData* functionData = ModManager::GetFunctionData("DSCollectorsItemSystemLoad");
+	if (!functionData || !functionData->originalFunction)
+	{
+		return;
+	}
+
+	using DSCollectorsItemSystemLoad_t = void (*)(void*, void*, void*, void*);
+	reinterpret_cast<DSCollectorsItemSystemLoad_t>(functionData->originalFunction)(arg1, arg2, arg3, arg4);
+
+	void* system = arg1;
+	if (ModConfiguration::gameProvider == GameProvider::XBOX_GAMEPASS)
+	{
+		system = nullptr;
+		if (MemoryUtils::IsReadableAddress(gamePassCollectorsItemSystemGlobalAddress, sizeof(void*)))
+		{
+			system = *reinterpret_cast<void**>(gamePassCollectorsItemSystemGlobalAddress);
+		}
+	}
+
+	CacheUnlockFacts(system);
+}
+
+void MusicPlayer::CacheUnlockFacts(void* system)
+{
+	musicUnlockFacts.clear();
+	musicUnlockFactsCached = false;
+	if (!system)
+	{
+		Logging::Write(logPrefix, "DSCollectors item system was not available; music unlock gating will fail open");
+		return;
+	}
+
+	const uintptr_t systemAddress = reinterpret_cast<uintptr_t>(system);
+	if (
+		!MemoryUtils::IsReadableAddress(systemAddress + collectorsItemCountOffset, sizeof(int32_t))
+		|| !MemoryUtils::IsReadableAddress(systemAddress + collectorsItemDataOffset, sizeof(uintptr_t))
+	)
+	{
+		Logging::Write(logPrefix, "DSCollectors item system layout was not readable; music unlock gating will fail open");
+		return;
+	}
+
+	const int32_t count = *reinterpret_cast<int32_t*>(systemAddress + collectorsItemCountOffset);
+	const uintptr_t items = *reinterpret_cast<uintptr_t*>(systemAddress + collectorsItemDataOffset);
+	if (count <= 0 || count > maxCollectorsItems || !MemoryUtils::IsReadableAddress(items, static_cast<size_t>(count) * sizeof(uintptr_t)))
+	{
+		Logging::Write(logPrefix, "DSCollectors item vector was not readable; music unlock gating will fail open");
+		return;
+	}
+
+	for (int32_t i = 0; i < count; ++i)
+	{
+		const uintptr_t item = reinterpret_cast<uintptr_t*>(items)[i];
+		if (!item || !MemoryUtils::IsReadableAddress(item + collectorsItemUnlockFactOffset, sizeof(uintptr_t)))
+		{
+			continue;
+		}
+
+		void* fact = *reinterpret_cast<void**>(item + collectorsItemUnlockFactOffset);
+		if (!fact || !MemoryUtils::IsReadableAddress(reinterpret_cast<uintptr_t>(fact) + booleanFactUuidOffset, 16))
+		{
+			continue;
+		}
+
+		for (const auto& [name, unlockData] : ModConfiguration::Databases::musicUnlockFactDatabase)
+		{
+			if (unlockData.exclusiveDC && ModConfiguration::gameVersion != GameVersion::DC)
+			{
+				continue;
+			}
+
+			std::vector<uint8_t> bytes;
+			std::vector<bool> masks;
+			MemoryUtils::ParseHexString(unlockData.signature, bytes, masks);
+			if (
+				bytes.size() == 16
+				&& std::memcmp(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(fact) + booleanFactUuidOffset), bytes.data(), 16) == 0
+			)
+			{
+				musicUnlockFacts[name] = fact;
+				break;
+			}
+		}
+	}
+
+	musicUnlockFactsCached = true;
+	Logging::Write(logPrefix,
+		"Cached %zu music unlock facts from DSCollectors item system",
+		musicUnlockFacts.size()
+	);
+}
+
+bool MusicPlayer::IsTrackUnlocked(const MusicData* data)
+{
+	if (!ModConfiguration::skipLockedSongs || !data || data->type != MusicType::SONG || data->customWemPath || !data->name)
+	{
+		return true;
+	}
+
+	auto unlockDataIt = ModConfiguration::Databases::musicUnlockFactDatabase.find(data->name);
+	if (
+		unlockDataIt == ModConfiguration::Databases::musicUnlockFactDatabase.end()
+		|| (unlockDataIt->second.exclusiveDC && ModConfiguration::gameVersion != GameVersion::DC)
+	)
+	{
+		return true;
+	}
+
+	auto factIt = musicUnlockFacts.find(data->name);
+	if (!musicUnlockFactsCached || factIt == musicUnlockFacts.end() || !factIt->second)
+	{
+		return true;
+	}
+
+	const FunctionData* getBooleanFactData = ModManager::GetFunctionData("GetBooleanFact");
+	if (!getBooleanFactData || !getBooleanFactData->address)
+	{
+		return true;
+	}
+
+	using GetBooleanFact_t = bool (*)(void*, void*);
+	return reinterpret_cast<GetBooleanFact_t>(getBooleanFactData->address)(factIt->second, factIt->second);
 }
 
 bool MusicPlayer::ClearMusicDescription()
@@ -1244,6 +1424,18 @@ bool MusicPlayer::ShowMusicDescriptionNow(const MusicData* data)
 
 void MusicPlayer::PlayMusic(const MusicData* data, bool displayDescription, long long resumeOffsetMs)
 {
+	if (!data || !data->address)
+	{
+		Logging::Write(logPrefix, "Invalid music data provided, cannot play music");
+		return;
+	}
+
+	if (!IsTrackUnlocked(data))
+	{
+		Logging::Write(logPrefix, "Song \"%s\" is still locked in-game, skipping", data->name ? data->name : "");
+		return;
+	}
+
 	if (musicAddressWatcher)
 	{
 		musicAddressWatcher->Uninstall();
@@ -1257,12 +1449,6 @@ void MusicPlayer::PlayMusic(const MusicData* data, bool displayDescription, long
 			nullptr,
 			nullptr
 		});
-	}
-
-	if (!data || !data->address)
-	{
-		Logging::Write(logPrefix, "Invalid music data provided, cannot play music");
-		return;
 	}
 
 	const bool usesAreaOverride = AreaMusic::UsesOverride(data);
@@ -1358,9 +1544,9 @@ void MusicPlayer::PlayMusic(const MusicData* data, bool displayDescription, long
 			currentMusicPausedByBlocker.store(false);
 			return;
 		}
-		playbackMaxLength = registration.effectiveDurationMs > 0
-			? registration.effectiveDurationMs
-			: data->maxLength;
+		playbackMaxLength = registration.metadataPatched
+			? 0
+			: (registration.effectiveDurationMs > 0 ? registration.effectiveDurationMs : data->maxLength);
 		playbackSourceStartMs = registration.effectiveSourceStartMs;
 		Logging::Write(logPrefix,
 			registration.metadataPatched
@@ -1427,9 +1613,15 @@ void MusicPlayer::PlayCurrentSong()
 	bool displayDescription = songQueue.GetCurrentIndex() < 0;
 
 	const MusicData* currentSong = songQueue.GetCurrent();
-	if (!currentSong)
+	for (size_t i = 0; i < songQueue.Size() && currentSong && !IsTrackUnlocked(currentSong); ++i)
 	{
-		Logging::Write(logPrefix, "No current song available in the queue");
+		Logging::Write(logPrefix, "Skipping locked song: %s", currentSong->name ? currentSong->name : "");
+		currentSong = songQueue.GetNext();
+	}
+
+	if (!currentSong || !IsTrackUnlocked(currentSong))
+	{
+		Logging::Write(logPrefix, "No unlocked current song available in the queue");
 		return;
 	}
 
@@ -1444,10 +1636,23 @@ void MusicPlayer::PlayNextSong()
 		return;
 	}
 
-	const MusicData* nextSong = songQueue.GetNext();
-	if (!nextSong)
+	const MusicData* nextSong = nullptr;
+	for (size_t i = 0; i < songQueue.Size(); ++i)
 	{
-		Logging::Write(logPrefix, "No next songs available in the queue");
+		nextSong = songQueue.GetNext();
+		if (nextSong && IsTrackUnlocked(nextSong))
+		{
+			break;
+		}
+		if (nextSong)
+		{
+			Logging::Write(logPrefix, "Skipping locked song: %s", nextSong->name ? nextSong->name : "");
+		}
+	}
+
+	if (!nextSong || !IsTrackUnlocked(nextSong))
+	{
+		Logging::Write(logPrefix, "No unlocked next songs available in the queue");
 		return;
 	}
 	Logging::Write(logPrefix, "Attempting to play next song: %s", nextSong->name);
@@ -1462,10 +1667,23 @@ void MusicPlayer::PlayPreviousSong()
 		return;
 	}
 
-	const MusicData* previousSong = songQueue.GetPrevious();
-	if (!previousSong)
+	const MusicData* previousSong = nullptr;
+	for (size_t i = 0; i < songQueue.Size(); ++i)
 	{
-		Logging::Write(logPrefix, "No previous song available in the queue");
+		previousSong = songQueue.GetPrevious();
+		if (previousSong && IsTrackUnlocked(previousSong))
+		{
+			break;
+		}
+		if (previousSong)
+		{
+			Logging::Write(logPrefix, "Skipping locked song: %s", previousSong->name ? previousSong->name : "");
+		}
+	}
+
+	if (!previousSong || !IsTrackUnlocked(previousSong))
+	{
+		Logging::Write(logPrefix, "No unlocked previous song available in the queue");
 		return;
 	}
 	Logging::Write(logPrefix, "Attempting to play previous song: %s", previousSong->name);

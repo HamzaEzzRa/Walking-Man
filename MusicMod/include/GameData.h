@@ -77,6 +77,14 @@ struct MusicData
 	InternalWwiseAreaTrackData internalWwiseAreaTrack{};
 };
 
+struct MusicUnlockFactData
+{
+	const char* signature;
+	bool exclusiveDC = false;
+	uintptr_t address = 0;
+	bool active = false;
+};
+
 struct FunctionData
 {
 	const char* name;

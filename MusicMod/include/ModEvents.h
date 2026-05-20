@@ -4,7 +4,10 @@
 
 enum class ModEventType
 {
+	NoEvent = -1,
+
 	PreExitTriggered,
+	FunctionScanCompleted,
 	ScanCompleted,
 	FrameRendered,
 
@@ -29,7 +32,7 @@ enum class ModEventType
 
 	BTTerritoryStateChanged,
 	MuleTerritoryStateChanged,
-	FacilityTerritoryStateChanged,
+	FacilityBlockStateChanged,
 	ChiralNetworkStateChanged
 };
 

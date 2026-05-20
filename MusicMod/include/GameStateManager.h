@@ -16,7 +16,7 @@ enum class EnemyTerritoryFlag
 	DETECTED = 3,
 };
 
-enum class FacilityFlag
+enum class AreaFlag
 {
 	UNKNOWN = -1,
 	OUTSIDE = 0,
@@ -63,7 +63,7 @@ private:
 	void OnPreExit();
 
 	static void InGameFlagUpdateHook(void*, void*, void*, void*);
-	static void FacilityManagerUpdateHook(void*);
+	static void InGameAreaUpdateHook(void*);
 
 	template<typename T>
 	void OnFlagStateChanged(FlagState<T>&);
@@ -84,9 +84,14 @@ private:
 	inline static FlagState<EnemyTerritoryFlag> muleTerritoryState = FlagState<EnemyTerritoryFlag>(
 		0xB90, 0xCC8, ModEventType::MuleTerritoryStateChanged, EnemyTerritoryFlag::UNKNOWN // Pretty much no way around having 2 offsets here
 	);
-	inline static FlagState<FacilityFlag> facilityTerritoryState = FlagState<FacilityFlag>(
-		0x228, 0x290, ModEventType::FacilityTerritoryStateChanged, FacilityFlag::UNKNOWN
-	);
+	
+	inline static FlagState<AreaFlag> privateRoomAreaState =
+	    FlagState<AreaFlag>(0x1E8, 0x1E8, ModEventType::NoEvent, AreaFlag::UNKNOWN);
+	inline static FlagState<AreaFlag> facilityAreaState =
+	    FlagState<AreaFlag>(0x228, 0x290, ModEventType::NoEvent, AreaFlag::UNKNOWN);
+	inline static FlagState<AreaFlag> facilityBlockState =
+	    FlagState<AreaFlag>(0x0, 0x0, ModEventType::FacilityBlockStateChanged, AreaFlag::UNKNOWN);
+
 	inline static FlagState<ChiralNetworkFlag> chiralNetworkState = FlagState<ChiralNetworkFlag>(
 		0x174, 0x174, ModEventType::ChiralNetworkStateChanged, ChiralNetworkFlag::UNKNOWN
 	);
