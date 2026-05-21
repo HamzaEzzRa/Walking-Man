@@ -216,7 +216,6 @@ COPY "$(SolutionDir)walkingman.local.ini" "C:\XboxGames\DSDC\Content\walkingman.
     <ClInclude Include="..\MusicMod\include\IEventListener.h" />
     <ClInclude Include="..\MusicMod\include\InputCode.h" />
     <ClInclude Include="..\MusicMod\include\InputTracker.h" />
-    <ClInclude Include="..\MusicMod\include\BreakpointWatcher.h" />
     <ClInclude Include="..\MusicMod\include\LanguageManager.h" />
     <ClInclude Include="..\MusicMod\include\CustomMediaLoader.h" />
     <ClInclude Include="..\MusicMod\include\MemoryWatcher.h" />
@@ -248,7 +247,6 @@ COPY "$(SolutionDir)walkingman.local.ini" "C:\XboxGames\DSDC\Content\walkingman.
     <ClCompile Include="..\MusicMod\src\DecimaArchiveReader.cpp" />
     <ClCompile Include="..\MusicMod\src\GameStateManager.cpp" />
     <ClCompile Include="..\MusicMod\src\InputTracker.cpp" />
-    <ClCompile Include="..\MusicMod\src\BreakpointWatcher.cpp" />
     <ClCompile Include="..\MusicMod\src\LanguageManager.cpp" />
     <ClCompile Include="..\MusicMod\src\CustomMediaLoader.cpp" />
     <ClCompile Include="..\MusicMod\src\MemoryWatcher.cpp" />

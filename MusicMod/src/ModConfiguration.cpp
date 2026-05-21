@@ -415,12 +415,20 @@ namespace ModConfiguration
 				"?? 48 33 C4 48 89 44 24 40 4D 85 C0 74"}
 			},
 			{
-				"PlayingLoop",
-				{"PlayingLoop",
-				"4C 39 48 08 75 06 4C 39 40 10 74 0B",
-				// gp version
-				"4C 39 48 08 75 06 4C 39 40 10 74 0B 48 "
-				"83 C1 08 48 3B CA 75 E8 33 C0 48 8B 4C"}
+				"GetSourcePlayPositions",
+				{"GetSourcePlayPositions",
+				"48 83 EC ?? 4D 85 C0 74 ?? 48 85 D2 75 ?? 41 39 10",
+				// gp version (same)
+				"48 83 EC ?? 4D 85 C0 74 ?? 48 85 D2 75 ?? 41 39 10"}
+			},
+			{
+				"WwiseSourceCursorUpdate",
+				{"WwiseSourceCursorUpdate",
+				"48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57 "
+				"41 54 41 55 41 56 41 57 48 83 EC ?? 48 8B F1 49",
+				// gp version (same)
+				"48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57 "
+				"41 54 41 55 41 56 41 57 48 83 EC ?? 48 8B F1 49"}
 			},
 			{
 				"PlayUISound",
@@ -826,52 +834,52 @@ namespace ModConfiguration
 			},
 
 			// Ambient music, max duration is set to 3 minutes (180000 ms)
-			{
-				"Ambient 1",
-				{0, MusicType::AMBIENT, 180000, "Ambient 1", "",
-				"?? ?? ?? ?? ?? 7F 00 00 3B AE 7B 3A EE 91 42 1D 8B 6B BB 93 4D C7 D7 1A"}
-			},
-			{
-				"Ambient 2",
-				{0, MusicType::AMBIENT, 180000, "Ambient 2", "",
-				"?? ?? ?? ?? ?? 7F 00 00 73 8E 1B C3 D5 54 4C 3C 9C 37 19 87 70 B1 AF 7C"}
-			},
-			{
-				"Ambient 3",
-				{0, MusicType::AMBIENT, 180000, "Ambient 3", "",
-				"?? ?? ?? ?? ?? 7F 00 00 8D 28 ED 0A C2 44 44 E4 9B 00 BD 80 4E A9 ED 57"}
-			},
-			{
-				"Ambient 4",
-				{0, MusicType::AMBIENT, 180000, "Ambient 4", "",
-				"?? ?? ?? ?? ?? 7F 00 00 95 B0 41 AE 75 8E 49 A4 8B E1 54 15 E9 91 69 93"}
-			},
-			{
-				"Ambient 5",
-				{0, MusicType::AMBIENT, 180000, "Ambient 5", "",
-				"?? ?? ?? ?? ?? 7F 00 00 A6 0B 21 84 06 51 4E 8C A1 F6 8B 01 2E 73 D1 C9"}
-			},
-			{
-				"Ambient 6", // sound stops a bit earlier than 3 minutes
-				{0, MusicType::AMBIENT, 170000, "Ambient 6", "",
-				"?? ?? ?? ?? ?? 7F 00 00 C2 9E 42 90 99 DE 44 A0 8F 13 02 EC 23 F3 46 A2"}
-			},
-			{
-				"Ambient 7",
-				{0, MusicType::AMBIENT, 180000, "Ambient 7", "",
-				"?? ?? ?? ?? ?? 7F 00 00 CC D1 13 95 96 1E 40 9C BB 72 69 C7 C0 A1 B5 60"}
-			},
+			//{
+			//	"Ambient 1",
+			//	{0, MusicType::AMBIENT, 180000, "Ambient 1", "",
+			//	"?? ?? ?? ?? ?? 7F 00 00 3B AE 7B 3A EE 91 42 1D 8B 6B BB 93 4D C7 D7 1A"}
+			//},
+			//{
+			//	"Ambient 2",
+			//	{0, MusicType::AMBIENT, 180000, "Ambient 2", "",
+			//	"?? ?? ?? ?? ?? 7F 00 00 73 8E 1B C3 D5 54 4C 3C 9C 37 19 87 70 B1 AF 7C"}
+			//},
+			//{
+			//	"Ambient 3",
+			//	{0, MusicType::AMBIENT, 180000, "Ambient 3", "",
+			//	"?? ?? ?? ?? ?? 7F 00 00 8D 28 ED 0A C2 44 44 E4 9B 00 BD 80 4E A9 ED 57"}
+			//},
+			//{
+			//	"Ambient 4",
+			//	{0, MusicType::AMBIENT, 180000, "Ambient 4", "",
+			//	"?? ?? ?? ?? ?? 7F 00 00 95 B0 41 AE 75 8E 49 A4 8B E1 54 15 E9 91 69 93"}
+			//},
+			//{
+			//	"Ambient 5",
+			//	{0, MusicType::AMBIENT, 180000, "Ambient 5", "",
+			//	"?? ?? ?? ?? ?? 7F 00 00 A6 0B 21 84 06 51 4E 8C A1 F6 8B 01 2E 73 D1 C9"}
+			//},
+			//{
+			//	"Ambient 6", // sound stops a bit earlier than 3 minutes
+			//	{0, MusicType::AMBIENT, 170000, "Ambient 6", "",
+			//	"?? ?? ?? ?? ?? 7F 00 00 C2 9E 42 90 99 DE 44 A0 8F 13 02 EC 23 F3 46 A2"}
+			//},
+			//{
+			//	"Ambient 7",
+			//	{0, MusicType::AMBIENT, 180000, "Ambient 7", "",
+			//	"?? ?? ?? ?? ?? 7F 00 00 CC D1 13 95 96 1E 40 9C BB 72 69 C7 C0 A1 B5 60"}
+			//},
 
 			// Others
-			{
-				"Almost Nothing (Instrumental)",
-				{32, MusicType::SONG, 0, "Almost Nothing (Instrumental)", "SILENT POETS",
-				"?? ?? ?? ?? ?? 7F 00 00 CE 47 2C 1F 52 25 45 56 B2 31 8B 0E 20 BF 6B 08"}
-			},
 			{
 				"Almost Nothing (No Beatbox)",
 				{32, MusicType::SONG, 0, "Almost Nothing (No Beatbox)", "SILENT POETS",
 				"?? ?? ?? ?? ?? 7F 00 00 EF E6 84 B0 5C 9F 4B BE 91 B7 AE F9 06 BD 12 FF"}
+			},
+			/*{
+				"Almost Nothing (Instrumental)",
+				{32, MusicType::SONG, 0, "Almost Nothing (Instrumental)", "SILENT POETS",
+				"?? ?? ?? ?? ?? 7F 00 00 CE 47 2C 1F 52 25 45 56 B2 31 8B 0E 20 BF 6B 08"}
 			},
 			{
 				"Patience (duplicate 1)",
@@ -917,7 +925,7 @@ namespace ModConfiguration
 				"Bones (duplicate 3)",
 				{22, MusicType::SONG, 0, "Bones (duplicate 3)", "Low Roar",
 				"?? ?? ?? ?? ?? 7F 00 00 F9 11 18 09 E1 ED 40 BF 89 71 17 49 FC 70 D8 15"}
-			},
+			},*/
 		};
 
 		std::unordered_map<std::string, MusicUnlockFactData> musicUnlockFactDatabase =

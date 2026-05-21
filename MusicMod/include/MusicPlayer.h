@@ -4,10 +4,9 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <memory>
+#include <mutex>
 #include <string>
-
-#include "BreakpointWatcher.h"
+#include <unordered_map>
 
 #include "IEventListener.h"
 #include "FunctionHook.h"
@@ -48,9 +47,12 @@ private:
 	bool ResumeCurrentMusicForBlocker(const char*);
 	bool RestartCurrentMusicFromSavedPosition(const char*);
 	static bool HasActiveMusicBlocker();
-	void InstallMusicAddressWatcher();
 	bool QueueAreaMusicTransition(const MusicData*, bool);
 	bool PlaySilenceForAreaMusicTransition();
+	bool UpdateCurrentMusicCursor();
+	static bool ReadMusicCursor(uint32_t, uint32_t, uint32_t, long long&);
+	static bool ResolveCursorSource(const MusicData*, uint32_t&, uint32_t&);
+	static void ResetCurrentMusicCursor();
 	static bool ClearMusicDescription();
 	bool ShowMusicDescription(const MusicData*);
 	bool ShowMusicDescriptionNow(const MusicData*);
@@ -61,6 +63,7 @@ private:
 	void PlayPreviousInPool();
 
 	static void PlayMusicHook(void*, void*, void*, void*);
+	static void WwiseSourceCursorUpdateHook(void*, uint32_t, void*, void*);
 	static void PlayUISoundHook(void*, void*, void*, void*);
 	static void ShowMusicDescriptionCoreHook(void*, void*, void*, void*);
 	static void DSCollectorsItemSystemLoadHook(void*, void*, void*, void*);
@@ -71,6 +74,13 @@ private:
 		ONE,
 		NONE,
 		COUNT // Just for size, not a valid mode
+	};
+
+	struct WwiseSourcePosition
+	{
+		uint32_t trackId;
+		uint32_t sourceId;
+		uint32_t positionMs;
 	};
 
 	inline static constexpr const char* logPrefix = "Music Player";
@@ -84,18 +94,24 @@ private:
 	inline static uintptr_t playMusicFuncRCXAddress = 0;
 	inline static uintptr_t playMusicFuncRDXAddress = 0;
 
+	inline static std::unordered_map<std::string, void*> musicUnlockFacts{};
+	inline static bool musicUnlockFactsCached = false;
+	inline static uintptr_t gamePassCollectorsItemSystemGlobalAddress = 0;
+
 	inline static bool gameCalledSong = false;
 	inline static bool gameCalledInterruptor = false;
-	inline static std::atomic<long long> currentMusicPlayTime = 0; // in ms, used to track current playback time
+	inline static std::atomic<long long> currentMusicPlayTime = 0; // in ms, Wwise source cursor for current playback
 	inline static std::atomic<long long> currentMusicMaxLength = 0; // in ms, runtime guard for current playback
-	inline static std::atomic<long long> currentMusicSourceStartOffsetMs = 0; // in ms, absolute source offset for resumed area overrides
-
-	inline static constexpr long long resumeCompensationMs = 500; // ms to add on resume to compensate for fade-out time
 
 	inline static const MusicData* currentMusicData = nullptr;
-	inline static std::chrono::time_point<std::chrono::steady_clock> currentMusicStartTime;
 	inline static std::atomic<bool> currentMusicIsPlaying = false;
 	inline static std::atomic<bool> currentMusicPausedByBlocker = false;
+	inline static std::atomic<uint32_t> currentMusicPlayingId = 0;
+	inline static std::atomic<uint32_t> currentMusicTrackId = 0;
+	inline static std::atomic<uint32_t> currentMusicSourceId = 0;
+	inline static std::atomic<bool> currentMusicCursorSeen = false;
+	inline static std::atomic<long long> currentMusicEndDetectedMs = 0;
+	inline static std::mutex currentMusicCursorMutex{};
 	inline static const MusicData* pendingMusicData = nullptr;
 	inline static bool pendingMusicDisplayDescription = true;
 	inline static bool pendingMusicOverridePrepared = false;
@@ -109,14 +125,7 @@ private:
 	inline static LoopMode loopMode = LoopMode::ALL;
 	uint16_t timeTillAutoplay = 1000; // in ms, time to wait before playing next song automatically
 
-	inline static uintptr_t playingLoopAddress = 0;
 	inline static void* musicDescriptionManager = nullptr;
-
-	// Tracks playing loop instruction that accesses currentMusicAddress (+0x08 to be exact), helps detect song end
-	std::unique_ptr<BreakpointWatcher> musicAddressWatcher;
-	inline static uint8_t musicAddressAccessOffset = 0x08;
-	inline static uintptr_t watchedInstructionLength = 4; // in bytes
-	inline static uint32_t watcherPollingInterval = 10; // ms
 
 	bool descriptionDisplayed = false;
 	const MusicData* pendingMusicDescriptionData = nullptr;

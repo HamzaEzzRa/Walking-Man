@@ -96,9 +96,6 @@
     <ClInclude Include="..\MusicMod\include\UIManager.h">
       <Filter>Header Files\Music Mod</Filter>
     </ClInclude>
-    <ClInclude Include="..\MusicMod\include\BreakpointWatcher.h">
-      <Filter>Header Files\Music Mod</Filter>
-    </ClInclude>
     <ClInclude Include="..\MusicMod\include\IEventListener.h">
       <Filter>Header Files\Music Mod</Filter>
     </ClInclude>
@@ -189,9 +186,6 @@
       <Filter>Source Files\MinHook\hde</Filter>
     </ClCompile>
     <ClCompile Include="..\MusicMod\src\UIManager.cpp">
-      <Filter>Source Files\Music Mod</Filter>
-    </ClCompile>
-    <ClCompile Include="..\MusicMod\src\BreakpointWatcher.cpp">
       <Filter>Source Files\Music Mod</Filter>
     </ClCompile>
     <ClCompile Include="..\MusicMod\src\ModConfiguration.cpp">
