@@ -165,7 +165,11 @@ void ModManager::Initialize()
 
 			if (instance)
 			{
-				instance->DispatchEvent(ModEvent{ ModEventType::FunctionScanCompleted, nullptr, nullptr });
+				instance->DispatchEvent(ModEvent{
+					ModEventType::FunctionScanCompleted,
+					nullptr,
+					nullptr
+				});
 			}
 
 			bool hookResult = TryHookFunction("GamePreExit", &GamePreExitHook);

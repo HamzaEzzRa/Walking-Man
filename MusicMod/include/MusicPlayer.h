@@ -119,8 +119,10 @@ private:
 
 	inline static std::atomic<bool> btTerritoryBlocksMusic = false;
 	inline static std::atomic<bool> muleTerritoryBlocksMusic = false;
-	inline static std::atomic<bool> facilityTerritoryBlocksMusic = false;
+	inline static std::atomic<bool> facilityAreaBlocksMusic = false;
+	inline static std::atomic<bool> privateRoomAreaBlocksMusic = false;
 	inline static std::atomic<bool> chiralNetworkBlocksMusic = false;
+	inline static std::atomic<bool> cutsceneBlocksMusic = false;
 
 	inline static LoopMode loopMode = LoopMode::ALL;
 	uint16_t timeTillAutoplay = 1000; // in ms, time to wait before playing next song automatically
@@ -129,6 +131,7 @@ private:
 
 	bool descriptionDisplayed = false;
 	const MusicData* pendingMusicDescriptionData = nullptr;
+	bool musicCompassOpen = false;
 	uint16_t displayDuration = 6500; // in ms
 	std::chrono::time_point<std::chrono::steady_clock> lastDisplayTime;
 };

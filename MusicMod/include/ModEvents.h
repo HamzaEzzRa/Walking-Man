@@ -30,9 +30,11 @@ enum class ModEventType
 	AreaMusicPatchNativeOffsetRequested,
 	AreaMusicRestoreNativeOffsetRequested,
 
+	CutsceneStateChanged,
 	BTTerritoryStateChanged,
 	MuleTerritoryStateChanged,
-	FacilityBlockStateChanged,
+	FacilityAreaStateChanged,
+	PrivateRoomAreaStateChanged,
 	ChiralNetworkStateChanged
 };
 

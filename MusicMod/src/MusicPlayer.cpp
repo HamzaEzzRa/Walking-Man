@@ -47,7 +47,6 @@ void MusicPlayer::CancelPendingAreaMusicTransition(const char* reason)
 		return;
 	}
 
-	constexpr const char* logPrefix = "Music Player";
 	Logging::Write(logPrefix,
 		"Canceling queued area music track \"%s\"%s%s",
 		pendingMusicData->name ? pendingMusicData->name : "",
@@ -224,6 +223,11 @@ void MusicPlayer::OnEvent(const ModEvent& event)
 			OnInputPress(inputCode);
 			break;
 		}
+		case ModEventType::CompassStateChanged:
+		{
+			musicCompassOpen = std::any_cast<CompassState>(event.data) == CompassState::OPEN;
+			break;
+		}
 		case ModEventType::BTTerritoryStateChanged:
 		case ModEventType::MuleTerritoryStateChanged:
 		{
@@ -244,13 +248,13 @@ void MusicPlayer::OnEvent(const ModEvent& event)
 			);
 			break;
 		}
-		case ModEventType::FacilityBlockStateChanged:
+		case ModEventType::FacilityAreaStateChanged:
 		{
 			if (ModConfiguration::stopInFacility)
 			{
 				auto* facilityFlagState = std::any_cast<FlagState<AreaFlag>*>(event.data);
 				const bool wasBlocked = HasActiveMusicBlocker();
-				facilityTerritoryBlocksMusic.store(facilityFlagState->current == AreaFlag::INSIDE);
+				facilityAreaBlocksMusic.store(facilityFlagState->current == AreaFlag::INSIDE);
 				const bool isBlocked = HasActiveMusicBlocker();
 
 				HandleMusicBlockerChange(
@@ -261,6 +265,21 @@ void MusicPlayer::OnEvent(const ModEvent& event)
 					"facility territory interruption"
 				);
 			}
+			break;
+		}
+		case ModEventType::PrivateRoomAreaStateChanged:
+		{
+			auto* privateRoomFlagState = std::any_cast<FlagState<AreaFlag>*>(event.data);
+			const bool wasBlocked = HasActiveMusicBlocker();
+			privateRoomAreaBlocksMusic.store(privateRoomFlagState->current == AreaFlag::INSIDE);
+			const bool isBlocked = HasActiveMusicBlocker();
+			HandleMusicBlockerChange(
+				wasBlocked,
+				isBlocked,
+				"in private room",
+				"private room cleared",
+				"private room interruption"
+			);
 			break;
 		}
 		case ModEventType::ChiralNetworkStateChanged:
@@ -280,6 +299,22 @@ void MusicPlayer::OnEvent(const ModEvent& event)
 					"chiral network interruption"
 				);
 			}
+			break;
+		}
+		case ModEventType::CutsceneStateChanged:
+		{
+			auto* cutsceneFlagState = std::any_cast<FlagState<CutsceneFlag>*>(event.data);
+			const bool wasBlocked = HasActiveMusicBlocker();
+			cutsceneBlocksMusic.store(cutsceneFlagState->current == CutsceneFlag::ACTIVE);
+			const bool isBlocked = HasActiveMusicBlocker();
+
+			HandleMusicBlockerChange(
+				wasBlocked,
+				isBlocked,
+				"cutscene",
+				"cutscene cleared",
+				"cutscene interruption"
+			);
 			break;
 		}
 		default: break;
@@ -641,9 +676,15 @@ void MusicPlayer::OnRender()
 	// Handle Song Description
 	if (pendingMusicDescriptionData)
 	{
-		const MusicData* pendingDescription = pendingMusicDescriptionData;
-		pendingMusicDescriptionData = nullptr;
-		ShowMusicDescriptionNow(pendingDescription);
+		if (pendingMusicDescriptionData != currentMusicData)
+		{
+			pendingMusicDescriptionData = nullptr;
+		}
+		else if (!musicCompassOpen && currentMusicCursorSeen.load())
+		{
+			ShowMusicDescriptionNow(pendingMusicDescriptionData);
+			pendingMusicDescriptionData = nullptr;
+		}
 	}
 
 	if (descriptionDisplayed)
@@ -682,8 +723,10 @@ void MusicPlayer::OnPreExit()
 	ResetCurrentMusicCursor();
 	btTerritoryBlocksMusic.store(false);
 	muleTerritoryBlocksMusic.store(false);
-	facilityTerritoryBlocksMusic.store(false);
+	facilityAreaBlocksMusic.store(false);
+	privateRoomAreaBlocksMusic.store(false);
 	chiralNetworkBlocksMusic.store(false);
+	cutsceneBlocksMusic.store(false);
 }
 
 void MusicPlayer::OnUIButtonAction(const UIButtonAction& action)
@@ -758,7 +801,6 @@ void MusicPlayer::OnUIButtonAction(const UIButtonAction& action)
 
 void MusicPlayer::PlayMusicHook(void* arg1, void* arg2, void* arg3, void* arg4)
 {
-	constexpr const char* logPrefix = "Play Music Hook";
 	const bool blockerPausedByActiveBlocker = currentMusicPausedByBlocker.load() && HasActiveMusicBlocker();
 	//Logging::Write(logPrefix, "PlayMusic called with args: %p, %p, %p, %p", arg1, arg2, arg3, arg4);
 
@@ -966,35 +1008,37 @@ void MusicPlayer::WwiseSourceCursorUpdateHook(
 
 void MusicPlayer::PlayUISoundHook(void* arg1, void* arg2, void* arg3, void* arg4)
 {
-	constexpr const char* logPrefix = "Play UI Sound";
-
-	if ((currentMusicData || pendingMusicData) && arg1 && arg2)
+	const bool shouldSuppress =
+		(pendingMusicData || (currentMusicData && !currentMusicPausedByBlocker.load()))
+		&& arg1 && arg2;
+	if (shouldSuppress)
 	{
-		std::vector<uint8_t> targetBytes;
-		std::vector<bool> masks;
-		for (const auto& nameInterruptorPair : ModConfiguration::Databases::interruptorUIDatabase)
+		//std::vector<uint8_t> targetBytes;
+		//std::vector<bool> masks;
+		//for (const auto& nameInterruptorPair : ModConfiguration::Databases::interruptorUIDatabase)
 		{
 			bool match = true;
-			const MusicData& interruptor = nameInterruptorPair.second;
+			//const MusicData& interruptor = nameInterruptorPair.second;
 
-			targetBytes.clear();
-			masks.clear();
-			MemoryUtils::ParseHexString(interruptor.signature, targetBytes, masks);
-			for (size_t i = 0; i < targetBytes.size(); i++)
-			{
-				if (masks[i])
-				{
-					if (*reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(arg2) + i) != targetBytes[i])
-					{
-						match = false;
-						break;
-					}
-				}
-			}
+			//targetBytes.clear();
+			//masks.clear();
+			//MemoryUtils::ParseHexString(interruptor.signature, targetBytes, masks);
+			//for (size_t i = 0; i < targetBytes.size(); i++)
+			//{
+			//	if (masks[i])
+			//	{
+			//		if (*reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(arg2) + i) != targetBytes[i])
+			//		{
+			//			match = false;
+			//			break;
+			//		}
+			//	}
+			//}
 
 			if (match)
 			{
-				Logging::Write(logPrefix, "Interruptor %s matched, skipping UI sound", interruptor.name);
+				// Logging::Write(logPrefix, "Interruptor %s matched, skipping UI sound", interruptor.name);
+				Logging::Write(logPrefix, "Skipping UI sound");
 				return;
 			}
 		}
@@ -1011,8 +1055,6 @@ void MusicPlayer::PlayUISoundHook(void* arg1, void* arg2, void* arg3, void* arg4
 
 void MusicPlayer::ShowMusicDescriptionCoreHook(void* arg1, void* arg2, void* arg3, void* arg4)
 {
-	constexpr const char* logPrefix = "Show Music Description Core Hook";
-
 	if (arg1)
 	{
 		musicDescriptionManager = arg1;
@@ -1021,13 +1063,19 @@ void MusicPlayer::ShowMusicDescriptionCoreHook(void* arg1, void* arg2, void* arg
 	const FunctionData* showMusicDescriptionCoreFuncData = ModManager::GetFunctionData("ShowMusicDescriptionCore");
 	if (!showMusicDescriptionCoreFuncData || !showMusicDescriptionCoreFuncData->originalFunction)
 	{
-		Logging::Write(logPrefix, "Original show music description core function was not hooked, cannot show description");
+		Logging::Write(
+			logPrefix,
+			"Original show music description core function was not hooked, cannot show description"
+		);
 		return;
 	}
 
 	if (gameCalledSong && !ModConfiguration::allowScriptedSongs)
 	{
-		Logging::Write(logPrefix, "Configuration does not allow scripted songs, skipping song description");
+		Logging::Write(
+			logPrefix,
+			"Configuration does not allow scripted songs, skipping song description"
+		);
 		return;
 	}
 
@@ -1179,8 +1227,10 @@ bool MusicPlayer::HasActiveMusicBlocker()
 {
 	return btTerritoryBlocksMusic.load()
 		|| muleTerritoryBlocksMusic.load()
-		|| facilityTerritoryBlocksMusic.load()
-		|| chiralNetworkBlocksMusic.load();
+		|| facilityAreaBlocksMusic.load()
+		|| privateRoomAreaBlocksMusic.load()
+		|| chiralNetworkBlocksMusic.load()
+		|| cutsceneBlocksMusic.load();
 }
 
 void MusicPlayer::HandleMusicBlockerChange(
@@ -1245,11 +1295,16 @@ bool MusicPlayer::PauseCurrentMusicForBlocker(const char* reason)
 	{
 		if (!UpdateCurrentMusicCursor())
 		{
-			Logging::Write(logPrefix,
-				"Cannot pause area music \"%s\": Wwise cursor is not attached",
-				currentMusicData->name ? currentMusicData->name : ""
-			);
-			return false;
+			const bool waitingForResumedCursor =
+				!currentMusicCursorSeen.load() && currentMusicPlayTime.load() > 0;
+			if (!waitingForResumedCursor)
+			{
+				Logging::Write(logPrefix,
+					"Cannot pause area music \"%s\": Wwise cursor is not attached",
+					currentMusicData->name ? currentMusicData->name : ""
+				);
+				return false;
+			}
 		}
 	}
 
@@ -1434,16 +1489,11 @@ bool MusicPlayer::ShowMusicDescription(const MusicData* data)
 		return false;
 	}
 
-	if (descriptionDisplayed || pendingMusicDescriptionData)
-	{
-		descriptionDisplayed = false;
-		ClearMusicDescription();
-		pendingMusicDescriptionData = data;
-		Logging::Write(logPrefix, "Deferring song description until next frame: %s", data->name ? data->name : "");
-		return true;
-	}
-
-	return ShowMusicDescriptionNow(data);
+	descriptionDisplayed = false;
+	ClearMusicDescription();
+	pendingMusicDescriptionData = data;
+	Logging::Write(logPrefix, "Deferring song description until playback starts: %s", data->name ? data->name : "");
+	return true;
 }
 
 bool MusicPlayer::ShowMusicDescriptionNow(const MusicData* data)

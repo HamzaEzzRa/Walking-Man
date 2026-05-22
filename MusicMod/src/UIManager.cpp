@@ -58,17 +58,25 @@ void UIManager::OnEvent(const ModEvent& event)
 			);
 			break;
 		}
-		case ModEventType::FacilityBlockStateChanged:
+		case ModEventType::FacilityAreaStateChanged:
 		{
-		    if (ModConfiguration::stopInFacility)
-		    {
-			    auto* areaFlagState = std::any_cast<FlagState<AreaFlag>*>(event.data);
-			    UpdateMusicPlayerUIBlockers(
+			if (ModConfiguration::stopInFacility)
+			{
+				auto* areaFlagState = std::any_cast<FlagState<AreaFlag>*>(event.data);
+				UpdateMusicPlayerUIBlockers(
 					MusicPlayerUIBlocker::FACILITY_BLOCK, areaFlagState->current == AreaFlag::INSIDE
 				);
-		    }
-		    break;
-	    }
+			}
+			break;
+		}
+		case ModEventType::PrivateRoomAreaStateChanged:
+		{
+			auto* areaFlagState = std::any_cast<FlagState<AreaFlag>*>(event.data);
+			UpdateMusicPlayerUIBlockers(
+				MusicPlayerUIBlocker::PRIVATE_ROOM_BLOCK, areaFlagState->current == AreaFlag::INSIDE
+			);
+			break;
+		}
 		case ModEventType::ChiralNetworkStateChanged:
 		{
 			if (ModConfiguration::connectToChiralNetwork)
@@ -78,6 +86,21 @@ void UIManager::OnEvent(const ModEvent& event)
 					MusicPlayerUIBlocker::CHIRAL_BLOCK, chiralNetworkFlag->current == ChiralNetworkFlag::OFF
 				);
 			}
+			break;
+		}
+		case ModEventType::CutsceneStateChanged:
+		{
+			auto* cutsceneFlagState = std::any_cast<FlagState<CutsceneFlag>*>(event.data);
+			UpdateMusicPlayerUIBlockers(
+				MusicPlayerUIBlocker::CUTSCENE_BLOCK, cutsceneFlagState->current == CutsceneFlag::ACTIVE
+			);
+
+			cutsceneBlocksCompass = cutsceneFlagState->current == CutsceneFlag::ACTIVE;
+			if (cutsceneBlocksCompass && currentCompassState == CompassState::OPEN)
+			{
+				ResetModCompassState();
+			}
+
 			break;
 		}
 		case ModEventType::MusicPlayerShuffled:
@@ -181,7 +204,7 @@ void UIManager::OnRender()
 
 void UIManager::OnInputPress(const InputCode& inputCode)
 {
-	if (currentCompassState == OPEN)
+	if (currentCompassState == CompassState::OPEN)
 	{
 		for (auto it = musicPlayerActionButtonMap.begin(); it != musicPlayerActionButtonMap.end(); it++)
 		{
@@ -293,6 +316,8 @@ void UIManager::UpdateMusicPlayerUIBlockers(MusicPlayerUIBlocker blocker, bool e
 			}
 			break;
 		}
+		case MusicPlayerUIBlocker::PRIVATE_ROOM_BLOCK: break;
+		case MusicPlayerUIBlocker::CUTSCENE_BLOCK: break;
 	}
 }
 
@@ -312,7 +337,7 @@ void UIManager::InGameUIUpdateStaticPoolCallerHook(void* arg1, void* arg2, void*
 	);
 
 	// Persist slots in the pool for display in compass UI
-	if (currentCompassState == OPEN && staticUIPoolAddress)
+	if (currentCompassState == CompassState::OPEN && staticUIPoolAddress)
 	{
 		std::lock_guard<std::mutex> lock(updateRuntimeUITextMutex);
 
@@ -542,13 +567,8 @@ void UIManager::InGameUIDrawElementHook(void* arg1, void* arg2, void* arg3, void
 		arg1, arg2, arg3, arg4
 	);
 
-	//size_t runtimeSlotIndex = reinterpret_cast<size_t>(arg2);
-	//if (runtimeSlotIndex == 0) // New UI group so we reset the compass state
-	//{
-	//	ResetModCompassState();
-	//}
-
-	if (currentRuntimeUIPoolStart) {
+	if (currentRuntimeUIPoolStart)
+	{
 		uintptr_t compassFlagOffset = GetRuntimeCompassFlagOffset();
 		uint8_t* runtimeCompassOpenFlagAddress1 = (uint8_t*)(
 			currentRuntimeUIPoolStart + compassFlagOffset
@@ -556,18 +576,22 @@ void UIManager::InGameUIDrawElementHook(void* arg1, void* arg2, void* arg3, void
 		uint8_t* runtimeCompassOpenFlagAddress2 = (uint8_t*)(
 			currentRuntimeUIPoolStart + compassFlagOffset + 1
 		);
-		if (*runtimeCompassOpenFlagAddress1 == 1 && *runtimeCompassOpenFlagAddress2 == 1)
+
+		if (!cutsceneBlocksCompass
+			&& *runtimeCompassOpenFlagAddress1 == 1
+			&& *runtimeCompassOpenFlagAddress2 == 1
+			&& currentCompassState != CompassState::OPEN)
 		{
 			Logging::Write(logPrefix,
 				"Compass UI detected as OPEN based on runtime flags %p and %p",
 				(void*)runtimeCompassOpenFlagAddress1, (void*)runtimeCompassOpenFlagAddress2
 			);
-			currentCompassState = OPEN;
+			currentCompassState = CompassState::OPEN;
+			if (ModManager* instance = ModManager::GetInstance())
+			{
+				instance->DispatchEvent(ModEvent{ ModEventType::CompassStateChanged, nullptr, CompassState::OPEN });
+			}
 		}
-		/*else
-		{
-			currentCompassState = CLOSED;
-		}*/
 	}
 }
 
@@ -575,7 +599,7 @@ void UIManager::PostMenuExitHook(void* arg1, void* arg2, void* arg3, void* arg4)
 {
 	constexpr const char* logPrefix = "UI Manager";
 
-	if (currentCompassState == OPEN)
+	if (currentCompassState == CompassState::OPEN)
 	{
 		Logging::Write(logPrefix, "Resetting compass state to CLOSED on menu exit.");
 	}
@@ -698,7 +722,18 @@ void UIManager::ShowNotificationText(const char* text)
 
 void UIManager::ResetModCompassState()
 {
-	currentCompassState = CLOSED; // reset compass state on menu exit
+	if (currentCompassState != CompassState::CLOSED)
+	{
+		currentCompassState = CompassState::CLOSED;
+		if (ModManager* instance = ModManager::GetInstance())
+		{
+			instance->DispatchEvent(ModEvent{
+				ModEventType::CompassStateChanged,
+				nullptr,
+				CompassState::CLOSED
+			});
+		}
+	}
 }
 
 std::string UIManager::RuntimeUITextToUtf8(const RuntimeUIText* text)

@@ -4,6 +4,7 @@
 #include "ModManager.h"
 
 #include "MemoryWatcher.h"
+#include "MemoryUtils.h"
 
 #include "MinHook.h"
 
@@ -15,6 +16,11 @@ void GameStateManager::OnEvent(const ModEvent& event)
 {
 	switch (event.type)
 	{
+		case ModEventType::FunctionScanCompleted:
+		{
+			OnFunctionScanDone();
+			break;
+		}
 		case ModEventType::ScanCompleted:
 		{
 			OnScanDone();
@@ -61,30 +67,34 @@ void GameStateManager::OnScanDone()
 	);
 }
 
+void GameStateManager::OnFunctionScanDone()
+{
+	if (!ModConfiguration::showMusicPlayerUI)
+	{
+		return;
+	}
+
+	bool result = ModManager::TryHookFunction(
+		"WwiseRTPCStateActivate",
+		reinterpret_cast<void*>(&GameStateManager::WwiseRTPCStateActivateHook)
+	);
+	Logging::Write(logPrefix,
+		"WwiseRTPCStateActivate function hook %s",
+		result ? "installed successfully" : "failed"
+	);
+}
+
 void GameStateManager::OnRender()
 {
 	OnFlagStateChanged(btTerritoryState);
 	OnFlagStateChanged(muleTerritoryState);
 
-	if (facilityAreaState.flagWatcher || privateRoomAreaState.flagWatcher)
-	{
-		facilityBlockState.current = (facilityAreaState.current == AreaFlag::INSIDE
-			|| privateRoomAreaState.current == AreaFlag::INSIDE) ? AreaFlag::INSIDE : AreaFlag::OUTSIDE;
-
-		if (facilityBlockState.current != facilityBlockState.previous)
-		{
-			if (ModManager* instance = ModManager::GetInstance())
-			{
-				instance->DispatchEvent(ModEvent{
-					ModEventType::FacilityBlockStateChanged,
-					this, &facilityBlockState
-				});
-			}
-			facilityBlockState.previous = facilityBlockState.current;
-		}
-	}
+	OnFlagStateChanged(facilityAreaState);
+	OnFlagStateChanged(privateRoomAreaState);
 	
 	OnFlagStateChanged(chiralNetworkState);
+
+	OnFlagStateChanged(cutsceneState);
 }
 
 void GameStateManager::OnPreExit()
@@ -115,6 +125,12 @@ void GameStateManager::OnPreExit()
 	{
 		chiralNetworkState.flagWatcher->Uninstall();
 		chiralNetworkState.flagWatcher.reset();
+	}
+
+	if (cutsceneState.flagWatcher)
+	{
+		cutsceneState.flagWatcher->Uninstall();
+		cutsceneState.flagWatcher.reset();
 	}
 }
 
@@ -258,6 +274,115 @@ void GameStateManager::InGameAreaUpdateHook(void* manager)
 		"InGameAreaUpdate function unhook %s",
 		result ? "successful" : "failed"
 	);
+}
+
+void GameStateManager::WwiseRTPCStateActivateHook(void* manager, void* state, void* mask)
+{
+	const FunctionData* functionData = ModManager::GetFunctionData("WwiseRTPCStateActivate");
+	if (functionData && functionData->originalFunction)
+	{
+		reinterpret_cast<void(*)(void*, void*, void*)>(functionData->originalFunction)(
+			manager, state, mask
+		);
+	}
+
+	const uintptr_t managerAddress = reinterpret_cast<uintptr_t>(manager);
+	if (
+		!managerAddress
+		|| !MemoryUtils::IsReadableAddress(
+			managerAddress + rtpcManagerBucketCountOffset,
+			sizeof(uint32_t)
+		)
+		|| !MemoryUtils::IsReadableAddress(
+			managerAddress + rtpcManagerBucketsOffset,
+			sizeof(uintptr_t)
+		)
+	)
+	{
+		return;
+	}
+
+	const uintptr_t buckets =
+		*reinterpret_cast<const uintptr_t*>(managerAddress + rtpcManagerBucketsOffset);
+	const uint32_t bucketCount =
+		*reinterpret_cast<const uint32_t*>(managerAddress + rtpcManagerBucketCountOffset);
+	if (!buckets || !bucketCount)
+	{
+		return;
+	}
+
+	const uintptr_t bucketAddress =
+		buckets + static_cast<uintptr_t>(cutsceneMusicPauseRtpcId % bucketCount) * sizeof(uintptr_t);
+	if (!MemoryUtils::IsReadableAddress(bucketAddress, sizeof(uintptr_t)))
+	{
+		return;
+	}
+
+	uintptr_t nodeAddress = *reinterpret_cast<const uintptr_t*>(bucketAddress);
+	while (nodeAddress)
+	{
+		if (
+			!MemoryUtils::IsReadableAddress(nodeAddress, sizeof(uint32_t))
+			|| !MemoryUtils::IsReadableAddress(nodeAddress + rtpcNodeNextOffset, sizeof(uintptr_t))
+		)
+		{
+			return;
+		}
+
+		const uint32_t nodeKey =
+			*reinterpret_cast<const uint32_t*>(nodeAddress);
+		if (nodeKey == cutsceneMusicPauseRtpcId)
+		{
+			break;
+		}
+
+		nodeAddress = *reinterpret_cast<const uintptr_t*>(nodeAddress + rtpcNodeNextOffset);
+	}
+
+	if (!nodeAddress)
+	{
+		return;
+	}
+
+	const uintptr_t countAddress = nodeAddress + rtpcNodeActiveCountOffset;
+	if (!MemoryUtils::IsReadableAddress(countAddress, sizeof(uint32_t)))
+	{
+		return;
+	}
+
+	const uint32_t count = *reinterpret_cast<const uint32_t*>(countAddress);
+	const CutsceneFlag current = count != 0 ? CutsceneFlag::ACTIVE : CutsceneFlag::INACTIVE;
+	const bool firstInstall =
+		cutsceneState.current == CutsceneFlag::UNKNOWN && cutsceneState.previous == CutsceneFlag::UNKNOWN;
+	cutsceneState.current = current;
+	if (firstInstall && current == CutsceneFlag::INACTIVE)
+	{
+		cutsceneState.previous = current;
+	}
+
+	auto& cutsceneStateRef = cutsceneState;
+	cutsceneState.flagWatcher = std::make_unique<MemoryWatcher>(
+		[&cutsceneStateRef](const void* newValue)
+		{
+			const uint32_t count = *reinterpret_cast<const uint32_t*>(newValue);
+			const CutsceneFlag next = count != 0 ? CutsceneFlag::ACTIVE : CutsceneFlag::INACTIVE;
+			if (cutsceneStateRef.current != next)
+			{
+				cutsceneStateRef.current = next;
+			}
+		},
+		cutsceneState.pollingInterval
+	);
+	cutsceneState.flagWatcher->Install(reinterpret_cast<const void*>(countAddress), sizeof(uint32_t));
+
+	if (functionData)
+	{
+		const bool result = ModManager::TryUnhookFunction(*functionData);
+		Logging::Write(logPrefix,
+			"WwiseRTPCStateActivate function unhook %s",
+			result ? "successful" : "failed"
+		);
+	}
 }
 
 template<typename T>

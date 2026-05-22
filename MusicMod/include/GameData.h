@@ -24,6 +24,12 @@ enum class GameVersion
 	STANDARD
 };
 
+enum class CompassState
+{
+	CLOSED,
+	OPEN,
+};
+
 enum class TextLanguage: uint8_t
 {
 	UNKNOWN = 0,

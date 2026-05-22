@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "FunctionHook.h"
+#include "GameData.h"
 #include "IEventListener.h"
 #include "InputCode.h"
 #include "InputTracker.h"
@@ -87,12 +88,6 @@ public:
 		}
 	};
 
-	enum CompassState
-	{
-		CLOSED,
-		OPEN,
-	};
-
 	enum MusicPlayerUIBlocker: uint8_t
 	{
 		NONE = 0,
@@ -100,6 +95,8 @@ public:
 		MULE_BLOCK = 1 << 1, // Blocked by MULE detection
 		CHIRAL_BLOCK = 1 << 2, // Blocked by Chiral Network turned off
 		FACILITY_BLOCK = 1 << 3, // Blocked inside facilities
+		PRIVATE_ROOM_BLOCK = 1 << 4, // Blocked inside private rooms
+		CUTSCENE_BLOCK = 1 << 5, // Blocked during cutscenes
 	};
 	uint8_t musicPlayerUIBlockers = 0; // Bitmask of events preventing music player UI from showing
 
@@ -166,9 +163,10 @@ private:
 	inline static uintptr_t currentRuntimeUIPoolStart = 0;
 	inline static uintptr_t runtimeUITextOffsetToActiveFlag = -24; // Offset to the active flag from the runtime UI text
 
-	inline static CompassState currentCompassState = CLOSED;
+	inline static CompassState currentCompassState = CompassState::CLOSED;
 	inline static uintptr_t GetRuntimeCompassFlagOffset()
 	{
 		return ModConfiguration::gameVersion == GameVersion::STANDARD? 0xF9E : 0x121E;
 	}
+	inline static bool cutsceneBlocksCompass = false;
 };

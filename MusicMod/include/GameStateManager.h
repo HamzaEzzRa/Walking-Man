@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cstdint>
+#include <cstddef>
+
 #include "IEventListener.h"
 #include "FunctionHook.h"
 
@@ -28,6 +31,13 @@ enum class ChiralNetworkFlag
 	UNKNOWN = -1,
 	OFF = 0,
 	ON = 1,
+};
+
+enum class CutsceneFlag
+{
+	UNKNOWN = -1,
+	INACTIVE = 0,
+	ACTIVE = 1,
 };
 
 template<typename T>
@@ -59,11 +69,13 @@ public:
 
 private:
 	void OnScanDone();
+	void OnFunctionScanDone();
 	void OnRender();
 	void OnPreExit();
 
 	static void InGameFlagUpdateHook(void*, void*, void*, void*);
 	static void InGameAreaUpdateHook(void*);
+	static void WwiseRTPCStateActivateHook(void*, void*, void*);
 
 	template<typename T>
 	void OnFlagStateChanged(FlagState<T>&);
@@ -73,6 +85,11 @@ private:
 
 private:
 	inline static constexpr const char* logPrefix = "Game State Manager";
+	inline static constexpr uint32_t cutsceneMusicPauseRtpcId = 0x28D65BDB;
+	inline static constexpr size_t rtpcManagerBucketsOffset = 0x0;
+	inline static constexpr size_t rtpcManagerBucketCountOffset = 0x8;
+	inline static constexpr size_t rtpcNodeNextOffset = 0x8;
+	inline static constexpr size_t rtpcNodeActiveCountOffset = 0x58;
 
 	inline static uintptr_t inGameFlagPoolAddress = 0;
 
@@ -85,14 +102,18 @@ private:
 		0xB90, 0xCC8, ModEventType::MuleTerritoryStateChanged, EnemyTerritoryFlag::UNKNOWN // Pretty much no way around having 2 offsets here
 	);
 	
-	inline static FlagState<AreaFlag> privateRoomAreaState =
-	    FlagState<AreaFlag>(0x1E8, 0x1E8, ModEventType::NoEvent, AreaFlag::UNKNOWN);
-	inline static FlagState<AreaFlag> facilityAreaState =
-	    FlagState<AreaFlag>(0x228, 0x290, ModEventType::NoEvent, AreaFlag::UNKNOWN);
-	inline static FlagState<AreaFlag> facilityBlockState =
-	    FlagState<AreaFlag>(0x0, 0x0, ModEventType::FacilityBlockStateChanged, AreaFlag::UNKNOWN);
+	inline static FlagState<AreaFlag> facilityAreaState = FlagState<AreaFlag>(
+		0x228, 0x290, ModEventType::FacilityAreaStateChanged, AreaFlag::UNKNOWN
+	);
+	inline static FlagState<AreaFlag> privateRoomAreaState = FlagState<AreaFlag>(
+		0x1E8, 0x1E8, ModEventType::PrivateRoomAreaStateChanged, AreaFlag::UNKNOWN
+	);
 
 	inline static FlagState<ChiralNetworkFlag> chiralNetworkState = FlagState<ChiralNetworkFlag>(
 		0x174, 0x174, ModEventType::ChiralNetworkStateChanged, ChiralNetworkFlag::UNKNOWN
+	);
+
+	inline static FlagState<CutsceneFlag> cutsceneState = FlagState<CutsceneFlag>(
+		0x0, 0x0, ModEventType::CutsceneStateChanged, CutsceneFlag::UNKNOWN
 	);
 };
