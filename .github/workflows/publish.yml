@@ -29,7 +29,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Path dist | Out-Null
           Copy-Item x64\Release\dxgi.dll dist\dxgi.dll
-          Copy-Item extended_wardrobe.ini dist\extended_wardrobe.ini
+          Copy-Item walkingman.ini dist\walkingman.ini
 
       - name: Create ZIP Archive
         shell: pwsh
