@@ -34,6 +34,9 @@ namespace ModConfiguration
 	extern bool showNotificationMessage;
 
 	extern bool connectToChiralNetwork;
+
+	extern bool stopInMuleTerritory;
+	extern bool stopInBTTerritory;
 	extern bool stopInFacility;
 
 	extern bool skipLockedSongs;

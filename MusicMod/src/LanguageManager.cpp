@@ -98,7 +98,6 @@ void LanguageManager::ReloadCache()
 
 void LanguageManager::AccessLanguagePoolHook(void* arg1, void* arg2, void* arg3, void* arg4)
 {
-	constexpr const char* logPrefix = "Access Language Pool Hook";
 	const FunctionData* funcData = ModManager::GetFunctionData("AccessLanguagePool");
 	if (!funcData || !funcData->originalFunction)
 	{

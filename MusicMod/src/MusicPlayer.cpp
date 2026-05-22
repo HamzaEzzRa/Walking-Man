@@ -250,21 +250,18 @@ void MusicPlayer::OnEvent(const ModEvent& event)
 		}
 		case ModEventType::FacilityAreaStateChanged:
 		{
-			if (ModConfiguration::stopInFacility)
-			{
-				auto* facilityFlagState = std::any_cast<FlagState<AreaFlag>*>(event.data);
-				const bool wasBlocked = HasActiveMusicBlocker();
-				facilityAreaBlocksMusic.store(facilityFlagState->current == AreaFlag::INSIDE);
-				const bool isBlocked = HasActiveMusicBlocker();
+			auto* facilityFlagState = std::any_cast<FlagState<AreaFlag>*>(event.data);
+			const bool wasBlocked = HasActiveMusicBlocker();
+			facilityAreaBlocksMusic.store(facilityFlagState->current == AreaFlag::INSIDE);
+			const bool isBlocked = HasActiveMusicBlocker();
 
-				HandleMusicBlockerChange(
-					wasBlocked,
-					isBlocked,
-					"in facility",
-					"facility territory cleared",
-					"facility territory interruption"
-				);
-			}
+			HandleMusicBlockerChange(
+				wasBlocked,
+				isBlocked,
+				"in facility",
+				"facility territory cleared",
+				"facility territory interruption"
+			);
 			break;
 		}
 		case ModEventType::PrivateRoomAreaStateChanged:
@@ -284,21 +281,18 @@ void MusicPlayer::OnEvent(const ModEvent& event)
 		}
 		case ModEventType::ChiralNetworkStateChanged:
 		{
-			if (ModConfiguration::connectToChiralNetwork)
-			{
-				auto* chiralNetworkFlagState = std::any_cast<FlagState<ChiralNetworkFlag>*>(event.data);
-				const bool wasBlocked = HasActiveMusicBlocker();
-				chiralNetworkBlocksMusic.store(chiralNetworkFlagState->current == ChiralNetworkFlag::OFF);
-				const bool isBlocked = HasActiveMusicBlocker();
+			auto* chiralNetworkFlagState = std::any_cast<FlagState<ChiralNetworkFlag>*>(event.data);
+			const bool wasBlocked = HasActiveMusicBlocker();
+			chiralNetworkBlocksMusic.store(chiralNetworkFlagState->current == ChiralNetworkFlag::OFF);
+			const bool isBlocked = HasActiveMusicBlocker();
 
-				HandleMusicBlockerChange(
-					wasBlocked,
-					isBlocked,
-					"chiral network off",
-					"chiral network restored",
-					"chiral network interruption"
-				);
-			}
+			HandleMusicBlockerChange(
+				wasBlocked,
+				isBlocked,
+				"chiral network off",
+				"chiral network restored",
+				"chiral network interruption"
+			);
 			break;
 		}
 		case ModEventType::CutsceneStateChanged:
@@ -801,8 +795,8 @@ void MusicPlayer::OnUIButtonAction(const UIButtonAction& action)
 
 void MusicPlayer::PlayMusicHook(void* arg1, void* arg2, void* arg3, void* arg4)
 {
-	const bool blockerPausedByActiveBlocker = currentMusicPausedByBlocker.load() && HasActiveMusicBlocker();
-	//Logging::Write(logPrefix, "PlayMusic called with args: %p, %p, %p, %p", arg1, arg2, arg3, arg4);
+	const bool blockerPausedByActiveBlocker =
+		currentMusicPausedByBlocker.load() && HasActiveMusicBlocker();
 
 	if (!playMusicFuncRCXAddress)
 	{
@@ -877,6 +871,19 @@ void MusicPlayer::PlayMusicHook(void* arg1, void* arg2, void* arg3, void* arg4)
 			"Configuration does not allow scripted songs, skipping song %s",
 			songToPlay->name
 		);
+		return;
+	}
+
+	const bool musicPlayerHasActiveMusic =
+		pendingMusicData || (currentMusicData && !currentMusicPausedByBlocker.load());
+
+	const bool territoryStopDisabled =
+		(btTerritoryBlocksMusic.load() && !ModConfiguration::stopInBTTerritory)
+		|| (muleTerritoryBlocksMusic.load() && !ModConfiguration::stopInMuleTerritory);
+	if (territoryStopDisabled && musicPlayerHasActiveMusic)
+	{
+		gameCalledSong = false;
+		gameCalledInterruptor = false;
 		return;
 	}
 
@@ -1037,8 +1044,10 @@ void MusicPlayer::PlayUISoundHook(void* arg1, void* arg2, void* arg3, void* arg4
 
 			if (match)
 			{
-				// Logging::Write(logPrefix, "Interruptor %s matched, skipping UI sound", interruptor.name);
-				Logging::Write(logPrefix, "Skipping UI sound");
+				//Logging::Write(logPrefix,
+				//	"Interruptor %s matched, skipping UI sound",
+				//	interruptor.name
+				//);
 				return;
 			}
 		}
@@ -1178,7 +1187,8 @@ void MusicPlayer::CacheUnlockFacts(void* system)
 
 bool MusicPlayer::IsTrackUnlocked(const MusicData* data)
 {
-	if (!ModConfiguration::skipLockedSongs || !data || data->type != MusicType::SONG || data->customWemPath || !data->name)
+	if (!ModConfiguration::skipLockedSongs
+		|| !data || data->type != MusicType::SONG || data->customWemPath || !data->name)
 	{
 		return true;
 	}
@@ -1205,7 +1215,9 @@ bool MusicPlayer::IsTrackUnlocked(const MusicData* data)
 	}
 
 	using GetBooleanFact_t = bool (*)(void*, void*);
-	return reinterpret_cast<GetBooleanFact_t>(getBooleanFactData->address)(factIt->second, factIt->second);
+	return reinterpret_cast<GetBooleanFact_t>(getBooleanFactData->address)(
+		factIt->second, factIt->second
+	);
 }
 
 bool MusicPlayer::ClearMusicDescription()
@@ -1225,11 +1237,11 @@ bool MusicPlayer::ClearMusicDescription()
 
 bool MusicPlayer::HasActiveMusicBlocker()
 {
-	return btTerritoryBlocksMusic.load()
-		|| muleTerritoryBlocksMusic.load()
-		|| facilityAreaBlocksMusic.load()
+	return (ModConfiguration::stopInBTTerritory && btTerritoryBlocksMusic.load())
+		|| (ModConfiguration::stopInMuleTerritory && muleTerritoryBlocksMusic.load())
+		|| (ModConfiguration::stopInFacility && facilityAreaBlocksMusic.load())
 		|| privateRoomAreaBlocksMusic.load()
-		|| chiralNetworkBlocksMusic.load()
+		|| (ModConfiguration::connectToChiralNetwork && chiralNetworkBlocksMusic.load())
 		|| cutsceneBlocksMusic.load();
 }
 
@@ -1600,7 +1612,10 @@ void MusicPlayer::PlayMusic(const MusicData* data, bool displayDescription, long
 
 	if (!IsTrackUnlocked(data))
 	{
-		Logging::Write(logPrefix, "Song \"%s\" is still locked in-game, skipping", data->name ? data->name : "");
+		Logging::Write(logPrefix,
+			"Song \"%s\" is locked in-game and \"skipLockedSongs\" is enabled, skipping",
+			data->name ? data->name : ""
+		);
 		return;
 	}
 
@@ -1694,7 +1709,11 @@ void MusicPlayer::PlayMusic(const MusicData* data, bool displayDescription, long
 			);
 			if (ModManager* instance = ModManager::GetInstance())
 			{
-				instance->DispatchEvent(ModEvent{ ModEventType::AreaMusicUnsetRequested, nullptr, nullptr });
+				instance->DispatchEvent(ModEvent{
+					ModEventType::AreaMusicUnsetRequested,
+					nullptr,
+					nullptr
+				});
 			}
 			PlaySilenceForAreaMusicTransition();
 			currentMusicData = nullptr;
@@ -1709,9 +1728,8 @@ void MusicPlayer::PlayMusic(const MusicData* data, bool displayDescription, long
 			? 0
 			: (registration.effectiveDurationMs > 0 ? registration.effectiveDurationMs : data->maxLength);
 		Logging::Write(logPrefix,
-			registration.metadataPatched
-			? "Using patched Wwise media metadata for area override track \"%s\"; runtime duration guard is %lld ms"
-			: "Wwise media metadata was not patched for area override track \"%s\"; runtime duration guard is %lld ms",
+			"%s Wwise media metadata patch for area override track \"%s\"; runtime duration guard is %lld ms",
+		    (registration.metadataPatched ? "Successful" : "Failed"),
 			data->name ? data->name : "",
 			playbackMaxLength
 		);
@@ -1720,7 +1738,11 @@ void MusicPlayer::PlayMusic(const MusicData* data, bool displayDescription, long
 	{
 		if (ModManager* instance = ModManager::GetInstance())
 		{
-			instance->DispatchEvent(ModEvent{ ModEventType::AreaMusicUnsetRequested, nullptr, nullptr });
+			instance->DispatchEvent(ModEvent{
+				ModEventType::AreaMusicUnsetRequested,
+				nullptr,
+				nullptr
+			});
 		}
 	}
 

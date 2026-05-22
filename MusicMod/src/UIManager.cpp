@@ -46,7 +46,8 @@ void UIManager::OnEvent(const ModEvent& event)
 		{
 			auto* territoryFlagState = std::any_cast<FlagState<EnemyTerritoryFlag>*>(event.data);
 			UpdateMusicPlayerUIBlockers(
-				MusicPlayerUIBlocker::BT_BLOCK, territoryFlagState->current != EnemyTerritoryFlag::SAFE
+				MusicPlayerUIBlocker::BT_BLOCK,
+				ModConfiguration::stopInBTTerritory && territoryFlagState->current != EnemyTerritoryFlag::SAFE
 			);
 			break;
 		}
@@ -54,19 +55,18 @@ void UIManager::OnEvent(const ModEvent& event)
 		{
 			auto* territoryFlagState = std::any_cast<FlagState<EnemyTerritoryFlag>*>(event.data);
 			UpdateMusicPlayerUIBlockers(
-				MusicPlayerUIBlocker::MULE_BLOCK, territoryFlagState->current != EnemyTerritoryFlag::SAFE
+				MusicPlayerUIBlocker::MULE_BLOCK,
+				ModConfiguration::stopInMuleTerritory && territoryFlagState->current != EnemyTerritoryFlag::SAFE
 			);
 			break;
 		}
 		case ModEventType::FacilityAreaStateChanged:
 		{
-			if (ModConfiguration::stopInFacility)
-			{
-				auto* areaFlagState = std::any_cast<FlagState<AreaFlag>*>(event.data);
-				UpdateMusicPlayerUIBlockers(
-					MusicPlayerUIBlocker::FACILITY_BLOCK, areaFlagState->current == AreaFlag::INSIDE
-				);
-			}
+			auto* areaFlagState = std::any_cast<FlagState<AreaFlag>*>(event.data);
+			UpdateMusicPlayerUIBlockers(
+				MusicPlayerUIBlocker::FACILITY_BLOCK,
+				ModConfiguration::stopInFacility && areaFlagState->current == AreaFlag::INSIDE
+			);
 			break;
 		}
 		case ModEventType::PrivateRoomAreaStateChanged:
@@ -79,13 +79,11 @@ void UIManager::OnEvent(const ModEvent& event)
 		}
 		case ModEventType::ChiralNetworkStateChanged:
 		{
-			if (ModConfiguration::connectToChiralNetwork)
-			{
-				auto* chiralNetworkFlag = std::any_cast<FlagState<ChiralNetworkFlag>*>(event.data);
-				UpdateMusicPlayerUIBlockers(
-					MusicPlayerUIBlocker::CHIRAL_BLOCK, chiralNetworkFlag->current == ChiralNetworkFlag::OFF
-				);
-			}
+			auto* chiralNetworkFlag = std::any_cast<FlagState<ChiralNetworkFlag>*>(event.data);
+			UpdateMusicPlayerUIBlockers(
+				MusicPlayerUIBlocker::CHIRAL_BLOCK,
+				ModConfiguration::connectToChiralNetwork && chiralNetworkFlag->current == ChiralNetworkFlag::OFF
+			);
 			break;
 		}
 		case ModEventType::CutsceneStateChanged:
@@ -323,7 +321,6 @@ void UIManager::UpdateMusicPlayerUIBlockers(MusicPlayerUIBlocker blocker, bool e
 
 void UIManager::InGameUIUpdateStaticPoolCallerHook(void* arg1, void* arg2, void* arg3, void* arg4)
 {
-	constexpr const char* logPrefix = "UI Manager";
 	const FunctionData* InGameUIUpdateStaticPoolCallerFuncData =
 		ModManager::GetFunctionData("InGameUIUpdateStaticPoolCaller");
 	if (!InGameUIUpdateStaticPoolCallerFuncData
@@ -511,7 +508,6 @@ void UIManager::InGameUIUpdateStaticPoolCallerHook(void* arg1, void* arg2, void*
 
 void UIManager::AccessStaticUIPoolHook(void* arg1, void* arg2, void* arg3, void* arg4)
 {
-	constexpr const char* logPrefix = "Access Static UI Pool Hook";
 	uintptr_t ownerAddress = reinterpret_cast<uintptr_t>(arg1);
 	uintptr_t poolRootAddress = *(uintptr_t*)(ownerAddress + staticUIPoolOwnerOffset);
 	staticUIPoolAddress = poolRootAddress + GetStaticUIPoolOffset();
@@ -527,8 +523,6 @@ void UIManager::AccessStaticUIPoolHook(void* arg1, void* arg2, void* arg3, void*
 
 void UIManager::InGameUIUpdateElementHook(void* arg1, void* arg2, void* arg3, void* arg4)
 {
-	constexpr const char* logPrefix = "UI Manager";
-
 	// arg1 is runtime pool start address + 0xC8 + slotSize * slotIndex
 	if (currentRuntimeUIPoolStart)
 	{
@@ -553,7 +547,6 @@ void UIManager::InGameUIUpdateElementHook(void* arg1, void* arg2, void* arg3, vo
 
 void UIManager::InGameUIDrawElementHook(void* arg1, void* arg2, void* arg3, void* arg4)
 {
-	constexpr const char* logPrefix = "UI Manager";
 	currentRuntimeUIPoolStart = reinterpret_cast<uintptr_t>(arg1);
 
 	const FunctionData* inGameUIDrawElementFuncData =
@@ -597,8 +590,6 @@ void UIManager::InGameUIDrawElementHook(void* arg1, void* arg2, void* arg3, void
 
 void UIManager::PostMenuExitHook(void* arg1, void* arg2, void* arg3, void* arg4)
 {
-	constexpr const char* logPrefix = "UI Manager";
-
 	if (currentCompassState == CompassState::OPEN)
 	{
 		Logging::Write(logPrefix, "Resetting compass state to CLOSED on menu exit.");
@@ -618,8 +609,6 @@ void UIManager::PostMenuExitHook(void* arg1, void* arg2, void* arg3, void* arg4)
 
 void UIManager::ShowNotificationText(const char* text)
 {
-	constexpr const char* logPrefix = "Show Notification Text";
-
 	const FunctionData* createRuntimeUITextFromStringFuncData =
 		ModManager::GetFunctionData("CreateRuntimeUITextFromString");
 	if (!createRuntimeUITextFromStringFuncData || !createRuntimeUITextFromStringFuncData->address)

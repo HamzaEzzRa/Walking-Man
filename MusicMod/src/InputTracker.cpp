@@ -46,7 +46,6 @@ void InputTracker::OnRender()
 
 void InputTracker::ProcessControllerInputHook(void* arg1, void* arg2, void* arg3, void* arg4)
 {
-	constexpr const char* logPrefix = "Process Controller Input Hook";
 	const FunctionData* funcData = ModManager::GetFunctionData("ProcessControllerInput");
 	if (!funcData || !funcData->originalFunction)
 	{

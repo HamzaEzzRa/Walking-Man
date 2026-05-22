@@ -70,7 +70,10 @@ namespace ModConfiguration
 	bool showNotificationMessage = true;
 
 	bool connectToChiralNetwork = true;
-	bool stopInFacility = true;
+
+	bool stopInMuleTerritory = true;
+	bool stopInBTTerritory = true;
+	bool stopInFacility = false;
 
 	bool skipLockedSongs = true;
 
@@ -102,6 +105,12 @@ namespace ModConfiguration
 		
 		{"connectToChiralNetwork",
 		[](const std::string& val) { connectToChiralNetwork = (val == "true" || val == "1"); }},
+
+		//{"stopInMuleTerritory",
+		//[](const std::string& val) { stopInMuleTerritory = (val == "true" || val == "1"); }},
+
+		//{"stopInBTTerritory",
+		//[](const std::string& val) { stopInBTTerritory = (val == "true" || val == "1"); }},
 
 		{"stopInFacility",
 		[](const std::string& val) { stopInFacility = (val == "true" || val == "1"); }},
