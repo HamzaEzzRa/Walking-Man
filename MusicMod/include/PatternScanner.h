@@ -36,7 +36,7 @@ public:
 		}
 	};
 
-	inline static constexpr const char* logPrefix = "PatternScanner";
+	inline static constexpr const char* logPrefix = "Pattern Scanner";
 	inline static std::atomic<bool> exiting = false;
 	static constexpr uint16_t WILDCARD = 0xFFFF;
 

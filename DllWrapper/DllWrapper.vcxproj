@@ -187,13 +187,19 @@ COPY "$(SolutionDir)x64\Debug\dxgi.dll" "C:\Program Files (x86)\Steam\steamapps\
     </Link>
     <PostBuildEvent>
       <Command>COPY "$(SolutionDir)x64\Release\dxgi.dll" "C:\Program Files\Epic Games\DeathStranding\dxgi.dll"
+
 COPY "$(SolutionDir)walkingman.local.ini" "C:\Program Files\Epic Games\DeathStranding\walkingman.ini"
+
 COPY "$(SolutionDir)x64\Release\dxgi.dll" "C:\Program Files\Epic Games\DeathStrandingDC\dxgi.dll"
+
 COPY "$(SolutionDir)walkingman.local.ini" "C:\Program Files\Epic Games\DeathStrandingDC\walkingman.ini"
+
 COPY "$(SolutionDir)x64\Release\dxgi.dll" "C:\Program Files (x86)\Steam\steamapps\common\DEATH STRANDING DIRECTORS CUT\dxgi.dll"
+
 COPY "$(SolutionDir)walkingman.local.ini" "C:\Program Files (x86)\Steam\steamapps\common\DEATH STRANDING DIRECTORS CUT\walkingman.ini"
-IF EXIST "C:\XboxGames\DSDC\Content\dxgi.dll" DEL /Q "C:\XboxGames\DSDC\Content\dxgi.dll"
+
 COPY "$(SolutionDir)x64\Release\dxgi.dll" "C:\XboxGames\DSDC\Content\winhttp.dll"
+
 COPY "$(SolutionDir)walkingman.local.ini" "C:\XboxGames\DSDC\Content\walkingman.ini"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>

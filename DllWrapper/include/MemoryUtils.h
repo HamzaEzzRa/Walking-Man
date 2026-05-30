@@ -28,7 +28,7 @@
 // Contains various memory manipulation functions related to hooking or modding
 namespace MemoryUtils
 {
-	static constexpr const char* logPrefix = "MemoryUtils";
+	static constexpr const char* logPrefix = "Memory Utils";
 	static constexpr int maskBytes = 0xFFFF;
 
 	struct HookInformation
@@ -692,8 +692,6 @@ namespace MemoryUtils
 	}
 
 	static void DumpMemoryRecursive(void* basePtr, size_t size = 0x40, int depth = 0, int maxDepth = 2) {
-		constexpr const char* logPrefix = "Memory Dump";
-
 		if (!basePtr || depth > maxDepth) return;
 
 		MEMORY_BASIC_INFORMATION mbi{};
@@ -743,8 +741,6 @@ namespace MemoryUtils
 		int depth = 0,
 		int maxDepth = 2
 	) {
-		constexpr const char* logPrefix = "Memory Dump";
-
 		if (!basePtr || depth > maxDepth) return;
 
 		MEMORY_BASIC_INFORMATION mbi{};
@@ -792,7 +788,6 @@ namespace MemoryUtils
 
 	static std::string FindCommonPattern(const std::vector<void*>& addresses, size_t length) {
 		if (addresses.empty()) return "";
-		constexpr const char* logPrefix = "Pattern Finder";
 
 		std::ostringstream oss;
 		const uint8_t* base = reinterpret_cast<const uint8_t*>(addresses[0]);

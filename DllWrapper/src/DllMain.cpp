@@ -153,8 +153,6 @@ static void StartHookThreadOnce()
 
 DWORD WINAPI DeferredHookThread(LPVOID lpParam)
 {
-	HMODULE module = reinterpret_cast<HMODULE>(lpParam);
-
 	const ULONGLONG deadline = GetTickCount64() + 60000;
 	while (GetTickCount64() < deadline)
 	{

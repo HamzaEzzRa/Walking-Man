@@ -383,7 +383,7 @@ void ModManager::GamePreExitHook(void* arg1, void* arg2, void* arg3, void* arg4)
 	{
 		instance->DispatchEvent(ModEvent{ ModEventType::PreExitTriggered, nullptr, nullptr });
 	}
-	instance = nullptr; // Clear instance to prevent further calls
+	ModManager::SetInstance(nullptr); // Clear instance to prevent further calls
 
 	const FunctionData* gamePreExitFuncData = ModManager::GetFunctionData("GamePreExit");
 	if (!gamePreExitFuncData || !gamePreExitFuncData->originalFunction)

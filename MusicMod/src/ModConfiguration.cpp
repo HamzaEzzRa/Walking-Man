@@ -133,8 +133,6 @@ namespace ModConfiguration
 
 	bool LoadConfigFromFile()
 	{
-		constexpr const char* logPrefix = "Mod Configuration";
-
 		std::ifstream file(configFilePath);
 		if (!file.is_open())
 		{
@@ -207,10 +205,8 @@ namespace ModConfiguration
 					activePlaylist.insert(line);
 					break;
 				}
-				case Section::INACTIVE_SONGS:
-					break;
-				default:
-					break;
+				case Section::INACTIVE_SONGS: break;
+				default: break;
 			}
 		}
 
