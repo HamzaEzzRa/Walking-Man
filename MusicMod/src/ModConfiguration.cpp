@@ -507,7 +507,7 @@ namespace ModConfiguration
 		// (most likely because of new music added in DC)
 		// Ended up going for a stable aob per audio
 		/*std::string audioTableSig =
-			"?? ?? ?? ?? ?? 7F 00 00 01 E6 29 73 28 09 48 F8 "
+			"?? ?? ?? ?? ?? ?? 00 00 01 E6 29 73 28 09 48 F8 "
 			"A3 26 69 44 AD 31 EC 71 ?? 00 00 00 00 00 00 00";*/
 
 		// Music interruptors are sounds played through PlayMusic, that stop music in-game
@@ -517,7 +517,7 @@ namespace ModConfiguration
 				// Ignore it and use other indicators, such as game state flags, to decide if playback should be interrupted
 				"Silence",
 				{0, MusicType::SFX, 0, "Silence", "",
-				"?? ?? ?? ?? ?? 7F 00 00 E4 77 3B F0 67 6B 41 DB BB CC E6 75 2F 25 5B F2"}
+				"?? ?? ?? ?? ?? ?? 00 00 E4 77 3B F0 67 6B 41 DB BB CC E6 75 2F 25 5B F2"}
 			}
 		};
 
@@ -528,107 +528,107 @@ namespace ModConfiguration
 			{
 				"Music Pool Start",
 				{0, MusicType::SONG, 0, "Music Pool Start", "",
-				"?? ?? ?? ?? ?? 7F 00 00 01 E6 29 73 28 09 48 F8 A3 26 69 44 AD 31 EC 71"}
+				"?? ?? ?? ?? ?? ?? 00 00 01 E6 29 73 28 09 48 F8 A3 26 69 44 AD 31 EC 71"}
 			},
 			{
 				"Don't Be So Serious",
 				{21, MusicType::SONG, 0, "Don't Be So Serious", "Low Roar",
-				"?? ?? ?? ?? ?? 7F 00 00 C4 BB 56 A4 5F B0 4A C5 A4 28 D8 65 FE 45 73 12"}
+				"?? ?? ?? ?? ?? ?? 00 00 C4 BB 56 A4 5F B0 4A C5 A4 28 D8 65 FE 45 73 12"}
 			},
 			{
 				"Bones",
 				{22, MusicType::SONG, 0, "Bones", "Low Roar",
-				"?? ?? ?? ?? ?? 7F 00 00 F4 66 B3 FE 15 0E 48 BB A6 AC 71 71 3B AF 57 AD"}
+				"?? ?? ?? ?? ?? ?? 00 00 F4 66 B3 FE 15 0E 48 BB A6 AC 71 71 3B AF 57 AD"}
 			},
 			{
 				"Poznan",
 				{29, MusicType::SONG, 0, "Poznan", "Low Roar",
-				"?? ?? ?? ?? ?? 7F 00 00 39 21 D5 77 DA 40 42 20 BF 2A 69 0E 39 F2 0C B8"}
+				"?? ?? ?? ?? ?? ?? 00 00 39 21 D5 77 DA 40 42 20 BF 2A 69 0E 39 F2 0C B8"}
 			},
 			{
 				"Anything You Need",
 				{15, MusicType::SONG, 0, "Anything You Need", "Low Roar",
-				"?? ?? ?? ?? ?? 7F 00 00 5C 90 55 50 1B D7 4E 61 A0 91 6C 43 6A 44 84 ED"}
+				"?? ?? ?? ?? ?? ?? 00 00 5C 90 55 50 1B D7 4E 61 A0 91 6C 43 6A 44 84 ED"}
 			},
 			{
 				"Easy Way Out",
 				{17, MusicType::SONG, 0, "Easy Way Out", "Low Roar",
-				"?? ?? ?? ?? ?? 7F 00 00 5A 5E D3 5D 0E 61 4E DB B1 79 2C 0A 29 20 89 15"}
+				"?? ?? ?? ?? ?? ?? 00 00 5A 5E D3 5D 0E 61 4E DB B1 79 2C 0A 29 20 89 15"}
 			},
 			{
 				"I'm Leaving",
 				{14, MusicType::SONG, 0, "I'm Leaving", "Low Roar",
-				"?? ?? ?? ?? ?? 7F 00 00 98 79 47 30 CB 7F 43 89 B2 1D 0A 09 60 72 6C BB"}
+				"?? ?? ?? ?? ?? ?? 00 00 98 79 47 30 CB 7F 43 89 B2 1D 0A 09 60 72 6C BB"}
 			},
 			{
 				"Give Up",
 				{1, MusicType::SONG, 0, "Give Up", "Low Roar",
-				"?? ?? ?? ?? ?? 7F 00 00 5F 40 BB B1 59 CE 44 F7 BC FE 9A 0C 72 D3 A5 0F"}
+				"?? ?? ?? ?? ?? ?? 00 00 5F 40 BB B1 59 CE 44 F7 BC FE 9A 0C 72 D3 A5 0F"}
 			},
 			{
 				"Gosia",
 				{27, MusicType::SONG, 0, "Gosia", "Low Roar",
-				"?? ?? ?? ?? ?? 7F 00 00 79 BD 05 CA 2E 64 4C AA AD FE 21 1D B3 3E 68 67"}
+				"?? ?? ?? ?? ?? ?? 00 00 79 BD 05 CA 2E 64 4C AA AD FE 21 1D B3 3E 68 67"}
 			},
 			{
 				"Without You",
 				{26, MusicType::SONG, 0, "Without You", "Low Roar",
-				"?? ?? ?? ?? ?? 7F 00 00 4E 49 14 AD 62 2D 40 62 98 BB EB D5 2D 08 00 67"}
+				"?? ?? ?? ?? ?? ?? 00 00 4E 49 14 AD 62 2D 40 62 98 BB EB D5 2D 08 00 67"}
 			},
 			{
 				"Breathe In",
 				{11, MusicType::SONG, 0, "Breathe In", "Low Roar",
-				"?? ?? ?? ?? ?? 7F 00 00 3B 21 F8 45 D5 7D 44 0A 82 DF 8E 51 AF 3E A0 43"}
+				"?? ?? ?? ?? ?? ?? 00 00 3B 21 F8 45 D5 7D 44 0A 82 DF 8E 51 AF 3E A0 43"}
 			},
 			{
 				"Because We Have To",
 				{4, MusicType::SONG, 0, "Because We Have To", "Low Roar",
-				"?? ?? ?? ?? ?? 7F 00 00 BA 33 13 60 5F BE 40 CC 90 4E 38 10 45 E4 78 D3"}
+				"?? ?? ?? ?? ?? ?? 00 00 BA 33 13 60 5F BE 40 CC 90 4E 38 10 45 E4 78 D3"}
 			},
 			{
 				"St. Eriksplan",
 				{23, MusicType::SONG, 0, "St. Eriksplan", "Low Roar",
-				"?? ?? ?? ?? ?? 7F 00 00 05 9D DD E3 6F E8 42 FB 8C 94 6F F4 CA 30 1F 41"}
+				"?? ?? ?? ?? ?? ?? 00 00 05 9D DD E3 6F E8 42 FB 8C 94 6F F4 CA 30 1F 41"}
 			},
 			{
 				"Rolling Over",
 				{3, MusicType::SONG, 0, "Rolling Over", "Low Roar",
-				"?? ?? ?? ?? ?? 7F 00 00 47 11 55 CA 04 45 45 8B A9 1E AD 54 3A 87 52 47"}
+				"?? ?? ?? ?? ?? ?? 00 00 47 11 55 CA 04 45 45 8B A9 1E AD 54 3A 87 52 47"}
 			},
 			{
 				"Once in a Long, Long While...",
 				{28, MusicType::SONG, 0, "Once in a Long, Long While...", "Low Roar",
-				"?? ?? ?? ?? ?? 7F 00 00 47 C3 A0 01 A5 D4 4F 92 84 B9 6A 27 19 B1 5B 0D"}
+				"?? ?? ?? ?? ?? ?? 00 00 47 C3 A0 01 A5 D4 4F 92 84 B9 6A 27 19 B1 5B 0D"}
 			},
 			{
 				"The Machine",
 				{30, MusicType::SONG, 0, "The Machine", "Low Roar",
-				"?? ?? ?? ?? ?? 7F 00 00 48 70 54 56 5B 66 4B BF B0 A3 B5 81 93 FE EB E7"}
+				"?? ?? ?? ?? ?? ?? 00 00 48 70 54 56 5B 66 4B BF B0 A3 B5 81 93 FE EB E7"}
 			},
 			{
 				"Patience",
 				{2, MusicType::SONG, 0, "Patience", "Low Roar",
-				"?? ?? ?? ?? ?? 7F 00 00 39 0D 21 C8 64 76 43 15 9D 51 59 8C 3A 38 BA A0"}
+				"?? ?? ?? ?? ?? ?? 00 00 39 0D 21 C8 64 76 43 15 9D 51 59 8C 3A 38 BA A0"}
 			},
 			{
 				"Not Around",
 				{24, MusicType::SONG, 0, "Not Around", "Low Roar",
-				"?? ?? ?? ?? ?? 7F 00 00 59 39 6F 24 7E BC 42 50 BB A3 EC 0B 98 59 01 DC"}
+				"?? ?? ?? ?? ?? ?? 00 00 59 39 6F 24 7E BC 42 50 BB A3 EC 0B 98 59 01 DC"}
 			},
 			{
 				"Please Don't Stop (Chapter 1)",
 				{13, MusicType::SONG, 0, "Please Don't Stop (Chapter 1)", "Low Roar",
-				"?? ?? ?? ?? ?? 7F 00 00 C4 9B 4D 1F 56 A2 4E 87 A7 B7 A7 18 1E DD F1 F8"}
+				"?? ?? ?? ?? ?? ?? 00 00 C4 9B 4D 1F 56 A2 4E 87 A7 B7 A7 18 1E DD F1 F8"}
 			},
 			{
 				"Tonight, tonight, tonight",
 				{5, MusicType::SONG, 0, "Tonight, tonight, tonight", "Low Roar",
-				"?? ?? ?? ?? ?? 7F 00 00 55 1B 36 D4 F5 F2 4B A6 8F 2D 16 72 3B 67 92 36"}
+				"?? ?? ?? ?? ?? ?? 00 00 55 1B 36 D4 F5 F2 4B A6 8F 2D 16 72 3B 67 92 36"}
 			},
 			{
 				"Please Don't Stop (Chapter 2)",
 				{16, MusicType::SONG, 0, "Please Don't Stop (Chapter 2)", "Low Roar",
-				"?? ?? ?? ?? ?? 7F 00 00 08 E1 2B 67 43 59 42 C7 93 DF 5A 7E 98 AF 0B DA"}
+				"?? ?? ?? ?? ?? ?? 00 00 08 E1 2B 67 43 59 42 C7 93 DF 5A 7E 98 AF 0B DA"}
 			},
 			{
 				"I'll Keep Coming",
@@ -637,39 +637,39 @@ namespace ModConfiguration
 					352213,
 					"I'll Keep Coming",
 					"Low Roar",
-					"?? ?? ?? ?? ?? 7F 00 00 14 D0 B6 9E C7 40 4C 0E A0 9C FB 04 D1 7C 3B B1",
+					"?? ?? ?? ?? ?? ?? 00 00 14 D0 B6 9E C7 40 4C 0E A0 9C FB 04 D1 7C 3B B1",
 					{1305110817u, 1055644723u, 650923206u, 382608620u, 439722904u, 5352569u, 0x00040001u}
 				)
 			},
 			{
 				"Half Asleep",
 				{0, MusicType::SONG, 0, "Half Asleep", "Low Roar",
-				"?? ?? ?? ?? ?? 7F 00 00 36 74 BE F1 54 90 40 B9 B5 7C 3D D5 52 8C BF FB"}
+				"?? ?? ?? ?? ?? ?? 00 00 36 74 BE F1 54 90 40 B9 B5 7C 3D D5 52 8C BF FB"}
 			},
 			{
 				"Waiting (10 Years)",
 				{25, MusicType::SONG, 0, "Waiting (10 Years)", "Low Roar",
-				"?? ?? ?? ?? ?? 7F 00 00 93 B5 68 43 31 9A 43 87 B7 82 4A 97 B1 D1 81 E0"}
+				"?? ?? ?? ?? ?? ?? 00 00 93 B5 68 43 31 9A 43 87 B7 82 4A 97 B1 D1 81 E0"}
 			},
 			{
 				"Nobody Else",
 				{0, MusicType::SONG, 0, "Nobody Else", "Low Roar",
-				"?? ?? ?? ?? ?? 7F 00 00 95 BE A0 E6 7E 52 44 C2 8C 3E AE 05 2C 87 83 4A"}
+				"?? ?? ?? ?? ?? ?? 00 00 95 BE A0 E6 7E 52 44 C2 8C 3E AE 05 2C 87 83 4A"}
 			},
 			{
 				"Asylums For The Feeling",
 				{31, MusicType::SONG, 0, "Asylums For The Feeling", "SILENT POETS",
-				"?? ?? ?? ?? ?? 7F 00 00 2F 3F E6 D6 4B C4 43 B0 B2 30 AF 27 AA FE 04 C0"}
+				"?? ?? ?? ?? ?? ?? 00 00 2F 3F E6 D6 4B C4 43 B0 B2 30 AF 27 AA FE 04 C0"}
 			},
 			{
 				"Almost Nothing",
 				{32, MusicType::SONG, 0, "Almost Nothing", "SILENT POETS",
-				"?? ?? ?? ?? ?? 7F 00 00 A2 BA 0D EB 2A 00 4F 48 89 1C 5B D7 37 71 47 D2"}
+				"?? ?? ?? ?? ?? ?? 00 00 A2 BA 0D EB 2A 00 4F 48 89 1C 5B D7 37 71 47 D2"}
 			},
 			{
 				"BB's Theme",
 				{35, MusicType::SONG, 0, "BB's Theme", "Ludvig Forssell",
-				"?? ?? ?? ?? ?? 7F 00 00 F3 A0 F0 58 1A 9C 42 2F 8D 34 A7 E9 70 3A 45 23"}
+				"?? ?? ?? ?? ?? ?? 00 00 F3 A0 F0 58 1A 9C 42 2F 8D 34 A7 E9 70 3A 45 23"}
 			},
 			{
 				"Yellow Box",
@@ -678,7 +678,7 @@ namespace ModConfiguration
 					181242,
 					"Yellow Box",
 					"The Neighbourhood",
-					"?? ?? ?? ?? ?? 7F 00 00 FA 7F C9 EB 62 AB 43 86 BB F5 E8 A1 50 E3 18 E8",
+					"?? ?? ?? ?? ?? ?? 00 00 FA 7F C9 EB 62 AB 43 86 BB F5 E8 A1 50 E3 18 E8",
 					{2924515455u, 1012319143u, 671037301u, 487040596u, 547112959u, 2503595u, 0x00040001u}
 				)
 			},
@@ -689,7 +689,7 @@ namespace ModConfiguration
 					176797,
 					"Ghost",
 					"Alan Walker & Au/Ra",
-					"?? ?? ?? ?? ?? 7F 00 00 2C 4A DD D9 B8 95 42 64 87 33 F5 C1 B9 0E CC F9",
+					"?? ?? ?? ?? ?? ?? 00 00 2C 4A DD D9 B8 95 42 64 87 33 F5 C1 B9 0E CC F9",
 					{598365015u, 1043875000u, 1047951530u, 829141283u, 898858101u, 2662798u, 0x00040001u}
 				)
 			},
@@ -700,7 +700,7 @@ namespace ModConfiguration
 					170982,
 					"Trigger",
 					"Khalid & Major Lazer",
-					"?? ?? ?? ?? ?? 7F 00 00 0F 7D 12 60 75 31 40 A0 8F A6 05 9A AA 2A 16 5C",
+					"?? ?? ?? ?? ?? ?? 00 00 0F 7D 12 60 75 31 40 A0 8F A6 05 9A AA 2A 16 5C",
 					{1893238147u, 89519363u, 519029854u, 386911041u, 80774687u, 2611920u, 0x00040001u}
 				)
 			},
@@ -711,7 +711,7 @@ namespace ModConfiguration
 					205158,
 					"Meanwhile... In Genova",
 					"The S.L.P.",
-					"?? ?? ?? ?? ?? 7F 00 00 FC 1E B7 F3 84 6A 4D A3 89 84 B7 EB 07 DC 1D 48",
+					"?? ?? ?? ?? ?? ?? 00 00 FC 1E B7 F3 84 6A 4D A3 89 84 B7 EB 07 DC 1D 48",
 					{3371207578u, 1016826391u, 147702751u, 470414990u, 144885500u, 2747688u, 0x00040001u}
 				)
 			},
@@ -722,7 +722,7 @@ namespace ModConfiguration
 					276344,
 					"Ludens",
 					"Bring Me The Horizon",
-					"?? ?? ?? ?? ?? 7F 00 00 CC 25 E3 36 66 05 42 88 84 92 14 CB FE B0 2C 8B",
+					"?? ?? ?? ?? ?? ?? 00 00 CC 25 E3 36 66 05 42 88 84 92 14 CB FE B0 2C 8B",
 					{856141473u, 237707466u, 1021953861u, 547593542u, 430772228u, 4393532u, 0x00040001u}
 				)
 			},
@@ -733,7 +733,7 @@ namespace ModConfiguration
 					181533,
 					"Pop Virus",
 					"Gen Hoshino",
-					"?? ?? ?? ?? ?? 7F 00 00 23 A9 DD 3C 14 F4 49 24 BA 14 B4 B0 51 ED C7 E7",
+					"?? ?? ?? ?? ?? ?? 00 00 23 A9 DD 3C 14 F4 49 24 BA 14 B4 B0 51 ED C7 E7",
 					{391919030u, 934080991u, 670119032u, 956497239u, 798253428u, 2457847u, 0x00040001u}
 				)
 			},
@@ -744,7 +744,7 @@ namespace ModConfiguration
 					325000,
 					"Car Go Fast",
 					"Ludvig Forssell",
-					"?? ?? ?? ?? ?? 7F 00 00 D0 67 2D F6 86 06 42 12 B4 ED E0 21 AE CB 62 1E",
+					"?? ?? ?? ?? ?? ?? 00 00 D0 67 2D F6 86 06 42 12 B4 ED E0 21 AE CB 62 1E",
 					{1284342117u, 53356964u, 215126431u, 267299658u, 251243249u, 10001440u, 0x00040001u},
 					true
 				)
@@ -756,7 +756,7 @@ namespace ModConfiguration
 					319000,
 					"Over The Threshold",
 					"Ludvig Forssell",
-					"?? ?? ?? ?? ?? 7F 00 00 6D CC 12 4F FC 65 47 1F 94 F1 B6 99 F7 3B 84 08",
+					"?? ?? ?? ?? ?? ?? 00 00 6D CC 12 4F FC 65 47 1F 94 F1 B6 99 F7 3B 84 08",
 					{3913561973u, 1006104337u, 826687163u, 423182524u, 1008401873u, 6580285u, 0x00040001u},
 					true
 				)
@@ -768,7 +768,7 @@ namespace ModConfiguration
 					193000,
 					"Truckin'",
 					"Ludvig Forssell",
-					"?? ?? ?? ?? ?? 7F 00 00 8C 1A 5C 05 28 8A 40 A8 99 C3 3E 0B 9D 25 5F 2F",
+					"?? ?? ?? ?? ?? ?? 00 00 8C 1A 5C 05 28 8A 40 A8 99 C3 3E 0B 9D 25 5F 2F",
 					{2233763949u, 830860311u, 282292946u, 542579712u, 198734754u, 4480029u, 0x00040001u},
 					true
 				)
@@ -780,7 +780,7 @@ namespace ModConfiguration
 					247000,
 					"UCA Pacific Highway 46",
 					"Ludvig Forssell",
-					"?? ?? ?? ?? ?? 7F 00 00 75 49 E4 E7 F3 0E 46 5B BC B8 1A 0E 25 0D DF 44",
+					"?? ?? ?? ?? ?? ?? 00 00 75 49 E4 E7 F3 0E 46 5B BC B8 1A 0E 25 0D DF 44",
 					{3276989892u, 983148444u, 518357792u, 62764114u, 140915981u, 6009723u, 0x00040001u},
 					true
 				)
@@ -792,7 +792,7 @@ namespace ModConfiguration
 					164000,
 					"Highways",
 					"Ludvig Forssell",
-					"?? ?? ?? ?? ?? 7F 00 00 A8 E1 13 25 10 74 45 51 A5 2C D0 D7 92 2D C0 C5",
+					"?? ?? ?? ?? ?? ?? 00 00 A8 E1 13 25 10 74 45 51 A5 2C D0 D7 92 2D C0 C5",
 					{2675753311u, 505072956u, 191416213u, 90472243u, 212867915u, 5245015u, 0x00040001u},
 					true
 				)
@@ -804,7 +804,7 @@ namespace ModConfiguration
 					180000,
 					"Alone",
 					"Biting Elbows",
-					"?? ?? ?? ?? ?? 7F 00 00 D8 C7 3D 56 06 D1 4A 0B 82 7E 41 9B 0E 35 72 1A",
+					"?? ?? ?? ?? ?? ?? 00 00 D8 C7 3D 56 06 D1 4A 0B 82 7E 41 9B 0E 35 72 1A",
 					{1540271023u, 78924567u, 27281959u, 953843384u, 646208726u, 2446760u, 0x00040001u},
 					true
 				)
@@ -816,7 +816,7 @@ namespace ModConfiguration
 					186000,
 					"Path",
 					"Apocalyptica",
-					"?? ?? ?? ?? ?? 7F 00 00 44 4B D7 F2 70 CF 41 39 B4 58 72 03 78 90 C1 92",
+					"?? ?? ?? ?? ?? ?? 00 00 44 4B D7 F2 70 CF 41 39 B4 58 72 03 78 90 C1 92",
 					{2079558722u, 408002769u, 991931525u, 345109632u, 23355226u, 2763179u, 0x00040001u},
 					true
 				)
@@ -828,7 +828,7 @@ namespace ModConfiguration
 					204000,
 					"Path Vol. 2",
 					"Apocalyptica",
-					"?? ?? ?? ?? ?? 7F 00 00 36 12 05 30 2D 17 4D 80 9E E9 A5 02 48 7E 9E 9C",
+					"?? ?? ?? ?? ?? ?? 00 00 36 12 05 30 2D 17 4D 80 9E E9 A5 02 48 7E 9E 9C",
 					{1669624497u, 215763671u, 711699113u, 1056922396u, 1007972598u, 3221381u, 0x00040001u},
 					true
 				)
@@ -838,121 +838,121 @@ namespace ModConfiguration
 			{
 				"Pale Yellow",
 				{104, MusicType::SONG, 0, "Pale Yellow", "Woodkid",
-				"?? ?? ?? ?? ?? 7F 00 00 56 1A C5 A0 0F 5E 45 DE 86 02 71 4E 23 70 4C B8", true} // true for DC exclusive
+				"?? ?? ?? ?? ?? ?? 00 00 56 1A C5 A0 0F 5E 45 DE 86 02 71 4E 23 70 4C B8", true} // true for DC exclusive
 			},
 			{
 				"Goliath",
 				{105, MusicType::SONG, 0, "Goliath", "Woodkid",
-				"?? ?? ?? ?? ?? 7F 00 00 A0 E8 B6 72 C9 60 41 76 87 A7 B6 98 0B 1A E9 40", true}
+				"?? ?? ?? ?? ?? ?? 00 00 A0 E8 B6 72 C9 60 41 76 87 A7 B6 98 0B 1A E9 40", true}
 			},
 			{
 				"Control",
 				{102, MusicType::SONG, 0, "Control", "Biting Elbows",
-				"?? ?? ?? ?? ?? 7F 00 00 7B A6 DF 4F 6C D4 4C 7D 86 50 F5 39 32 00 54 DC", true}
+				"?? ?? ?? ?? ?? ?? 00 00 7B A6 DF 4F 6C D4 4C 7D 86 50 F5 39 32 00 54 DC", true}
 			},
 			{
 				"Other Me",
 				{103, MusicType::SONG, 0, "Other Me", "Biting Elbows",
-				"?? ?? ?? ?? ?? 7F 00 00 3D 21 BE 31 6B BC 42 4A 96 03 04 9B F8 0B 58 F9", true}
+				"?? ?? ?? ?? ?? ?? 00 00 3D 21 BE 31 6B BC 42 4A 96 03 04 9B F8 0B 58 F9", true}
 			},
 			{
 				"Fragile",
 				{100, MusicType::SONG, 0, "Fragile", "Midge Ure",
-				"?? ?? ?? ?? ?? 7F 00 00 FE D0 78 11 11 50 43 8F BB 02 5C 1F E4 6F 81 48", true}
+				"?? ?? ?? ?? ?? ?? 00 00 FE D0 78 11 11 50 43 8F BB 02 5C 1F E4 6F 81 48", true}
 			},
 
 			// Ambient music, max duration is set to 3 minutes (180000 ms)
 			//{
 			//	"Ambient 1",
 			//	{0, MusicType::AMBIENT, 180000, "Ambient 1", "",
-			//	"?? ?? ?? ?? ?? 7F 00 00 3B AE 7B 3A EE 91 42 1D 8B 6B BB 93 4D C7 D7 1A"}
+			//	"?? ?? ?? ?? ?? ?? 00 00 3B AE 7B 3A EE 91 42 1D 8B 6B BB 93 4D C7 D7 1A"}
 			//},
 			//{
 			//	"Ambient 2",
 			//	{0, MusicType::AMBIENT, 180000, "Ambient 2", "",
-			//	"?? ?? ?? ?? ?? 7F 00 00 73 8E 1B C3 D5 54 4C 3C 9C 37 19 87 70 B1 AF 7C"}
+			//	"?? ?? ?? ?? ?? ?? 00 00 73 8E 1B C3 D5 54 4C 3C 9C 37 19 87 70 B1 AF 7C"}
 			//},
 			//{
 			//	"Ambient 3",
 			//	{0, MusicType::AMBIENT, 180000, "Ambient 3", "",
-			//	"?? ?? ?? ?? ?? 7F 00 00 8D 28 ED 0A C2 44 44 E4 9B 00 BD 80 4E A9 ED 57"}
+			//	"?? ?? ?? ?? ?? ?? 00 00 8D 28 ED 0A C2 44 44 E4 9B 00 BD 80 4E A9 ED 57"}
 			//},
 			//{
 			//	"Ambient 4",
 			//	{0, MusicType::AMBIENT, 180000, "Ambient 4", "",
-			//	"?? ?? ?? ?? ?? 7F 00 00 95 B0 41 AE 75 8E 49 A4 8B E1 54 15 E9 91 69 93"}
+			//	"?? ?? ?? ?? ?? ?? 00 00 95 B0 41 AE 75 8E 49 A4 8B E1 54 15 E9 91 69 93"}
 			//},
 			//{
 			//	"Ambient 5",
 			//	{0, MusicType::AMBIENT, 180000, "Ambient 5", "",
-			//	"?? ?? ?? ?? ?? 7F 00 00 A6 0B 21 84 06 51 4E 8C A1 F6 8B 01 2E 73 D1 C9"}
+			//	"?? ?? ?? ?? ?? ?? 00 00 A6 0B 21 84 06 51 4E 8C A1 F6 8B 01 2E 73 D1 C9"}
 			//},
 			//{
 			//	"Ambient 6", // sound stops a bit earlier than 3 minutes
 			//	{0, MusicType::AMBIENT, 170000, "Ambient 6", "",
-			//	"?? ?? ?? ?? ?? 7F 00 00 C2 9E 42 90 99 DE 44 A0 8F 13 02 EC 23 F3 46 A2"}
+			//	"?? ?? ?? ?? ?? ?? 00 00 C2 9E 42 90 99 DE 44 A0 8F 13 02 EC 23 F3 46 A2"}
 			//},
 			//{
 			//	"Ambient 7",
 			//	{0, MusicType::AMBIENT, 180000, "Ambient 7", "",
-			//	"?? ?? ?? ?? ?? 7F 00 00 CC D1 13 95 96 1E 40 9C BB 72 69 C7 C0 A1 B5 60"}
+			//	"?? ?? ?? ?? ?? ?? 00 00 CC D1 13 95 96 1E 40 9C BB 72 69 C7 C0 A1 B5 60"}
 			//},
 
 			// Others
 			{
 				"Almost Nothing (No Beatbox)",
 				{32, MusicType::SONG, 0, "Almost Nothing (No Beatbox)", "SILENT POETS",
-				"?? ?? ?? ?? ?? 7F 00 00 EF E6 84 B0 5C 9F 4B BE 91 B7 AE F9 06 BD 12 FF"}
+				"?? ?? ?? ?? ?? ?? 00 00 EF E6 84 B0 5C 9F 4B BE 91 B7 AE F9 06 BD 12 FF"}
 			},
 			/*{
 				"Almost Nothing (Instrumental)",
 				{32, MusicType::SONG, 0, "Almost Nothing (Instrumental)", "SILENT POETS",
-				"?? ?? ?? ?? ?? 7F 00 00 CE 47 2C 1F 52 25 45 56 B2 31 8B 0E 20 BF 6B 08"}
+				"?? ?? ?? ?? ?? ?? 00 00 CE 47 2C 1F 52 25 45 56 B2 31 8B 0E 20 BF 6B 08"}
 			},
 			{
 				"Patience (duplicate 1)",
 				{2, MusicType::SONG, 0, "Patience (duplicate 1)", "Low Roar",
-				"?? ?? ?? ?? ?? 7F 00 00 41 F4 FC DC 55 E0 4F 80 AB 62 8D 90 1C 10 A4 DC"}
+				"?? ?? ?? ?? ?? ?? 00 00 41 F4 FC DC 55 E0 4F 80 AB 62 8D 90 1C 10 A4 DC"}
 			},
 			{
 				"Rolling Over (duplicate 1)",
 				{3, MusicType::SONG, 0, "Rolling Over (duplicate 1)", "Low Roar",
-				"?? ?? ?? ?? ?? 7F 00 00 61 7D F8 24 AB 7F 49 09 9D 08 43 78 A8 E8 A2 62"}
+				"?? ?? ?? ?? ?? ?? 00 00 61 7D F8 24 AB 7F 49 09 9D 08 43 78 A8 E8 A2 62"}
 			},
 			{
 				"Bones (duplicate 1)",
 				{22, MusicType::SONG, 0, "Bones (duplicate 1)", "Low Roar",
-				"?? ?? ?? ?? ?? 7F 00 00 A2 FC AC AF D8 D6 4E DA A7 AD D7 C0 49 E4 DA 08"}
+				"?? ?? ?? ?? ?? ?? 00 00 A2 FC AC AF D8 D6 4E DA A7 AD D7 C0 49 E4 DA 08"}
 			},
 			{
 				"Without You (duplicate 1)",
 				{26, MusicType::SONG, 0, "Without You (duplicate 1)", "Low Roar",
-				"?? ?? ?? ?? ?? 7F 00 00 BE 6E E1 F0 85 9D 47 E2 84 54 7C DF DA C6 4C D7"}
+				"?? ?? ?? ?? ?? ?? 00 00 BE 6E E1 F0 85 9D 47 E2 84 54 7C DF DA C6 4C D7"}
 			},
 			{
 				"Bones (end 1)",
 				{22, MusicType::SONG, 0, "Bones (end 1)", "Low Roar",
-				"?? ?? ?? ?? ?? 7F 00 00 D6 DE B6 F0 6D 11 43 66 97 1E C1 51 E0 CE D6 E5"}
+				"?? ?? ?? ?? ?? ?? 00 00 D6 DE B6 F0 6D 11 43 66 97 1E C1 51 E0 CE D6 E5"}
 			},
 			{
 				"Bones (end 2)",
 				{22, MusicType::SONG, 0, "Bones (end 2)", "Low Roar",
-				"?? ?? ?? ?? ?? 7F 00 00 EC D7 93 C5 55 74 4A A2 88 37 07 66 55 87 08 CC"}
+				"?? ?? ?? ?? ?? ?? 00 00 EC D7 93 C5 55 74 4A A2 88 37 07 66 55 87 08 CC"}
 			},
 			{
 				"Because We Have To (duplicate 1)",
 				{4, MusicType::SONG, 0, "Because We Have To (duplicate 1)", "Low Roar",
-				"?? ?? ?? ?? ?? 7F 00 00 F3 03 BC FF 29 17 4C 8F 81 ED F1 D0 76 F1 C8 A7"}
+				"?? ?? ?? ?? ?? ?? 00 00 F3 03 BC FF 29 17 4C 8F 81 ED F1 D0 76 F1 C8 A7"}
 			},
 			{
 				"Bones (duplicate 2)",
 				{22, MusicType::SONG, 0, "Bones (duplicate 2)", "Low Roar",
-				"?? ?? ?? ?? ?? 7F 00 00 6F 4A B1 53 CE 04 45 9D 81 C6 3E BA C8 CA 33 C8"}
+				"?? ?? ?? ?? ?? ?? 00 00 6F 4A B1 53 CE 04 45 9D 81 C6 3E BA C8 CA 33 C8"}
 			},
 			{
 				"Bones (duplicate 3)",
 				{22, MusicType::SONG, 0, "Bones (duplicate 3)", "Low Roar",
-				"?? ?? ?? ?? ?? 7F 00 00 F9 11 18 09 E1 ED 40 BF 89 71 17 49 FC 70 D8 15"}
+				"?? ?? ?? ?? ?? ?? 00 00 F9 11 18 09 E1 ED 40 BF 89 71 17 49 FC 70 D8 15"}
 			},*/
 		};
 
